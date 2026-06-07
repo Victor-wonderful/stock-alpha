@@ -30,9 +30,11 @@
 4. **아키텍처 정합성 수정**:
    - ~~`signals.position_size_pct` 분리~~ ✅ **완료** — 마이그레이션 `0009`로 컬럼 제거, 엔진 `generate.py`는 비중 미저장(진입/손절/TP/R:R만). 웹 `lib/position.ts`가 entry/stop + 사용자 `risk_per_trade_pct`(profiles, 비로그인=1.0 기본)로 **읽기 시점 계산**. 검증: 삼성 11.08%·SK 25%(상한)·NAVER 6.78% = 기존값과 일치. 이제 사용자가 risk 바꾸면 엔진 재실행 없이 비중 갱신.
    - **티어 게이팅**(Free 지연/요약 vs Pro 실시간) 앱 레이어(`lib/data.ts`) 미구현 — RLS는 0008로 anon 읽기 열어둠, 차등은 앱에서. (남은 작업)
-5. **factor_scores composite_alpha=0** — 5종목·섹터중립이라 거의 degenerate. 유니버스 확대(시드/인제스트) 후 재확인 필요.
-6. **파생 산출물 전용 테이블 없음** — 레짐/섹터로테이션/리스크는 현재 샘플만. 등락%·스파크라인도 ohlcv 기반 실데이터 경로 없음.
-7. **미구현 마일스톤**: M8 결제 · Phase 2 애널리스트 북(reports) · Phase 3 비수탁 봇(executor)
+5. ~~**유니버스 5종목**~~ ✅ **전체 코스피·코스닥 3,859종목 확장**. `engine/ingest/universe.py`(네이버 시총목록 파싱, pykrx 종목목록도 죽어서 네이버 사용) + `seed-universe` CLI. OHLCV 병렬 인제스트(ThreadPool 12워커, 순차 대비 ~28배, 622,060행). **systemic 버그 수정**: PostgREST 1000행 제한 → `db.select_all` 페이지네이션(instruments 조회 5곳 적용). factors 3,864 / **signals 1,214건·1,137종목**(4 플레이북 전부 발동) → 스크리너 실데이터로 가득.
+6. **factor composite_alpha 여전히 빈약**(3개 값 -0.05/0/+0.05) — 가치/성장 팩터가 **DART 재무 5종목만** 있어 대부분 null→0→클리핑. 가격팩터(모멘텀/변동성)만 유효. **유니버스 전체 DART 재무 배치** 또는 가격팩터 중심 모델 필요.
+7. **밸류에이션·수급도 5종목만** — DART 재무/네이버 수급을 3,859 전체로 배치 인제스트 필요(rate-limit 고려). 현재 종목상세 대부분은 밸류/수급 sample 폴백.
+8. **파생 산출물 전용 테이블 없음** — 레짐/섹터로테이션/리스크는 현재 샘플만.
+9. **미구현 마일스톤**: M8 결제 · Phase 2 애널리스트 북(reports) · Phase 3 비수탁 봇(executor)
 
 ## 사용자(나) 준비물 — 실데이터 라운드트립 전제
 

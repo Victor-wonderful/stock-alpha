@@ -15,20 +15,45 @@ def _yyyymmdd(d: date) -> str:
     return d.strftime("%Y%m%d")
 
 
-def ingest_krx_prices(days: int = 30) -> int:
-    """KRX 전 종목(마스터에 등록된) 일봉 OHLCV 적재."""
+def ingest_krx_prices(days: int = 30, workers: int = 12) -> int:
+    """KRX 전 종목(마스터에 등록된) 일봉 OHLCV 적재.
+
+    pykrx 횡단면(by_ticker) 엔드포인트가 죽어 per-ticker 호출만 가능 → fetch 가
+    병목이라 스레드풀로 병렬화(workers). upsert 는 메인스레드에서 순차(Supabase
+    동시쓰기 회피). 종목 단위 실패는 건너뛰고 계속.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     imap = load_instrument_map("KRX")
     todate = date.today()
     fromdate = todate - timedelta(days=days)
-    total = 0
-    for (symbol, _exchange), iid in imap.items():
+    f, t = _yyyymmdd(fromdate), _yyyymmdd(todate)
+
+    def _fetch(item: tuple) -> tuple:
+        (symbol, _exch), iid = item
         try:
-            df = krx.fetch_ohlcv(symbol, _yyyymmdd(fromdate), _yyyymmdd(todate))
-            rows = krx.normalize_ohlcv(df, iid)
-            total += upsert("ohlcv", rows, on_conflict="instrument_id,ts,interval")
-        except Exception as e:  # noqa: BLE001 — 종목 단위 실패는 건너뛰고 계속
-            log.warning("ohlcv.fail", symbol=symbol, error=str(e))
-    log.info("ingest_krx_prices.done", rows=total)
+            df = krx.fetch_ohlcv(symbol, f, t)
+            return iid, symbol, krx.normalize_ohlcv(df, iid), None
+        except Exception as e:  # noqa: BLE001
+            return iid, symbol, [], str(e)
+
+    items = list(imap.items())
+    total = 0
+    done = 0
+    failed = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(_fetch, it) for it in items]
+        for fut in as_completed(futures):
+            _iid, symbol, rows, err = fut.result()
+            if err:
+                failed += 1
+                log.warning("ohlcv.fail", symbol=symbol, error=err)
+            elif rows:
+                total += upsert("ohlcv", rows, on_conflict="instrument_id,ts,interval")
+            done += 1
+            if done % 250 == 0:
+                log.info("ohlcv.progress", done=done, of=len(items), rows=total, failed=failed)
+    log.info("ingest_krx_prices.done", rows=total, symbols=len(items), failed=failed)
     return total
 
 

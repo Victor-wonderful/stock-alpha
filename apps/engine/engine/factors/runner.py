@@ -5,7 +5,7 @@ from datetime import date
 
 import pandas as pd
 
-from engine.db import get_client, upsert
+from engine.db import get_client, select_all, upsert
 from engine.factors.compose import composite_alpha, zscore_factors
 from engine.factors.factors import compute_raw_factors
 from engine.logging import get_logger
@@ -80,7 +80,7 @@ def _load_cross_section() -> pd.DataFrame:
     momentum/volatility/growth 등 시계열 파생은 M4 후속에서 보강.
     """
     client = get_client()
-    inst = client.table("instruments").select("id,sector").eq("active", True).execute().data or []
+    inst = select_all("instruments", "id,sector", eq={"active": True})
     if not inst:
         return pd.DataFrame()
 

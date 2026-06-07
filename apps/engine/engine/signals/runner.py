@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from engine.db import get_client, upsert
+from engine.db import get_client, select_all, upsert
 from engine.logging import get_logger
 from engine.signals.generate import generate_signals
 
@@ -57,7 +57,7 @@ def run(
             log.warning("signals.gate.none_passed")
             return 0
 
-    inst = get_client().table("instruments").select("id").eq("active", True).execute().data or []
+    inst = select_all("instruments", "id", eq={"active": True})
     frames = {it["id"]: _load_ohlcv(it["id"]) for it in inst}
     frames = {k: v for k, v in frames.items() if not v.empty}
     ranks = _rs_ranks(frames)

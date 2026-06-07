@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from engine.db import get_client, upsert
+from engine.db import get_client, select_all, upsert
 from engine.fundamental import dcf, ratios
 from engine.logging import get_logger
 
@@ -86,8 +86,7 @@ def build_valuation_row(
 def run(instrument_ids: list[int] | None = None) -> int:
     """대상 종목들의 밸류에이션을 산출·적재."""
     if instrument_ids is None:
-        res = get_client().table("instruments").select("id").eq("active", True).execute()
-        instrument_ids = [r["id"] for r in (res.data or [])]
+        instrument_ids = [r["id"] for r in select_all("instruments", "id", eq={"active": True})]
 
     rows: list[dict] = []
     for iid in instrument_ids:

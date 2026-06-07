@@ -28,6 +28,33 @@ def get_client() -> Any:
     return create_client(s.supabase_url, s.supabase_service_role_key)
 
 
+def select_all(
+    table: str,
+    columns: str = "*",
+    *,
+    eq: dict[str, Any] | None = None,
+    page_size: int = 1000,
+) -> list[dict]:
+    """PostgREST 기본 1000행 제한을 넘기기 위한 페이지네이션 SELECT.
+
+    eq: 동등 필터 {컬럼: 값}. 모든 행을 모아 반환.
+    """
+    client = get_client()
+    out: list[dict] = []
+    start = 0
+    while True:
+        q = client.table(table).select(columns)
+        for col, val in (eq or {}).items():
+            q = q.eq(col, val)
+        res = q.range(start, start + page_size - 1).execute()
+        rows = res.data or []
+        out.extend(rows)
+        if len(rows) < page_size:
+            break
+        start += page_size
+    return out
+
+
 def upsert(table: str, rows: list[dict], on_conflict: str | None = None) -> int:
     """행 업서트. 적재 건수 반환."""
     if not rows:

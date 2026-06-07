@@ -9,7 +9,7 @@ import pandas as pd
 from engine.backtest.event_backtest import backtest_playbook
 from engine.backtest.gate import GateThresholds, evaluate_gate
 from engine.backtest.metrics import Trade, sharpe
-from engine.db import get_client, upsert
+from engine.db import get_client, select_all, upsert
 from engine.logging import get_logger
 from engine.signals import playbooks
 
@@ -31,7 +31,7 @@ def _load_ohlcv(instrument_id: int, limit: int = 500) -> pd.DataFrame:
 def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
     """전 종목·전 플레이북 백테스트 → 셋업별 게이트 결과. {setup: passed}."""
     thr = thresholds or GateThresholds()
-    inst = get_client().table("instruments").select("id").eq("active", True).execute().data or []
+    inst = select_all("instruments", "id", eq={"active": True})
     frames = {it["id"]: _load_ohlcv(it["id"]) for it in inst}
     frames = {k: v for k, v in frames.items() if not v.empty}
 

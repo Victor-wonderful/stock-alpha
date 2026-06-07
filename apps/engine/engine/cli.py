@@ -25,12 +25,13 @@ def ingest(
     market: str = typer.Option("kr", help="kr|us"),
     days: int = typer.Option(30, help="조회 기간(일)"),
     year: str = typer.Option("2024", help="재무 회계연도(fundamentals)"),
+    workers: int = typer.Option(12, help="prices 병렬 fetch 워커 수"),
 ) -> None:
     """데이터 인제스트 (M2). 현재 KRX prices/flows/fundamentals 구현."""
     from engine.ingest import runner
 
     if market == "kr" and target == "prices":
-        n = runner.ingest_krx_prices(days=days)
+        n = runner.ingest_krx_prices(days=days, workers=workers)
     elif market == "kr" and target == "flows":
         n = runner.ingest_krx_flows(days=days)
     elif market == "kr" and target == "fundamentals":
@@ -39,6 +40,18 @@ def ingest(
         log.info("ingest", target=target, market=market, status="not_implemented")
         return
     typer.echo(f"ingested rows: {n}")
+
+
+@app.command("seed-universe")
+def seed_universe(
+    markets: str = typer.Option("KOSPI,KOSDAQ", help="쉼표구분 시장: KOSPI,KOSDAQ"),
+) -> None:
+    """유니버스 시드 — 네이버 시총 목록에서 전 종목 instruments 적재."""
+    from engine.ingest import universe
+
+    ms = tuple(m.strip().upper() for m in markets.split(",") if m.strip())
+    n = universe.seed_universe(ms)
+    typer.echo(f"seeded instruments: {n}")
 
 
 @app.command()

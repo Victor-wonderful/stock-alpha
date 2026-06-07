@@ -1,19 +1,19 @@
 """종목 마스터 매핑 — symbol/exchange → instrument_id 해석 및 신규 업서트."""
 from __future__ import annotations
 
-from engine.db import get_client, upsert
+from engine.db import select_all, upsert
 from engine.logging import get_logger
 
 log = get_logger(__name__)
 
 
 def load_instrument_map(exchange: str | None = None) -> dict[tuple[str, str], int]:
-    """{(symbol, exchange): id} 매핑 로드."""
-    q = get_client().table("instruments").select("id,symbol,exchange")
-    if exchange:
-        q = q.eq("exchange", exchange)
-    res = q.execute()
-    return {(r["symbol"], r["exchange"]): r["id"] for r in (res.data or [])}
+    """{(symbol, exchange): id} 매핑 로드 (전체 페이지네이션 — 1000행 제한 우회)."""
+    rows = select_all(
+        "instruments", "id,symbol,exchange",
+        eq={"exchange": exchange} if exchange else None,
+    )
+    return {(r["symbol"], r["exchange"]): r["id"] for r in rows}
 
 
 def ensure_instruments(rows: list[dict]) -> dict[tuple[str, str], int]:
