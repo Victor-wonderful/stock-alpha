@@ -65,7 +65,8 @@ def generate_signals(
             "tp2": round(lv.tp2, 4),
             "tp3": round(lv.tp3, 4),
             "risk_reward": round(lv.risk_reward, 4),
-            "position_size_pct": round(lv.position_size_pct, 4),
+            # position_size_pct 는 저장하지 않는다 — 사용자 risk_per_trade_pct 에
+            # 의존하므로 읽기 시점에 entry/stop + 사용자 리스크로 계산(웹 lib/position).
             "holding_horizon": lv.holding_horizon,
             "rule_payload": cand.payload,
             "factor_payload": {"rs_rank": rs_rank} if rs_rank is not None else None,

@@ -27,9 +27,9 @@
 1. ~~**end-to-end 라운드트립 미검증**~~ ✅ 코어 + **밸류에이션(M3)까지 완료**. DART 키 투입 → `ingest fundamentals --year 2024`(5종목 실제 연결재무 + 유통주식수) → `analyze valuation`(5행). 웹 종목상세가 **PER/PBR/ROE/DCF/업사이드 전부 실데이터** 표시(삼성 PER 56.7·PBR 4.86·ROE 8.6%). 주의: 멀티플이 높은 건 **2024 연간실적 대비 2025~26 가격 급등**(반도체 강세장) 반영 — 수학적으로 정확.
 2. ~~**상장주식수(shares) 인제스트 없음**~~ ✅ **DART `stockTotqySttus`(주식의 총수 현황)로 해결** — pykrx의 cap/fundamental도 죽어서(아래 #3) pykrx 대신 DART 사용. `dart.fetch_shares`/`normalize_shares` 추가(`distb_stock_co` 유통주식수, 보통주 우선), `ingest fundamentals`가 financials.shares 채움. corp_code는 임시폴더 JSON 캐시(50MB zip 재다운로드 방지).
 3. **수급(flows)·공매도 데이터 — 업스트림 차단**: pykrx 1.2.8(최신)의 투자자수급·공매도·시총·펀더멘털 엔드포인트가 KRX 백엔드 변경으로 **전부 빈 응답**(OHLCV만 정상, 날짜 무관 확인). 코드는 우아하게 처리하도록 수정(`krx._safe_krx`, 명확한 `flows.upstream_unavailable` 경고) — **데이터 복구는 대체 소스(KRX OpenAPI/네이버 등) 필요**. valuation은 shares를 DART로 우회해 영향 없음.
-4. **아키텍처 정합성 수정 — 남은 것**:
-   - `signals.position_size_pct`를 공유 시그널에 박아둔 것 → 사용자 무관 값(진입/손절/TP/R:R)만 저장하고 **비중은 읽기 시점에 사용자 `risk_per_trade_pct`로 계산**하도록 분리 (DB엔 여전히 박혀 있음)
-   - **티어 게이팅**(Free 지연/요약 vs Pro 실시간) 앱 레이어(`lib/data.ts`) 미구현 — RLS는 0008로 anon 읽기 열어둠, 차등은 앱에서.
+4. **아키텍처 정합성 수정**:
+   - ~~`signals.position_size_pct` 분리~~ ✅ **완료** — 마이그레이션 `0009`로 컬럼 제거, 엔진 `generate.py`는 비중 미저장(진입/손절/TP/R:R만). 웹 `lib/position.ts`가 entry/stop + 사용자 `risk_per_trade_pct`(profiles, 비로그인=1.0 기본)로 **읽기 시점 계산**. 검증: 삼성 11.08%·SK 25%(상한)·NAVER 6.78% = 기존값과 일치. 이제 사용자가 risk 바꾸면 엔진 재실행 없이 비중 갱신.
+   - **티어 게이팅**(Free 지연/요약 vs Pro 실시간) 앱 레이어(`lib/data.ts`) 미구현 — RLS는 0008로 anon 읽기 열어둠, 차등은 앱에서. (남은 작업)
 5. **factor_scores composite_alpha=0** — 5종목·섹터중립이라 거의 degenerate. 유니버스 확대(시드/인제스트) 후 재확인 필요.
 6. **파생 산출물 전용 테이블 없음** — 레짐/섹터로테이션/리스크는 현재 샘플만. 등락%·스파크라인도 ohlcv 기반 실데이터 경로 없음.
 7. **미구현 마일스톤**: M8 결제 · Phase 2 애널리스트 북(reports) · Phase 3 비수탁 봇(executor)

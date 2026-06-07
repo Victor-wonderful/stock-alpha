@@ -1,4 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  computePositionSizePct,
+  DEFAULT_RISK_PER_TRADE_PCT,
+} from "./position";
 import type {
   BacktestView,
   FactorView,
@@ -33,9 +37,33 @@ export interface SignalFilters {
   session?: string;
 }
 
-// signals + instruments 조인 행 → SignalView
-function mapSignal(row: Record<string, unknown>): SignalView {
+// 로그인 사용자의 트레이드당 리스크(%). 비로그인/조회 실패 시 기본값.
+// (RLS: profiles 는 본인만 read → anon 은 자동으로 기본값)
+async function getUserRiskPct(): Promise<number> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return DEFAULT_RISK_PER_TRADE_PCT;
+    const { data } = await supabase
+      .from("profiles")
+      .select("risk_per_trade_pct")
+      .eq("id", user.id)
+      .single();
+    const v = data?.risk_per_trade_pct;
+    return typeof v === "number" && v > 0 ? v : DEFAULT_RISK_PER_TRADE_PCT;
+  } catch {
+    return DEFAULT_RISK_PER_TRADE_PCT;
+  }
+}
+
+// signals + instruments 조인 행 → SignalView.
+// position_size_pct 는 저장값이 아니라 사용자 리스크로 읽기 시점 계산(lib/position).
+function mapSignal(row: Record<string, unknown>, riskPct: number): SignalView {
   const inst = (row.instruments ?? {}) as Record<string, unknown>;
+  const entry = row.entry_price as number | null;
+  const stop = row.stop_loss as number | null;
   return {
     id: row.id as number,
     symbol: (inst.symbol as string) ?? "",
@@ -48,13 +76,13 @@ function mapSignal(row: Record<string, unknown>): SignalView {
     session: row.session as SignalView["session"],
     strength: Number(row.strength ?? 0),
     timeframe: (row.timeframe as string) ?? "",
-    entry_price: row.entry_price as number | null,
-    stop_loss: row.stop_loss as number | null,
+    entry_price: entry,
+    stop_loss: stop,
     tp1: row.tp1 as number | null,
     tp2: row.tp2 as number | null,
     tp3: row.tp3 as number | null,
     risk_reward: row.risk_reward as number | null,
-    position_size_pct: row.position_size_pct as number | null,
+    position_size_pct: computePositionSizePct(entry, stop, riskPct),
     holding_horizon: row.holding_horizon as string | null,
     llm_rationale: row.llm_rationale as string | null,
     valid_until: row.valid_until as string | null,
@@ -84,7 +112,8 @@ export async function getSignals(
     if (!data || data.length === 0) {
       return { data: applyFilters(SAMPLE_SIGNALS, filters), isSample: true };
     }
-    return { data: data.map(mapSignal), isSample: false };
+    const riskPct = await getUserRiskPct();
+    return { data: data.map((r) => mapSignal(r, riskPct)), isSample: false };
   } catch {
     return { data: applyFilters(SAMPLE_SIGNALS, filters), isSample: true };
   }
