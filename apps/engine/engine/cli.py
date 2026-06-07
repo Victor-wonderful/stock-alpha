@@ -35,7 +35,7 @@ def ingest(
     elif market == "kr" and target == "flows":
         n = runner.ingest_krx_flows(days=days)
     elif market == "kr" and target == "fundamentals":
-        n = runner.ingest_krx_financials(year=year)
+        n = runner.ingest_krx_financials(year=year, workers=workers)
     else:
         log.info("ingest", target=target, market=market, status="not_implemented")
         return
@@ -52,6 +52,15 @@ def seed_universe(
     ms = tuple(m.strip().upper() for m in markets.split(",") if m.strip())
     n = universe.seed_universe(ms)
     typer.echo(f"seeded instruments: {n}")
+
+
+@app.command("classify-universe")
+def classify_universe() -> None:
+    """실기업 vs 펀드/파생(ETF/ETN) 분류 — corp_code 없는 종목·스팩 비활성화."""
+    from engine.ingest import universe
+
+    r = universe.classify_universe()
+    typer.echo(f"stock(active): {r['stock']}  fund→inactive: {r['fund']}  spac→inactive: {r['spac']}")
 
 
 @app.command()

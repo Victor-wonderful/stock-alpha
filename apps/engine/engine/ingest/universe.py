@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 
+from engine.db import select_all
 from engine.ingest.instruments import ensure_instruments
 from engine.logging import get_logger
 
@@ -95,3 +96,41 @@ def seed_universe(markets: tuple[str, ...] = ("KOSPI", "KOSDAQ")) -> int:
     ensure_instruments(rows)
     log.info("universe.seed.done", rows=len(rows))
     return len(rows)
+
+
+_SPAC_RE = re.compile(r"스팩|기업인수목적")
+
+
+def classify_universe() -> dict[str, int]:
+    """실기업 vs 펀드/파생 분류 + 비활성화.
+
+    DART corp_code 가 없는 종목(ETF/ETN/펀드 — DART 비공시자)은 asset_type='etf',
+    active=false. 스팩(shell)도 active=false. 나머지(영업 기업)는 stock·active 유지.
+    → 팩터/시그널은 active=true 만 처리하므로 스크리너에서 파생상품이 사라진다.
+    """
+    from engine.db import get_client
+    from engine.ingest.dart import fetch_corp_code_map
+
+    cmap = fetch_corp_code_map()
+    rows = select_all("instruments", "id,symbol,exchange,name", eq={"exchange": "KRX"})
+
+    fund = [r["symbol"] for r in rows if r["symbol"] not in cmap]
+    spac = [
+        r["symbol"] for r in rows
+        if r["symbol"] in cmap and _SPAC_RE.search(r.get("name") or "")
+    ]
+    n_stock = len(rows) - len(fund) - len(spac)
+
+    client = get_client()
+
+    def _update(symbols: list[str], patch: dict) -> None:
+        for i in range(0, len(symbols), 200):       # IN 필터 길이 제한 → 청크
+            chunk = symbols[i:i + 200]
+            client.table("instruments").update(patch).in_("symbol", chunk).eq(
+                "exchange", "KRX"
+            ).execute()
+
+    _update(fund, {"active": False, "asset_type": "etf"})
+    _update(spac, {"active": False})
+    log.info("universe.classify.done", stock=n_stock, fund=len(fund), spac=len(spac))
+    return {"stock": n_stock, "fund": len(fund), "spac": len(spac)}

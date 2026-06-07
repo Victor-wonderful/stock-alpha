@@ -88,15 +88,31 @@ def ingest_krx_flows(days: int = 30, pages: int = 3) -> int:
     return total
 
 
-def ingest_krx_financials(year: str, reprt_code: str = "11011") -> int:
-    """KRX 종목 연결재무제표 적재. CFS 없으면 OFS(별도) 폴백."""
+def ingest_krx_financials(year: str, reprt_code: str = "11011", workers: int = 6) -> int:
+    """KRX 종목 연결재무제표 + 상장주식수 적재. CFS 없으면 OFS(별도) 폴백.
+
+    DART 호출(종목당 최대 3회: CFS/OFS 재무 + 주식수)이 병목 → 스레드풀 병렬화.
+    DART 분당 throttle 을 고려해 워커는 보수적(기본 6). corp_code 없는 종목
+    (ETF/ETN/스팩 등 비공시자)은 건너뜀. upsert 는 메인스레드 순차.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     imap = load_instrument_map("KRX")
     corp_map = dart.fetch_corp_code_map()
-    total = 0
-    for (symbol, _exchange), iid in imap.items():
-        corp = corp_map.get(symbol)
-        if not corp:
-            continue
+    period = f"{year}{'FY' if reprt_code == '11011' else reprt_code}"
+    # 재개 가능: 이미 해당 기간 재무가 있는 종목은 건너뜀(재시작 시 중복 호출 방지).
+    have = {
+        r["instrument_id"]
+        for r in select_all("financials", "instrument_id,period", eq={"period": period})
+    }
+    targets = [
+        (symbol, iid, corp_map[symbol])
+        for (symbol, _exch), iid in imap.items()
+        if corp_map.get(symbol) and iid not in have
+    ]
+
+    def _fetch(t: tuple) -> tuple:
+        symbol, iid, corp = t
         try:
             rows: list[dict] = []
             for fs_div in ("CFS", "OFS"):
@@ -104,16 +120,28 @@ def ingest_krx_financials(year: str, reprt_code: str = "11011") -> int:
                 rows = dart.normalize_financials(api, iid, year, reprt_code, fs_div)
                 if rows:
                     break
-            # 상장주식수 보강 — PER/PBR/EV·EBITDA/DCF 산출에 필요(재무제표엔 없음).
             if rows:
-                try:
-                    shares = dart.fetch_shares(corp, year, reprt_code)
-                    if shares:
-                        rows[0]["shares"] = shares
-                except Exception as e:  # noqa: BLE001 — 주식수 실패는 비치명
-                    log.warning("shares.fail", symbol=symbol, error=str(e))
-            total += upsert("financials", rows, on_conflict="instrument_id,period,fs_type")
+                shares = dart.fetch_shares(corp, year, reprt_code)
+                if shares:
+                    rows[0]["shares"] = shares
+            return symbol, rows, None
         except Exception as e:  # noqa: BLE001
-            log.warning("financials.fail", symbol=symbol, error=str(e))
-    log.info("ingest_krx_financials.done", rows=total)
+            return symbol, [], str(e)
+
+    total = 0
+    done = 0
+    failed = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(_fetch, t) for t in targets]
+        for fut in as_completed(futures):
+            symbol, rows, err = fut.result()
+            if err:
+                failed += 1
+                log.warning("financials.fail", symbol=symbol, error=err)
+            elif rows:
+                total += upsert("financials", rows, on_conflict="instrument_id,period,fs_type")
+            done += 1
+            if done % 200 == 0:
+                log.info("financials.progress", done=done, of=len(targets), rows=total, failed=failed)
+    log.info("ingest_krx_financials.done", rows=total, targets=len(targets), failed=failed)
     return total

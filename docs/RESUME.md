@@ -32,7 +32,7 @@
    - **티어 게이팅**(Free 지연/요약 vs Pro 실시간) 앱 레이어(`lib/data.ts`) 미구현 — RLS는 0008로 anon 읽기 열어둠, 차등은 앱에서. (남은 작업)
 5. ~~**유니버스 5종목**~~ ✅ **전체 코스피·코스닥 3,859종목 확장**. `engine/ingest/universe.py`(네이버 시총목록 파싱, pykrx 종목목록도 죽어서 네이버 사용) + `seed-universe` CLI. OHLCV 병렬 인제스트(ThreadPool 12워커, 순차 대비 ~28배, 622,060행). **systemic 버그 수정**: PostgREST 1000행 제한 → `db.select_all` 페이지네이션(instruments 조회 5곳 적용). factors 3,864 / **signals 1,214건·1,137종목**(4 플레이북 전부 발동) → 스크리너 실데이터로 가득.
 6. ~~**factor composite_alpha 빈약**~~ ✅ **가격팩터 산출로 해결**. `factors/runner._load_cross_section`이 ohlcv 히스토리로 **모멘텀(12-1)·변동성** 계산(전 종목). composite_alpha 3값→**2,651 distinct**(σ0.18, -0.56~0.84). + **`factor_composite` 시그널 생성기**(`signals/factor_signals.py`) 구현 — 합성알파 상위 10% → 매수 시그널(386건). 스크리너 '멀티팩터 종합' 필터 실작동. (가치/성장 팩터는 여전히 재무 5종목만 — 아래 #7. ETF/ETN이 모멘텀 상위에 섞임은 향후 asset_type 필터로 정제)
-7. **밸류에이션·수급도 5종목만** — DART 재무/네이버 수급을 3,859 전체로 배치 인제스트 필요(rate-limit 고려). 현재 종목상세 대부분은 밸류/수급 sample 폴백.
+7. **유니버스 정제 완료 + 재무 배치 진행**: ETF/ETN/펀드(1,252)·스팩(46)이 시드에 섞여 있던 것 → `universe.classify_universe`(DART corp_code 없으면 펀드로 판정 → active=false) + `classify-universe` CLI 로 비활성화. **활성 실주식 2,561**. 비활성 종목 signals/factor_scores 삭제(스크리너 파생상품 제거). DART 재무는 `ingest fundamentals --workers N`(병렬+재개가능)로 **전 종목 배치 중**(corp_code 3,968 다운로드 완료). 완료 후 factors/valuation 재계산하면 value/quality/growth 활성화. 수급(네이버)도 전체 배치 남음.
 8. **파생 산출물 전용 테이블 없음** — 레짐/섹터로테이션/리스크는 현재 샘플만.
 9. **미구현 마일스톤**: M8 결제 · Phase 2 애널리스트 북(reports) · Phase 3 비수탁 봇(executor)
 
