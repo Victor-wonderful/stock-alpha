@@ -74,10 +74,30 @@ def run(asof: str | None = None) -> int:
     return n
 
 
-def _load_cross_section() -> pd.DataFrame:
-    """instruments + 최신 financials + 최신 close 로 단면 구성.
+def _price_factors(closes: list[float]) -> tuple[float | None, float | None]:
+    """가격 히스토리(오름차순) → (모멘텀 12-1, 일간변동성).
 
-    momentum/volatility/growth 등 시계열 파생은 M4 후속에서 보강.
+    가격팩터는 재무 없이 전 종목에 적용 가능 → 합성알파의 핵심 입력.
+    """
+    if len(closes) < 30:
+        return None, None
+    s = pd.Series(closes, dtype=float)
+    rets = s.pct_change().dropna()
+    vol = float(rets.std()) if len(rets) > 5 else None
+    # 12-1 모멘텀: 최근 ~1개월(21거래일)을 제외한 누적 수익률(반전 효과 제거).
+    if len(s) >= 40:
+        recent, past = s.iloc[-21], s.iloc[0]
+        mom = float(recent / past - 1) if past > 0 else None
+    else:
+        mom = None
+    return mom, vol
+
+
+def _load_cross_section() -> pd.DataFrame:
+    """instruments + 최신 financials + 가격 히스토리(모멘텀·변동성) 로 단면 구성.
+
+    가격팩터(momentum/lowvol)는 ohlcv 히스토리에서 산출 → 전 종목 적용.
+    재무팩터(value/quality/size)는 financials 있는 종목만(composite 가 가중 재정규화).
     """
     client = get_client()
     inst = select_all("instruments", "id,sector", eq={"active": True})
@@ -95,10 +115,14 @@ def _load_cross_section() -> pd.DataFrame:
         px_res = (
             client.table("ohlcv").select("close")
             .eq("instrument_id", iid).eq("interval", "1d")
-            .order("ts", desc=True).limit(1).execute()
+            .order("ts", desc=True).limit(160).execute()
         )
-        px = (px_res.data or [{}])
-        price = float(px[0]["close"]) if px and px[0].get("close") is not None else None
+        closes = [
+            float(r["close"]) for r in reversed(px_res.data or [])
+            if r.get("close") is not None
+        ]
+        price = closes[-1] if closes else None
+        mom, vol = _price_factors(closes)
         shares = fin.get("shares")
         records.append({
             "instrument_id": iid,
@@ -112,5 +136,7 @@ def _load_cross_section() -> pd.DataFrame:
             "bps": fin.get("bps"),
             "price": price,
             "market_cap": (price * shares) if (price and shares) else None,
+            "ret_12_1": mom,
+            "volatility": vol,
         })
     return pd.DataFrame(records).set_index("instrument_id")

@@ -70,6 +70,19 @@ def run(
                 rs_rank=ranks.get(iid), setups=setups,
             )
         )
+
+    # 멀티팩터 종합(factor_composite) — 단면 랭킹 기반. setups 필터에 포함되거나
+    # 필터가 없을 때만 발행.
+    if setups is None or "factor_composite" in setups:
+        from engine.signals.factor_signals import generate_factor_signals
+        scores = select_all(
+            "factor_scores",
+            "instrument_id,composite_alpha,sector_rank,momentum_z,value_z",
+        )
+        all_rows.extend(
+            generate_factor_signals(scores, frames, risk_per_trade_pct=risk_per_trade_pct)
+        )
+
     # 자연키 업서트 — 재실행해도 중복 누적 없이 같은 시그널을 갱신(0010).
     n = upsert(
         "signals", all_rows,
