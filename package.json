@@ -1,0 +1,19 @@
+{
+  "name": "stock-alpha",
+  "version": "0.1.0",
+  "private": true,
+  "description": "전문가급 주식 리서치·시그널·자동매매 플랫폼",
+  "//workspaces": "Windows 심링크 권한 이슈로 npm workspaces 링크 미사용. 각 앱은 자체 node_modules. packages/db 는 tsconfig 경로 매핑으로 소스 직접 참조.",
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "lint": "npm --prefix apps/web run lint",
+    "db:migrate": "supabase db push",
+    "db:reset": "supabase db reset",
+    "engine:dev": "python -m engine.cli",
+    "engine:test": "pytest apps/engine"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

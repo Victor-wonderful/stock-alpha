@@ -1,0 +1,35 @@
+# 로컬 개발용 보조 서비스.
+# Postgres/Auth 는 Supabase CLI(`supabase start`)로 띄우는 것을 1차 권장.
+# 이 compose 는 엔진 워커 + 캐시(redis) 만 보조로 제공한다.
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: stockalpha-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  engine:
+    build:
+      context: ./apps/engine
+      dockerfile: Dockerfile
+    container_name: stockalpha-engine
+    env_file:
+      - .env.local
+    environment:
+      ENGINE_ENV: development
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    # 기본은 스케줄러. 일회성 작업은 `docker compose run engine python -m engine.cli <cmd>`
+    command: ["python", "-m", "engine.scheduler"]
+    restart: unless-stopped
+
+# Supabase 로컬 스택은 별도 (supabase CLI) — host.docker.internal 로 접근

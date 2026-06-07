@@ -1,0 +1,68 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────── 디자인 토큰 (다크 전용, 트레이딩 터미널) ───────── */
+:root {
+  --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --bg: #0a0b0e;            /* 최하단 배경 */
+  --surface: #101319;       /* 패널 */
+  --surface-2: #161a22;     /* 패널 위 요소 */
+  --surface-3: #1c212b;     /* hover/강조 */
+  --border: #222732;        /* 기본 보더 */
+  --border-strong: #2d343f; /* 강조 보더 */
+
+  --text: #e7eaef;          /* 본문 */
+  --text-dim: #9aa4b2;      /* 보조 */
+  --text-mute: #5a6472;     /* 약함 */
+
+  --accent: #3d7bff;        /* 브랜드 액센트 */
+  --accent-dim: #1e2a45;
+
+  --bull: #2ebd85;          /* 상승/매수 (트레이딩 표준) */
+  --bear: #f6465d;          /* 하락/매도 */
+  --warn: #f0b429;
+
+  color-scheme: dark;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 숫자는 고정폭(tabular) — 금융 데이터 정렬 핵심 */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.mono {
+  font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 스크롤바 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 6px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* 포커스 링 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

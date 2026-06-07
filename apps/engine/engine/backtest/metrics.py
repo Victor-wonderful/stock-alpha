@@ -1,0 +1,111 @@
+"""백테스트 성과 지표 — 순수 함수.
+
+핵심 단위는 'R'(리스크 배수): 트레이드 손익을 진입~손절 거리로 나눈 값.
+R>0=수익, R<0=손실. R 기반이면 종목·가격대 무관하게 합산 가능.
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+
+@dataclass
+class Trade:
+    r_multiple: float          # 손익 / 리스크
+    ret_pct: float             # 손익률 (포지션 대비)
+    bars_held: int
+
+
+def win_rate(trades: list[Trade]) -> float | None:
+    if not trades:
+        return None
+    wins = sum(1 for t in trades if t.r_multiple > 0)
+    return wins / len(trades)
+
+
+def avg_rr(trades: list[Trade]) -> float | None:
+    """평균 손익비 = 평균이익 / 평균손실(절대값)."""
+    wins = [t.r_multiple for t in trades if t.r_multiple > 0]
+    losses = [-t.r_multiple for t in trades if t.r_multiple < 0]
+    if not wins or not losses:
+        return None
+    avg_win = sum(wins) / len(wins)
+    avg_loss = sum(losses) / len(losses)
+    return avg_win / avg_loss if avg_loss > 0 else None
+
+
+def expectancy_r(trades: list[Trade]) -> float | None:
+    """기대값(R) = 평균 R 멀티플. 양수면 기대수익 우위."""
+    if not trades:
+        return None
+    return sum(t.r_multiple for t in trades) / len(trades)
+
+
+def sharpe(returns: list[float], periods_per_year: int = 252) -> float | None:
+    """수익률 시퀀스의 연율화 Sharpe (무위험수익률 0 가정)."""
+    n = len(returns)
+    if n < 2:
+        return None
+    mean = sum(returns) / n
+    var = sum((r - mean) ** 2 for r in returns) / (n - 1)
+    std = math.sqrt(var)
+    if std == 0:
+        return None
+    return (mean / std) * math.sqrt(periods_per_year)
+
+
+def max_drawdown(equity_curve: list[float]) -> float | None:
+    """최대 낙폭(0~1, 양수). equity_curve 는 누적 자산 시퀀스."""
+    if not equity_curve:
+        return None
+    peak = equity_curve[0]
+    mdd = 0.0
+    for v in equity_curve:
+        peak = max(peak, v)
+        if peak > 0:
+            dd = (peak - v) / peak
+            mdd = max(mdd, dd)
+    return mdd
+
+
+def equity_from_trades(trades: list[Trade], start: float = 1.0) -> list[float]:
+    """트레이드 수익률을 복리로 누적한 자산 곡선."""
+    eq = [start]
+    for t in trades:
+        eq.append(eq[-1] * (1 + t.ret_pct))
+    return eq
+
+
+def information_coefficient(scores: list[float], fwd_returns: list[float]) -> float | None:
+    """팩터 점수 vs 미래수익률 스피어만 상관(IC)."""
+    if len(scores) != len(fwd_returns) or len(scores) < 3:
+        return None
+    rs = _rank(scores)
+    rr = _rank(fwd_returns)
+    return _pearson(rs, rr)
+
+
+def _rank(xs: list[float]) -> list[float]:
+    order = sorted(range(len(xs)), key=lambda i: xs[i])
+    ranks = [0.0] * len(xs)
+    i = 0
+    while i < len(xs):
+        j = i
+        while j + 1 < len(xs) and xs[order[j + 1]] == xs[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = avg
+        i = j + 1
+    return ranks
+
+
+def _pearson(a: list[float], b: list[float]) -> float | None:
+    n = len(a)
+    ma, mb = sum(a) / n, sum(b) / n
+    cov = sum((a[i] - ma) * (b[i] - mb) for i in range(n))
+    va = math.sqrt(sum((x - ma) ** 2 for x in a))
+    vb = math.sqrt(sum((x - mb) ** 2 for x in b))
+    if va == 0 or vb == 0:
+        return None
+    return cov / (va * vb)
