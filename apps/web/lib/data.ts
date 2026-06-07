@@ -92,30 +92,37 @@ function mapSignal(row: Record<string, unknown>, riskPct: number): SignalView {
 
 export async function getSignals(
   filters: SignalFilters = {},
-  limit = 50,
-): Promise<Loaded<SignalView[]>> {
+  limit = 100,
+  offset = 0,
+): Promise<Loaded<SignalView[]> & { total: number }> {
   try {
     const supabase = await createClient();
     let q = supabase
       .from("signals")
-      .select(
-        "*, instruments(symbol,name,exchange,currency)",
-      )
+      .select("*, instruments(symbol,name,exchange,currency)", { count: "exact" })
+      // 강도(strength) 내림차순 — 같은 배치라 created_at 정렬은 무의미. 강한 시그널 우선.
+      .order("strength", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .range(offset, offset + limit - 1);
     if (filters.style) q = q.eq("style", filters.style);
     if (filters.setup) q = q.eq("setup", filters.setup);
     if (filters.session) q = q.eq("session", filters.session);
 
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) throw error;
     if (!data || data.length === 0) {
-      return { data: applyFilters(SAMPLE_SIGNALS, filters), isSample: true };
+      const s = applyFilters(SAMPLE_SIGNALS, filters);
+      return { data: s, isSample: true, total: s.length };
     }
     const riskPct = await getUserRiskPct();
-    return { data: data.map((r) => mapSignal(r, riskPct)), isSample: false };
+    return {
+      data: data.map((r) => mapSignal(r, riskPct)),
+      isSample: false,
+      total: count ?? data.length,
+    };
   } catch {
-    return { data: applyFilters(SAMPLE_SIGNALS, filters), isSample: true };
+    const s = applyFilters(SAMPLE_SIGNALS, filters);
+    return { data: s, isSample: true, total: s.length };
   }
 }
 
@@ -191,14 +198,32 @@ export async function getFactor(
 export async function getSignalsForSymbol(
   symbol: string,
 ): Promise<Loaded<SignalView[]>> {
-  const all = await getSignals({}, 200);
-  const filtered = all.data.filter((s) => s.symbol === symbol);
-  if (filtered.length > 0) return { data: filtered, isSample: all.isSample };
-  // 해당 종목 시그널이 없으면 예시에서 심볼만 맞춰 보여줌
-  return {
-    data: SAMPLE_SIGNALS.map((s) => ({ ...s, symbol })),
-    isSample: true,
-  };
+  // instrument_id 로 직접 조회 — 전역 시그널을 클라이언트 필터하면 1000행 제한·
+  // 강도순 상위 절단으로 해당 종목을 놓칠 수 있음.
+  try {
+    const supabase = await createClient();
+    const { data: inst } = await supabase
+      .from("instruments")
+      .select("id")
+      .eq("symbol", symbol)
+      .limit(1)
+      .single();
+    if (!inst) throw new Error("no instrument");
+    const { data, error } = await supabase
+      .from("signals")
+      .select("*, instruments(symbol,name,exchange,currency)")
+      .eq("instrument_id", inst.id)
+      .order("strength", { ascending: false });
+    if (error || !data || data.length === 0) throw error ?? new Error("empty");
+    const riskPct = await getUserRiskPct();
+    return { data: data.map((r) => mapSignal(r, riskPct)), isSample: false };
+  } catch {
+    // 해당 종목 시그널이 없으면 예시에서 심볼만 맞춰 보여줌
+    return {
+      data: SAMPLE_SIGNALS.map((s) => ({ ...s, symbol })),
+      isSample: true,
+    };
+  }
 }
 
 // ── 시장(마켓) ── 레짐/섹터는 파생(전용 테이블 없음) → 현재 샘플. macro 는 테이블 시도.

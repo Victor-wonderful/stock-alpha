@@ -14,7 +14,22 @@ export default async function ScreenerPage({
 }) {
   const sp = await searchParams;
   const filters = { style: sp.style, setup: sp.setup, session: sp.session };
-  const { data: signals, isSample } = await getSignals(filters);
+  const pageSize = 100;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const { data: signals, isSample, total } = await getSignals(
+    filters,
+    pageSize,
+    (page - 1) * pageSize,
+  );
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const qs = (p: number) => {
+    const params = new URLSearchParams();
+    if (filters.style) params.set("style", filters.style);
+    if (filters.setup) params.set("setup", filters.setup);
+    if (filters.session) params.set("session", filters.session);
+    params.set("page", String(p));
+    return `?${params.toString()}`;
+  };
 
   return (
     <AppShell
@@ -31,10 +46,16 @@ export default async function ScreenerPage({
 
         <div className="flex items-baseline justify-between">
           <p className="text-xs text-text-dim">
-            <span className="tnum font-semibold text-text">{signals.length}</span>개 시그널
+            총 <span className="tnum font-semibold text-text">{total.toLocaleString()}</span>개 시그널
+            {totalPages > 1 && (
+              <span className="text-text-mute">
+                {" "}· {((page - 1) * pageSize + 1).toLocaleString()}–
+                {Math.min(page * pageSize, total).toLocaleString()} 표시
+              </span>
+            )}
           </p>
           <p className="text-2xs text-text-mute">
-            가격 KRW · R:R·비중은 트레이드당 리스크 기준 · 백테스트 게이트 통과분
+            강도순 · 가격 KRW · R:R·비중은 트레이드당 리스크 기준 · 백테스트 게이트 통과분
           </p>
         </div>
 
@@ -42,6 +63,36 @@ export default async function ScreenerPage({
           <EmptyState message="조건에 맞는 시그널이 없습니다. 필터를 바꿔보세요." />
         ) : (
           <SignalTable rows={signals} />
+        )}
+
+        {totalPages > 1 && (
+          <nav className="flex items-center justify-between pt-2">
+            <a
+              href={qs(page - 1)}
+              aria-disabled={page <= 1}
+              className={`rounded-md border border-border px-3 py-1.5 text-xs ${
+                page <= 1
+                  ? "pointer-events-none text-text-mute opacity-40"
+                  : "text-text-dim hover:bg-surface-hover"
+              }`}
+            >
+              ← 이전
+            </a>
+            <span className="text-2xs text-text-mute tnum">
+              {page} / {totalPages}
+            </span>
+            <a
+              href={qs(page + 1)}
+              aria-disabled={page >= totalPages}
+              className={`rounded-md border border-border px-3 py-1.5 text-xs ${
+                page >= totalPages
+                  ? "pointer-events-none text-text-mute opacity-40"
+                  : "text-text-dim hover:bg-surface-hover"
+              }`}
+            >
+              다음 →
+            </a>
+          </nav>
         )}
 
         {isSample && (
