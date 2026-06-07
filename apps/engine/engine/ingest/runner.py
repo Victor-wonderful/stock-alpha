@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from engine.db import upsert
-from engine.ingest import dart, krx
+from engine.ingest import dart, krx, naver
 from engine.ingest.instruments import load_instrument_map
 from engine.logging import get_logger
 
@@ -32,38 +32,34 @@ def ingest_krx_prices(days: int = 30) -> int:
     return total
 
 
-def ingest_krx_flows(days: int = 30) -> int:
-    """KRX 투자자별 순매수 + 공매도 적재.
+def ingest_krx_flows(days: int = 30, pages: int = 3) -> int:
+    """투자자별 순매수(외국인·기관) 적재 — 네이버 금융 소스.
 
-    주의: 2026 현재 KRX 백엔드 변경으로 pykrx 의 투자자 수급·공매도 엔드포인트가
-    빈 응답을 반환한다(OHLCV 만 정상). 데이터를 못 받으면 0행으로 끝나며, 전 종목
-    빈 응답이면 업스트림 차단으로 간주해 한 줄 경고를 남긴다.
+    pykrx 의 KRX 투자자수급·공매도 엔드포인트가 업스트림 breakage(빈 응답)라
+    네이버 금융(item/frgn.naver)에서 외국인·기관 순매매를 받아 적재한다.
+    공매도(short_*)·개인·프로그램은 이 소스에 없어 미적재(다른 소스 필요).
+    `days` 는 호환 위해 받지만 네이버는 page 단위 → pages(페이지당 ~20거래일) 사용.
     """
     imap = load_instrument_map("KRX")
-    todate = date.today()
-    fromdate = todate - timedelta(days=days)
     total = 0
     empty_symbols = 0
     for (symbol, _exchange), iid in imap.items():
         try:
-            fdf = krx.fetch_flows(symbol, _yyyymmdd(fromdate), _yyyymmdd(todate))
-            flows = krx.normalize_flows(fdf, iid)
-            svol, sbal = krx.fetch_short(symbol, _yyyymmdd(fromdate), _yyyymmdd(todate))
-            merged = krx.merge_short_into_flows(flows, svol, sbal)
-            if not merged:
+            df = naver.fetch_frgn(symbol, pages=pages)
+            rows = naver.normalize_flows(df, iid)
+            if not rows:
                 empty_symbols += 1
                 continue
-            total += upsert("flows", merged, on_conflict="instrument_id,date")
+            total += upsert("flows", rows, on_conflict="instrument_id,date")
         except Exception as e:  # noqa: BLE001
             log.warning("flows.fail", symbol=symbol, error=str(e))
     if total == 0 and empty_symbols:
         log.warning(
-            "flows.upstream_unavailable",
+            "flows.empty",
             symbols=empty_symbols,
-            detail="KRX 투자자수급·공매도 pykrx 엔드포인트 빈 응답(업스트림). "
-            "OHLCV 는 정상. 대체 소스(KRX OpenAPI 등) 필요.",
+            detail="네이버 수급 파싱 0행 — 페이지 구조 변경 가능성 점검 필요.",
         )
-    log.info("ingest_krx_flows.done", rows=total)
+    log.info("ingest_krx_flows.done", rows=total, source="naver")
     return total
 
 
