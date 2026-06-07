@@ -70,6 +70,10 @@ def run(
                 rs_rank=ranks.get(iid), setups=setups,
             )
         )
-    n = upsert("signals", all_rows)
+    # 자연키 업서트 — 재실행해도 중복 누적 없이 같은 시그널을 갱신(0010).
+    n = upsert(
+        "signals", all_rows,
+        on_conflict="instrument_id,style,setup,session,signal_type",
+    )
     log.info("signals.run.done", rows=n, instruments=len(frames))
     return n
