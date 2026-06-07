@@ -101,17 +101,35 @@ def fetch_ohlcv(ticker: str, fromdate: str, todate: str) -> pd.DataFrame:
     return stock.get_market_ohlcv(fromdate, todate, ticker)
 
 
+class FlowsUnavailable(RuntimeError):
+    """KRX 수급/공매도 엔드포인트가 빈 응답(업스트림 pykrx/KRX 이슈)."""
+
+
+def _safe_krx(fn: Any, *args: Any) -> pd.DataFrame:
+    """pykrx 호출 래퍼. 엔드포인트가 죽어 빈 본문/KeyError 면 빈 DataFrame 반환.
+
+    2026 현재 KRX 백엔드 변경으로 투자자 수급·공매도 계열 pykrx 함수가 빈
+    HTTP 본문('Expecting value')을 반환하며, pykrx 내부에서 Key('거래량') 등으로
+    터진다. OHLCV 만 정상. 종목 단위로 시끄럽게 실패하지 않도록 흡수한다.
+    """
+    try:
+        df = fn(*args)
+    except (KeyError, ValueError):  # pykrx 내부 빈응답 파싱 실패
+        return pd.DataFrame()
+    return df if df is not None else pd.DataFrame()
+
+
 def fetch_flows(ticker: str, fromdate: str, todate: str) -> pd.DataFrame:
-    """투자자별 순매수(거래대금 기준)."""
+    """투자자별 순매수(거래대금 기준). 엔드포인트 불가 시 빈 DataFrame."""
     from pykrx import stock
 
-    return stock.get_market_trading_value_by_date(fromdate, todate, ticker)
+    return _safe_krx(stock.get_market_trading_value_by_date, fromdate, todate, ticker)
 
 
 def fetch_short(ticker: str, fromdate: str, todate: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """(공매도 거래량 df, 공매도 잔고 df)."""
+    """(공매도 거래량 df, 공매도 잔고 df). 엔드포인트 불가 시 빈 DataFrame 쌍."""
     from pykrx import stock
 
-    vol = stock.get_shorting_volume_by_date(fromdate, todate, ticker)
-    bal = stock.get_shorting_balance_by_date(fromdate, todate, ticker)
+    vol = _safe_krx(stock.get_shorting_volume_by_date, fromdate, todate, ticker)
+    bal = _safe_krx(stock.get_shorting_balance_by_date, fromdate, todate, ticker)
     return vol, bal
