@@ -9,7 +9,7 @@ from datetime import datetime
 import pandas as pd
 
 from engine.signals import playbooks
-from engine.signals.levels import compute_levels
+from engine.signals.levels import compute_levels, min_risk_floor
 from engine.signals.styles import get_style_config
 
 SOURCE_VERSION = "signal-v1"
@@ -50,6 +50,11 @@ def generate_signals(
             support=cand.support, resistance=cand.resistance,
             now=now, market_close=market_close,
         )
+        # 노이즈 수준 손절폭 배제 — 백테스트(event_backtest)와 동일 기준.
+        # 검증된 모집단과 발행 모집단을 일치시킨다.
+        if abs(lv.entry_price - lv.stop_loss) < min_risk_floor(lv.entry_price, cand.atr):
+            continue
+
         cfg = get_style_config(cand.style)
         rows.append({
             "instrument_id": instrument_id,

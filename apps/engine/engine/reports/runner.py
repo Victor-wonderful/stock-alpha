@@ -27,10 +27,12 @@ def _top_symbols(limit: int) -> list[str]:
         .order("composite_alpha", desc=True).limit(limit * 3).execute()
     ).data or []
     out: list[str] = []
+    seen: set[str] = set()
     for r in scores:
         inst = r.get("instruments") or {}
-        if not inst.get("active"):
+        if not inst.get("active") or inst.get("symbol") in seen:
             continue
+        seen.add(inst["symbol"])
         sig = (
             client.table("signals").select("id")
             .eq("instrument_id", r["instrument_id"]).eq("signal_type", "buy")

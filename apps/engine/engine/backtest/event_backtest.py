@@ -11,7 +11,7 @@ import pandas as pd
 
 from engine.backtest.metrics import Trade
 from engine.signals import playbooks
-from engine.signals.levels import compute_levels
+from engine.signals.levels import compute_levels, min_risk_floor
 from engine.signals.styles import TradeStyle
 
 # 스타일별 타임아웃(일봉 기준 보유 봉 수)
@@ -51,11 +51,8 @@ def backtest_playbook(
         stop = lv.stop_loss
         tp = lv.tp1
         risk = entry - stop
-        # 노이즈 수준 손절폭 배제 — 지지선이 진입가에 붙으면 리스크 분모가 0에
-        # 수렴해 +50R 같은 비현실적 트레이드가 생긴다(슬리피지 한 번이면 소멸).
-        # 최소 ¼ATR·진입가 0.1% 이상의 손절폭만 거래로 인정.
-        min_risk = max(0.25 * (cand.atr or 0.0), 0.001 * entry)
-        if risk <= 0 or risk < min_risk:
+        # 노이즈 수준 손절폭 배제 — 라이브 시그널(generate)과 동일 기준(levels).
+        if risk <= 0 or risk < min_risk_floor(entry, cand.atr):
             i += 1
             continue
 

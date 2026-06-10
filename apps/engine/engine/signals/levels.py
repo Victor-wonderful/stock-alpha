@@ -14,6 +14,17 @@ from datetime import datetime, timedelta, timezone
 
 from engine.signals.styles import TradeStyle, get_style_config
 
+# ── 최소 손절폭 (방법론 위생) ──
+# 손절이 진입가에 붙으면 리스크 분모→0 으로 +50R 급 비현실 트레이드가 생긴다.
+# 백테스트와 라이브 시그널이 같은 기준을 쓰도록 단일 출처로 둔다.
+MIN_RISK_ATR_MULT = 0.25   # 손절폭 ≥ ¼ATR
+MIN_RISK_PCT = 0.001       # 손절폭 ≥ 진입가 0.1%
+
+
+def min_risk_floor(entry_price: float, atr: float | None) -> float:
+    """거래로 인정할 최소 손절폭(가격 단위)."""
+    return max(MIN_RISK_ATR_MULT * (atr or 0.0), MIN_RISK_PCT * entry_price)
+
 
 @dataclass
 class Levels:

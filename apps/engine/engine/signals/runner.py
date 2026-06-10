@@ -89,6 +89,18 @@ def run(
             generate_factor_signals(scores, frames, risk_per_trade_pct=risk_per_trade_pct)
         )
 
+    # 배치 내 자연키 중복 제거 — 같은 키가 한 커맨드에 2번 오면 Postgres 가
+    # "cannot affect row a second time"(21000) 으로 거부. 강도 높은 쪽 유지.
+    uniq: dict[tuple, dict] = {}
+    for r in all_rows:
+        k = (r["instrument_id"], r["style"], r["setup"], r["session"], r["signal_type"])
+        cur = uniq.get(k)
+        if cur is None or (r.get("strength") or 0) > (cur.get("strength") or 0):
+            uniq[k] = r
+    if len(uniq) < len(all_rows):
+        log.info("signals.dedupe", before=len(all_rows), after=len(uniq))
+    all_rows = list(uniq.values())
+
     # 자연키 업서트 — 재실행해도 중복 누적 없이 같은 시그널을 갱신(0010).
     n = upsert(
         "signals", all_rows,
