@@ -33,8 +33,15 @@ export default async function FocusPage() {
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
 
   const { data: reports } = await getReports(100);
-  const buys = reports.filter((r) => r.rating === "매수");
-  const neutrals = reports.filter((r) => r.rating === "중립").slice(0, 6);
+  // 매수 판정 섹션은 포커스와 역할 분리: 포커스 = 실행플랜 있는 최상위 후보(카드),
+  // 여기는 등급이 매수인데 포커스에 들지 않은 종목(실행플랜 없음/정원 밖)만.
+  const pickSymbols = new Set(picks.map((p) => p.symbol));
+  const buys = reports.filter(
+    (r) => r.rating === "매수" && !pickSymbols.has(r.symbol ?? ""),
+  );
+  const neutrals = reports
+    .filter((r) => r.rating === "중립" && !pickSymbols.has(r.symbol ?? ""))
+    .slice(0, 6);
   // 픽 ↔ 근거 리포트 연결 (심볼 매칭) — 카드에서 판정·리포트 링크 표시용
   const reportBySymbol = new Map(reports.map((r) => [r.symbol, r]));
   // 권장 비중 — 사용자 리스크 설정(비로그인 1%) 기준 읽기 시점 계산
@@ -166,12 +173,19 @@ export default async function FocusPage() {
           )}
         </Panel>
 
-        {/* 매수 판정 */}
-        <Panel title="매수 판정 종목 분석">
+        {/* 매수 판정 — 포커스 제외분 */}
+        <Panel
+          title="그 외 매수 판정 종목"
+          action={
+            <span className="text-2xs text-text-mute">
+              등급은 매수지만 포커스 미선정(실행플랜 없음 또는 정원 밖)
+            </span>
+          }
+        >
           {buys.length === 0 ? (
             <p className="text-sm text-text-mute">
-              현재 매수 판정 종목이 없습니다. 판정은 멀티팩터·밸류에이션·시그널을
-              가중 합산한 시스템 점수(65점 이상)로만 결정됩니다.
+              포커스 외 매수 판정 종목이 없습니다 — 매수 판정(65점 이상)을 받은
+              종목은 현재 모두 위 포커스에 올라가 있습니다.
             </p>
           ) : (
             <ul className="space-y-2">
