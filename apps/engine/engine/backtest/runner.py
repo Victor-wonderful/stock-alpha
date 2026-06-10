@@ -25,7 +25,10 @@ def _load_ohlcv(instrument_id: int, limit: int = 500) -> pd.DataFrame:
     rows = list(reversed(res.data or []))
     if not rows:
         return pd.DataFrame()
-    return pd.DataFrame(rows)[["open", "high", "low", "close", "volume"]].astype(float)
+    df = pd.DataFrame(rows)
+    out = df[["open", "high", "low", "close", "volume"]].astype(float)
+    out["ts"] = df["ts"]  # 트레이드 진입시점 기록용(시간순 MDD)
+    return out
 
 
 def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
@@ -46,6 +49,9 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
         trades: list[Trade] = []
         for df in frames.values():
             trades.extend(backtest_playbook(df, setup))
+        # 시간순 정렬 — MDD 는 순서 민감. DB 행 순서(임의)로 이어붙이면 런마다
+        # 값이 흔들려 경계선 셋업이 PASS/FAIL 을 오간다. 시간순 = 실제 시퀀스.
+        trades.sort(key=lambda t: t.entry_ts)
         gr = evaluate_gate(trades, thr)
         passed[setup] = gr.passed
         bt_rows.append({

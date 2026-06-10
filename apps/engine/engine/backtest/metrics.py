@@ -14,6 +14,9 @@ class Trade:
     r_multiple: float          # 손익 / 리스크
     ret_pct: float             # 손익률 (포지션 대비)
     bars_held: int
+    entry_ts: str = ""         # 진입 시점(ISO) — 전 종목 합산 시 시간순 정렬용.
+                               # MDD 는 순서 민감 → 임의(DB 행) 순서면 런마다 값이
+                               # 흔들린다. 시간순이 실제 포트폴리오 시퀀스.
 
 
 def win_rate(trades: list[Trade]) -> float | None:

@@ -76,8 +76,10 @@ def backtest_playbook(
         pnl = exit_price - entry
         r_multiple = pnl / risk
         ret_pct = (pnl / entry) * (lv.position_size_pct / 100.0)
+        entry_ts = str(df["ts"].iloc[i]) if "ts" in df.columns else ""
         trades.append(Trade(
             r_multiple=r_multiple, ret_pct=ret_pct, bars_held=exit_idx - i,
+            entry_ts=entry_ts,
         ))
         i = exit_idx + 1                   # 청산 다음 봉부터 재탐색(중첩 방지)
 

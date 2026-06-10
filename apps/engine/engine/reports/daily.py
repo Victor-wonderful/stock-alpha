@@ -91,7 +91,12 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
     for r in reports:
         p = r.get("payload") or {}
         verdict = p.get("verdict") or {}
-        plan = p.get("plan") or []
+        # EOD 스타일 플랜만 — 발행 정책 변경 전의 옛 payload(데이/종가베팅 플랜)가
+        # 섞여 있어도 픽으로 새지 않게 선정 단에서도 필터(이중 방어).
+        plan = [
+            row for row in (p.get("plan") or [])
+            if row.get("style") in EOD_STYLES
+        ]
         tradable = (p.get("tradability") or {}).get("passed", False)
         score = float(verdict.get("score") or 0)
         rating = verdict.get("rating")
@@ -118,6 +123,34 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             "as_of": r["as_of"],
         })
     return picks
+
+
+def select_and_store_picks(as_of: str) -> int:
+    """해당 일자 발행 리포트에서 픽 선정·적재. 단독 재실행 가능(픽만 갱신).
+
+    같은 날 재실행하면 자연키(0016)로 갱신되지만, 직전 선정에서 빠지게 된
+    종목이 남을 수 있어 해당 일자 daily_focus 를 먼저 비우고 다시 채운다.
+    """
+    client = get_client()
+    rows = (
+        client.table("reports")
+        .select("instrument_id,as_of,summary,payload")
+        .eq("report_type", "indepth").eq("status", "published").eq("as_of", as_of)
+        .execute()
+    ).data or []
+    picks = select_picks(rows)
+    rebalance_id = int(as_of.replace("-", ""))
+    for p in picks:
+        p["rebalance_id"] = rebalance_id
+    client.table("recommendations").delete().eq("basket_type", "daily_focus").eq(
+        "as_of", as_of
+    ).execute()
+    n = upsert(
+        "recommendations", picks,
+        on_conflict="basket_type,instrument_id,as_of",
+    ) if picks else 0
+    log.info("reports.daily.picks", as_of=as_of, picks=n)
+    return n
 
 
 def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
@@ -150,20 +183,7 @@ def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
             published += 1
 
     # 오늘의 포커스 — 그날 발행분에서 선정
-    rows = (
-        get_client().table("reports")
-        .select("instrument_id,as_of,summary,payload")
-        .eq("report_type", "indepth").eq("status", "published").eq("as_of", today)
-        .execute()
-    ).data or []
-    picks = select_picks(rows)
-    rebalance_id = int(today.replace("-", ""))
-    for p in picks:
-        p["rebalance_id"] = rebalance_id
-    n_picks = upsert(
-        "recommendations", picks,
-        on_conflict="basket_type,instrument_id,as_of",
-    ) if picks else 0
+    n_picks = select_and_store_picks(today)
 
     log.info("reports.daily.done", track_a=len(a), track_b=len(b),
              published=published, skipped=skipped, picks=n_picks)

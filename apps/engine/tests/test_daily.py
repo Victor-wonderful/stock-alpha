@@ -47,6 +47,15 @@ def test_picks_buy_and_high_score_only():
     assert 0 < picks[0]["conviction"] <= 1
 
 
+def test_picks_exclude_non_eod_plan():
+    # 옛 payload(데이/종가베팅 플랜)가 섞여 있어도 픽으로 새지 않는다(이중 방어).
+    r = _report(1, "매수", 70.0)
+    r["payload"]["plan"] = [{"style": "day", "setup": "close_betting",
+                             "strength": 0.9, "entry_price": 50.0,
+                             "tp1": 55.0, "stop_loss": 48.0}]
+    assert select_picks([r]) == []
+
+
 def test_picks_empty_day_allowed():
     reports = [_report(1, "관망", 30.0), _report(2, "거래 부적합", 80.0, tradable=False)]
     assert select_picks(reports) == []
