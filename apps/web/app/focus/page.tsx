@@ -9,6 +9,16 @@ import { fmtPct, fmtPrice } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
+// 발행일(as_of, 장 마감 후) 다음 거래일 라벨 — 주말은 월요일로 (공휴일은 미반영).
+function nextTradingDayLabel(asOf: string): string {
+  const d = new Date(asOf + "T00:00:00+09:00");
+  do {
+    d.setDate(d.getDate() + 1);
+  } while (d.getDay() === 0 || d.getDay() === 6);
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()]})`;
+}
+
 // 오늘의 포커스 — 제품의 첫 화면이자 첫 번째 답: "오늘 뭘 봐야 하나".
 // 픽은 사람이 고르지 않는다. 발행 규정 v1 기준을 통과한 종목만, 기준 미달이면 빈 날.
 export default async function FocusPage() {
@@ -17,6 +27,9 @@ export default async function FocusPage() {
     ? []
     : recs.data.filter((r) => r.basket_type === "daily_focus");
   const asOf = picks[0]?.as_of ?? null;
+  // 장 마감 후(16:30) 발행된 픽은 "다음 거래일 장 시작 전 플랜".
+  // 국내 가격은 장외에 움직이지 않으므로 레벨은 다음 장 시작까지 그대로 유효.
+  const planDay = asOf ? nextTradingDayLabel(asOf) : null;
 
   const { data: reports } = await getReports(100);
   const buys = reports.filter((r) => r.rating === "매수");
@@ -34,7 +47,9 @@ export default async function FocusPage() {
           title="포커스 종목"
           action={
             asOf ? (
-              <span className="text-2xs text-text-mute">{asOf} 16:30 기준</span>
+              <span className="text-2xs text-text-mute">
+                {planDay} 장 시작 전 플랜 · {asOf} 마감 데이터 기준
+              </span>
             ) : undefined
           }
         >
