@@ -101,6 +101,10 @@ def publish_indepth(
         return {"symbol": symbol, "rating": rating, "llm": False,
                 "title": "", "skipped": True}
 
+    # '거래 부적합'은 결론이 정해져 있어 LLM 서술이 불필요 — 템플릿 발행(비용 0).
+    # 웹 목록에서도 기본 숨김(종목 상세에서만 경고로 노출).
+    if rating == "거래 부적합":
+        use_llm = False
     model = s.claude_report_model if rating == "매수" else s.claude_summary_model
     narrative = generate_narrative(ctx, model=model) if use_llm else None
     llm_used = narrative is not None

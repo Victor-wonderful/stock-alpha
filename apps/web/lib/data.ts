@@ -583,10 +583,13 @@ function mapReportRow(row: Record<string, unknown>): ReportListItem {
   };
 }
 
-export async function getReports(limit = 30): Promise<Loaded<ReportListItem[]>> {
+export async function getReports(
+  limit = 30,
+  opts: { includeUnfit?: boolean } = {},
+): Promise<Loaded<ReportListItem[]>> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    let q = supabase
       .from("reports")
       .select(
         "id,report_type,title,as_of,rating,target_price,summary,model_version,instruments(symbol,name)",
@@ -595,6 +598,9 @@ export async function getReports(limit = 30): Promise<Loaded<ReportListItem[]>> 
       .order("as_of", { ascending: false })
       .order("id", { ascending: false })
       .limit(limit);
+    // '거래 부적합'은 목록 기본 제외 — 종목 상세에서만 경고로 노출.
+    if (!opts.includeUnfit) q = q.neq("rating", "거래 부적합");
+    const { data, error } = await q;
     if (error || !data) throw error ?? new Error("empty");
     return { data: data.map(mapReportRow), isSample: false };
   } catch {

@@ -15,11 +15,27 @@ function ratingVariant(rating: string | null) {
   return "neutral" as const;
 }
 
-export default async function ReportsPage() {
-  const { data: reports } = await getReports(100);
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const sp = await searchParams;
+  const includeUnfit = sp.all === "1";
+  const { data: reports } = await getReports(100, { includeUnfit });
 
   return (
     <AppShell title="종목 분석" subtitle="AI 애널리스트 — 판정·게이트·실행플랜">
+      <div className="mb-3 flex justify-end">
+        <Link
+          href={includeUnfit ? "/reports" : "/reports?all=1"}
+          className="text-2xs text-text-mute hover:text-text-dim"
+        >
+          {includeUnfit
+            ? "거래 부적합 숨기기"
+            : "거래 부적합 종목 포함 보기 (시스템 기준 미달 경고)"}
+        </Link>
+      </div>
       {reports.length === 0 ? (
         <EmptyState message="발행된 리포트가 없습니다. 엔진에서 `report indepth` 실행 시 여기에 게시됩니다." />
       ) : (
