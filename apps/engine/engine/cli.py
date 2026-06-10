@@ -206,9 +206,13 @@ def daily(
     passed = [s for s, ok in gate.items() if ok]
     typer.echo(f"[3/5] backtest gate passed: {', '.join(passed) or '(없음)'}")
 
-    setups = passed + ["factor_composite"]  # 횡단면 전략은 이벤트 게이트 비대상
+    # factor_composite 는 횡단면 백테스트(backtest-factor) 판정을 따른다 —
+    # 미통과면 발행 제외 (2026-06-10 검증: IC 유효하나 상위10% 초과수익 무유의)
+    setups = list(passed)
+    if "factor_composite" in rd.passed_setups_from_db():
+        setups.append("factor_composite")
     n = sr.run(setups=setups)
-    typer.echo(f"[4/5] signals: {n} rows ({', '.join(setups)})")
+    typer.echo(f"[4/5] signals: {n} rows ({', '.join(setups) or '(없음)'})")
 
     r = rd.run_daily(use_llm=llm, cap=cap)
     typer.echo(

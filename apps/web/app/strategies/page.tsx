@@ -44,15 +44,9 @@ const SETUP_GUIDE: Partial<Record<TradeSetup, { name: string; desc: string }>> =
 const NON_BACKTEST_SETUPS: {
   setup: TradeSetup;
   status: string;
-  variant: "accent" | "neutral";
+  variant: "accent" | "neutral" | "bear";
   note: string;
 }[] = [
-  {
-    setup: "factor_composite",
-    status: "별도 검증 예정",
-    variant: "accent",
-    note: "매매 타이밍이 아닌 종목 선별 전략 — 횡단면 방식(IC·분위수 스프레드)으로 검증 예정. 발행 중.",
-  },
   {
     setup: "theme",
     status: "준비 중",
@@ -68,7 +62,10 @@ const NON_BACKTEST_SETUPS: {
 ];
 
 export default async function StrategiesPage() {
-  const { data, isSample } = await getBacktests();
+  const { data: allRows, isSample } = await getBacktests();
+  // 멀티팩터(횡단면 검증)는 지표 체계가 달라(IC 기반) 본 표와 분리 표시
+  const data = allRows.filter((b) => b.setup !== "factor_composite");
+  const factor = allRows.find((b) => b.setup === "factor_composite");
   const passed = data.filter((b) => b.passed).length;
 
   return (
@@ -180,6 +177,31 @@ export default async function StrategiesPage() {
                     </tr>
                   );
                 })}
+                {factor && (
+                  <tr className="border-b border-border/50 hover:bg-surface-2">
+                    <td className="py-2.5 pl-1">
+                      <p className="font-medium text-text">멀티팩터 종합</p>
+                      <p className="mt-0.5 max-w-sm text-2xs text-text-mute">
+                        {SETUP_GUIDE.factor_composite?.desc}
+                      </p>
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <Badge variant={factor.passed ? "bull" : "bear"} size="md">
+                        {factor.passed ? "통과" : "미통과"}
+                      </Badge>
+                    </td>
+                    <td colSpan={5} className="px-3 py-2.5 text-2xs text-text-mute">
+                      횡단면 검증(주간 {factor.period?.replace("weekly x ", "") ?? "—"}
+                      기) — 순위 예측력 IC {fmtNum(factor.ic, 3)}·양수 비율{" "}
+                      {factor.win_rate != null
+                        ? `${(factor.win_rate * 100).toFixed(0)}%`
+                        : "—"}로 유효하나, 상위 10% 매수
+                      초과수익이 무유의(t={fmtNum(factor.sharpe, 2)}) → 매수
+                      시그널·픽 근거로 사용하지 않습니다. 가격 팩터 프록시 기준
+                      부분 검증이며, 재무 팩터 포함 모델 개선 후 재검증 예정.
+                    </td>
+                  </tr>
+                )}
                 {NON_BACKTEST_SETUPS.map((s) => {
                   const guide = SETUP_GUIDE[s.setup];
                   return (
