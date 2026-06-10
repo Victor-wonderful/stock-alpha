@@ -16,7 +16,7 @@ function ratingVariant(rating: string | null) {
 }
 
 export default async function ReportsPage() {
-  const { data: reports } = await getReports();
+  const { data: reports } = await getReports(100);
 
   return (
     <AppShell title="리포트" subtitle="AI 애널리스트 — 판정·게이트·실행플랜">
