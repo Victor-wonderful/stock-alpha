@@ -54,7 +54,8 @@ def _ctx(**over):
         flows=[{"date": "2026-06-09", "foreign_net": 1e9, "inst_net": -2e8,
                 "retail_net": None}],
         backtests=[{"setup": "leader_trend", "win_rate": 0.55, "avg_rr": 1.8,
-                    "mdd": 0.2, "sharpe": 1.1, "created_at": "2026-06-01"}],
+                    "mdd": 0.05, "sharpe": 1.1, "expectancy_r": 0.54,
+                    "passed": True, "created_at": "2026-06-01"}],
     )
     base.update(over)
     return build_context(**base)
@@ -82,10 +83,14 @@ def test_tradability_pass_and_fail():
 
 
 def test_backtest_passed_thresholds():
-    assert backtest_passed({"win_rate": 0.5, "avg_rr": 1.5, "mdd": 0.3})
-    assert not backtest_passed({"win_rate": 0.3, "avg_rr": 1.5, "mdd": 0.3})
-    assert not backtest_passed({"win_rate": 0.5, "avg_rr": 1.0, "mdd": 0.3})
-    assert not backtest_passed({"win_rate": 0.5, "avg_rr": 1.5, "mdd": 0.6})
+    # 저장된 판정(passed) 우선
+    assert backtest_passed({"passed": True, "expectancy_r": -1.0})
+    assert not backtest_passed({"passed": False, "expectancy_r": 1.0})
+    # 구버전 행 폴백: 기대값·R-MDD 재계산
+    assert backtest_passed({"expectancy_r": 0.16, "mdd": 0.3})
+    assert not backtest_passed({"expectancy_r": 0.01, "mdd": 0.3})
+    assert not backtest_passed({"expectancy_r": 0.16, "mdd": 0.6})
+    assert not backtest_passed({"win_rate": 0.5, "avg_rr": 1.5})  # 기대값 없음
 
 
 # ── 판정 ────────────────────────────────────────────────────────────

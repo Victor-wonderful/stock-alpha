@@ -45,12 +45,16 @@ def atr_pct(ohlcv: list[dict], window: int = 14) -> float | None:
 
 
 def backtest_passed(bt: dict, thr: GateThresholds | None = None) -> bool:
-    """backtests 행 → 게이트 통과 여부 (M6 임계 재사용)."""
+    """backtests 행 → 게이트 통과 여부.
+
+    엔진이 저장한 판정(passed)을 우선 사용. 구버전 행(컬럼 없음)은
+    M6 임계(기대값·R-MDD)로 재계산.
+    """
+    if bt.get("passed") is not None:
+        return bool(bt["passed"])
     t = thr or GateThresholds()
-    wr, rr, mdd = bt.get("win_rate"), bt.get("avg_rr"), bt.get("mdd")
-    if wr is None or float(wr) < t.min_win_rate:
-        return False
-    if rr is None or float(rr) < t.min_avg_rr:
+    exp, mdd = bt.get("expectancy_r"), bt.get("mdd")
+    if exp is None or float(exp) < t.min_expectancy_r:
         return False
     if mdd is not None and float(mdd) > t.max_mdd:
         return False
@@ -280,6 +284,7 @@ def build_context(
             "avg_rr": bt.get("avg_rr"),
             "mdd": bt.get("mdd"),
             "sharpe": bt.get("sharpe"),
+            "expectancy_r": bt.get("expectancy_r"),
             "passed": s in passed,
         }
         for s, bt in sorted(latest_bt.items())
@@ -351,7 +356,9 @@ def load_context(symbol: str) -> dict[str, Any] | None:
         .order("date", desc=True).limit(20).execute()
     ).data or []))
 
-    backtests = select_all("backtests", "setup,win_rate,avg_rr,mdd,sharpe,created_at")
+    backtests = select_all(
+        "backtests", "setup,win_rate,avg_rr,mdd,sharpe,expectancy_r,passed,created_at"
+    )
 
     return build_context(
         instrument=inst, valuation=valuation, factor=factor,

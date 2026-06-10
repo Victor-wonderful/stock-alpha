@@ -25,7 +25,7 @@ export default async function StrategiesPage() {
             <span className="tnum font-semibold text-bear">{data.length - passed}</span>개 미달
           </p>
           <p className="mt-1 text-2xs text-text-mute">
-            게이트 기준: 표본 ≥ 20 · 승률 ≥ 40% · 평균 R:R ≥ 1.3 · 기대값 &gt; 0 · MDD ≤ 40%. 미통과 셋업은 발행 차단.
+            게이트 기준: 표본 ≥ 20 · 기대값 ≥ +0.05R · R-MDD(트레이드당 리스크 1%) ≤ 40%. 승률·R:R은 보고용 지표. 미통과 셋업은 발행 차단.
           </p>
         </Panel>
 

@@ -383,7 +383,12 @@ export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
       win_rate: r.win_rate as number | null,
       avg_rr: r.avg_rr as number | null,
       period: r.period as string | null,
-      passed: (r.avg_rr as number ?? 0) >= 1.3 && (r.win_rate as number ?? 0) >= 0.4,
+      // 엔진이 저장한 게이트 판정(0015) 우선 — 구버전 행만 휴리스틱 폴백
+      passed:
+        typeof r.passed === "boolean"
+          ? r.passed
+          : ((r.avg_rr as number) ?? 0) >= 1.3 &&
+            ((r.win_rate as number) ?? 0) >= 0.4,
     }));
     return { data: rows, isSample: false };
   } catch {

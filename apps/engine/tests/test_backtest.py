@@ -94,13 +94,22 @@ def test_gate_fails_on_small_sample():
 
 
 def test_gate_passes_good_strategy():
-    # 25 트레이드, 승률 60%, 손익비 2 (이익 +2R 15회, 손실 -1R 10회)
+    # 25 트레이드, 승률 60%, 손익비 2 (이익 +2R 15회, 손실 -1R 10회) → 기대값 +0.8R
     trades = _trades([2.0] * 15 + [-1.0] * 10)
-    thr = GateThresholds(min_trades=20, min_win_rate=0.4, min_avg_rr=1.3, max_mdd=0.9)
-    gr = evaluate_gate(trades, thr)
+    gr = evaluate_gate(trades, GateThresholds(min_trades=20))
     assert gr.passed, gr.reasons
     assert gr.win_rate == pytest.approx(0.6)
     assert gr.avg_rr == pytest.approx(2.0)
+    assert gr.expectancy_r == pytest.approx(0.8)
+
+
+def test_gate_passes_low_winrate_high_rr_trend():
+    # 재캘리브레이션 핵심 케이스: 승률 1/3, 손익비 2.5 → 기대값 +0.167R.
+    # 구 게이트(승률 40% 하한)는 탈락시켰지만 기대값 기준으론 우위 전략.
+    trades = _trades([2.5, -1.0, -1.0] * 10)
+    gr = evaluate_gate(trades, GateThresholds(min_trades=20))
+    assert gr.passed, gr.reasons
+    assert gr.win_rate == pytest.approx(1 / 3)
 
 
 def test_gate_fails_negative_expectancy():
@@ -108,3 +117,29 @@ def test_gate_fails_negative_expectancy():
     trades = _trades([1.0] * 5 + [-1.0] * 20)
     gr = evaluate_gate(trades, GateThresholds(min_trades=10))
     assert not gr.passed
+    assert any("기대값" in r for r in gr.reasons)
+
+
+def test_equity_r_curve_fixed_risk():
+    # +1R 트레이드는 리스크 1% 기준 자산 +1% — 표본이 커져도 MDD 왜곡 없음
+    eq = m.equity_r_curve(_trades([1.0, -1.0]), risk_frac=0.01)
+    assert eq[1] == pytest.approx(1.01)
+    assert eq[2] == pytest.approx(1.01 * 0.99)
+
+
+def test_gate_winsorizes_outlier_r():
+    # +50R 이상치 1건이 만든 가짜 기대값은 클립(±10R) 후 사라져야 한다.
+    trades = _trades([50.0] + [-1.0] * 24)
+    gr = evaluate_gate(trades, GateThresholds(min_trades=20))
+    assert not gr.passed
+    assert gr.expectancy_r == pytest.approx((10.0 - 24.0) / 25)
+
+
+def test_r_mdd_sample_size_invariant():
+    # ret_pct 복리 MDD 는 손실 연속에 표본만 커져도 1로 수렴하지만
+    # R 곡선 MDD 는 패턴이 같으면 규모가 비슷하게 유지된다.
+    pattern = [2.0, -1.0, -1.0]
+    small = evaluate_gate(_trades(pattern * 10), GateThresholds(min_trades=1))
+    large = evaluate_gate(_trades(pattern * 100), GateThresholds(min_trades=1))
+    assert small.mdd is not None and large.mdd is not None
+    assert large.mdd < 0.10  # 우위 전략의 R-MDD 는 낮게 유지

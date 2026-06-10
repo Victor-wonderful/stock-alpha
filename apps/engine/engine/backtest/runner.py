@@ -48,9 +48,11 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
             "setup": setup,
             "params": {"thresholds": thr.__dict__},
             "sharpe": sharpe([t.ret_pct for t in trades]),
-            "mdd": gr.mdd,
+            "mdd": gr.mdd,                 # R 곡선(리스크 1%) 기준
             "win_rate": gr.win_rate,
             "avg_rr": gr.avg_rr,
+            "expectancy_r": gr.expectancy_r,
+            "passed": gr.passed,           # 게이트 판정 저장 — 웹/리포트는 read만
             "period": "daily-history",
         })
         log.info("backtest.setup", setup=setup, passed=gr.passed,

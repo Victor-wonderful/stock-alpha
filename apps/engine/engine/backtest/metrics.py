@@ -76,6 +76,21 @@ def equity_from_trades(trades: list[Trade], start: float = 1.0) -> list[float]:
     return eq
 
 
+def equity_r_curve(
+    trades: list[Trade], risk_frac: float = 0.01, start: float = 1.0
+) -> list[float]:
+    """R 기준 자산 곡선 — 트레이드당 자산의 risk_frac 만 리스크(고정 분할).
+
+    ret_pct 복리 곡선은 전 종목 트레이드를 전액 순차 복리로 가정해 표본이
+    커질수록 MDD 가 1로 수렴(방법론 왜곡). 트레이드당 리스크를 고정하면
+    MDD 가 전략 품질을 반영하고 종목·표본 수와 무관하게 비교 가능.
+    """
+    eq = [start]
+    for t in trades:
+        eq.append(eq[-1] * (1 + risk_frac * t.r_multiple))
+    return eq
+
+
 def information_coefficient(scores: list[float], fwd_returns: list[float]) -> float | None:
     """팩터 점수 vs 미래수익률 스피어만 상관(IC)."""
     if len(scores) != len(fwd_returns) or len(scores) < 3:
