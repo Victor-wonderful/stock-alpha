@@ -29,7 +29,43 @@ const SETUP_GUIDE: Partial<Record<TradeSetup, { name: string; desc: string }>> =
     name: "멀티팩터 종합",
     desc: "가치·품질·모멘텀 등 6개 지표 종합 점수 상위 종목 매수",
   },
+  theme: {
+    name: "테마주",
+    desc: "시장 테마(섹터 순환) 기반 매매 — 탐지기 미구현",
+  },
+  new_listing: {
+    name: "신규주",
+    desc: "신규 상장 종목 수급 매매 — 탐지기 미구현",
+  },
 };
+
+// 이벤트 백테스트 대상이 아닌 셋업의 상태 — 전략 지도를 완전하게.
+// (스크리너 필터와 검증 페이지가 같은 전략 목록을 보여야 혼란이 없다)
+const NON_BACKTEST_SETUPS: {
+  setup: TradeSetup;
+  status: string;
+  variant: "accent" | "neutral";
+  note: string;
+}[] = [
+  {
+    setup: "factor_composite",
+    status: "별도 검증 예정",
+    variant: "accent",
+    note: "매매 타이밍이 아닌 종목 선별 전략 — 횡단면 방식(IC·분위수 스프레드)으로 검증 예정. 발행 중.",
+  },
+  {
+    setup: "theme",
+    status: "준비 중",
+    variant: "neutral",
+    note: "미구현 — 발행되지 않습니다.",
+  },
+  {
+    setup: "new_listing",
+    status: "준비 중",
+    variant: "neutral",
+    note: "미구현 — 발행되지 않습니다.",
+  },
+];
 
 export default async function StrategiesPage() {
   const { data, isSample } = await getBacktests();
@@ -144,14 +180,41 @@ export default async function StrategiesPage() {
                     </tr>
                   );
                 })}
+                {NON_BACKTEST_SETUPS.map((s) => {
+                  const guide = SETUP_GUIDE[s.setup];
+                  return (
+                    <tr
+                      key={s.setup}
+                      className="border-b border-border/50 last:border-0 hover:bg-surface-2"
+                    >
+                      <td className="py-2.5 pl-1">
+                        <p className="font-medium text-text">
+                          {guide?.name ?? s.setup}
+                        </p>
+                        <p className="mt-0.5 max-w-sm text-2xs text-text-mute">
+                          {guide?.desc ?? ""}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <Badge variant={s.variant} size="md">
+                          {s.status}
+                        </Badge>
+                      </td>
+                      <td
+                        colSpan={5}
+                        className="px-3 py-2.5 text-2xs text-text-mute"
+                      >
+                        {s.note}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
           <p className="mt-3 text-2xs text-text-mute">
             검증 기준: 표본 ≥ 20거래 · 기대값 ≥ +0.05R · 최대 낙폭 ≤ 40%(일일
-            리스크 1% 기준). 멀티팩터 종합은 매매 시점이 아닌 종목 선별 전략이라
-            별도 방식(횡단면 검증)으로 검증 예정입니다. 과거 성과는 미래 수익을
-            보장하지 않습니다.
+            리스크 1% 기준). 과거 성과는 미래 수익을 보장하지 않습니다.
           </p>
         </Panel>
 

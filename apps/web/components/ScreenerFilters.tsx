@@ -8,10 +8,23 @@ import {
   TRADE_STYLE_LABELS,
 } from "@stock-alpha/db";
 
+// 셋업 필터는 구현·발행 중인 전략만 — 테마주/신규주는 탐지기 미구현(enum 만
+// 존재)이라 항상 0건인 유령 필터가 됨. 구현되면 여기에 추가.
+const ACTIVE_SETUPS = [
+  "factor_composite",
+  "leader_trend",
+  "oversold_bounce",
+  "breakout",
+  "close_betting",
+] as const;
+const ACTIVE_SETUP_LABELS = Object.fromEntries(
+  ACTIVE_SETUPS.map((s) => [s, TRADE_SETUP_LABELS[s]]),
+);
+
 const GROUPS: { key: string; label: string; options: Record<string, string> }[] = [
   { key: "market", label: "시장", options: { KOSPI: "코스피", KOSDAQ: "코스닥" } },
   { key: "style", label: "스타일", options: TRADE_STYLE_LABELS },
-  { key: "setup", label: "셋업", options: TRADE_SETUP_LABELS },
+  { key: "setup", label: "셋업", options: ACTIVE_SETUP_LABELS },
   { key: "session", label: "세션", options: TRADE_SESSION_LABELS },
 ];
 
