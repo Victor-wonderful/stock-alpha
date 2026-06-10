@@ -125,6 +125,72 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
     return picks
 
 
+PICK_EXPIRE_DAYS = 30  # 발행 후 30일(달력) 경과 시 만료 — 스윙 보유기간 상한 근사
+
+
+def resolve_pick_status(
+    pick: dict, last_close: float | None, today: date
+) -> dict | None:
+    """열린 픽 1건의 상태 판정 (순수 함수). 변경 없으면 None.
+
+    종가 기준 근사(장중 터치 미반영) — 손절 우선(보수적).
+    """
+    if last_close is None:
+        return None
+    stop = pick.get("stop_loss")
+    target = pick.get("target_price")
+    entry = pick.get("entry_price")
+    as_of = date.fromisoformat(str(pick["as_of"]))
+
+    status: str | None = None
+    if stop is not None and last_close <= float(stop):
+        status = "stopped"
+    elif target is not None and last_close >= float(target):
+        status = "target"
+    elif (today - as_of).days >= PICK_EXPIRE_DAYS:
+        status = "expired"
+    if status is None:
+        return None
+    ret = (
+        round(last_close / float(entry) - 1, 4)
+        if entry not in (None, 0) else None
+    )
+    return {
+        "status": status,
+        "closed_at": today.isoformat(),
+        "exit_price": last_close,
+        "close_return_pct": ret,
+    }
+
+
+def manage_picks(today: str | None = None) -> dict[str, int]:
+    """열린 픽 전체의 상태를 종가로 확정 — 일일 배치에서 호출 (갭 프레임 [관리])."""
+    client = get_client()
+    d = date.fromisoformat(today) if today else date.today()
+    open_picks = (
+        client.table("recommendations")
+        .select("id,as_of,entry_price,target_price,stop_loss,instrument_id")
+        .eq("basket_type", "daily_focus").eq("status", "open").execute()
+    ).data or []
+
+    counts = {"target": 0, "stopped": 0, "expired": 0, "open": 0}
+    for p in open_picks:
+        last = (
+            client.table("ohlcv").select("close")
+            .eq("instrument_id", p["instrument_id"]).eq("interval", "1d")
+            .order("ts", desc=True).limit(1).execute()
+        ).data
+        last_close = float(last[0]["close"]) if last else None
+        patch = resolve_pick_status(p, last_close, d)
+        if patch is None:
+            counts["open"] += 1
+            continue
+        client.table("recommendations").update(patch).eq("id", p["id"]).execute()
+        counts[patch["status"]] += 1
+    log.info("reports.daily.manage_picks", **counts)
+    return counts
+
+
 def select_and_store_picks(as_of: str) -> int:
     """해당 일자 발행 리포트에서 픽 선정·적재. 단독 재실행 가능(픽만 갱신).
 
@@ -157,6 +223,8 @@ def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
               coverage_top: int = COVERAGE_TOP) -> dict:
     """일일 발행 실행 — 트랙 A/B 리포트 + 오늘의 포커스. 결과 요약 반환."""
     today = date.today().isoformat()
+    # [관리] 어제까지의 열린 픽을 오늘 종가로 먼저 확정(목표/손절/만료)
+    pick_status = manage_picks(today)
     passed = passed_setups_from_db()
     log.info("reports.daily.gate", passed=sorted(passed))
 
@@ -186,7 +254,7 @@ def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
     n_picks = select_and_store_picks(today)
 
     log.info("reports.daily.done", track_a=len(a), track_b=len(b),
-             published=published, skipped=skipped, picks=n_picks)
+             published=published, skipped=skipped, picks=n_picks,
+             pick_status=pick_status)
     return {"track_a": len(a), "track_b": len(b), "published": published,
-            "skipped": skipped, "picks": n_picks,
-            "pick_symbols": [p["instrument_id"] for p in picks]}
+            "skipped": skipped, "picks": n_picks, "pick_status": pick_status}

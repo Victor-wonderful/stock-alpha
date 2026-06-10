@@ -380,6 +380,149 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
   }
 }
 
+// ── 포트폴리오 진단 (피벗 2축 — 자동화된 일반 로직, 입력 미저장) ──
+export interface HoldingInput {
+  symbol: string;
+  weight: number; // 0~1 (정규화 후)
+}
+export interface HoldingDiagnosis {
+  symbol: string;
+  name: string;
+  sector: string | null;
+  weight: number;
+  rating: string | null; // 최신 리포트 판정 (없으면 null)
+  score: number | null; // 종합 점수
+  composite_alpha: number | null;
+  upside_pct: number | null;
+  beta: number | null;
+  vol_annual: number | null;
+  report_id: number | null;
+  warnings: string[];
+}
+export interface PortfolioDiagnosis {
+  holdings: HoldingDiagnosis[];
+  notFound: string[];
+  weighted_alpha: number | null;
+  weighted_beta: number | null;
+  weighted_vol: number | null;
+  top_sector: { sector: string; weight: number } | null;
+  warnings: string[];
+}
+
+export async function getPortfolioDiagnosis(
+  items: HoldingInput[],
+): Promise<PortfolioDiagnosis> {
+  const supabase = await createClient();
+  const holdings: HoldingDiagnosis[] = [];
+  const notFound: string[] = [];
+
+  for (const it of items) {
+    const { data: inst } = await supabase
+      .from("instruments")
+      .select("id,symbol,name,sector,active")
+      .eq("symbol", it.symbol)
+      .limit(1)
+      .single();
+    if (!inst) {
+      notFound.push(it.symbol);
+      continue;
+    }
+    const [fac, val, risk, rep] = await Promise.all([
+      supabase
+        .from("factor_scores")
+        .select("composite_alpha")
+        .eq("instrument_id", inst.id)
+        .order("date", { ascending: false })
+        .limit(1),
+      supabase
+        .from("valuations")
+        .select("upside_pct")
+        .eq("instrument_id", inst.id)
+        .order("date", { ascending: false })
+        .limit(1),
+      supabase
+        .from("risk_metrics")
+        .select("beta,vol_annual")
+        .eq("instrument_id", inst.id)
+        .order("date", { ascending: false })
+        .limit(1),
+      supabase
+        .from("reports")
+        .select("id,rating,payload")
+        .eq("instrument_id", inst.id)
+        .eq("report_type", "indepth")
+        .eq("status", "published")
+        .order("as_of", { ascending: false })
+        .limit(1),
+    ]);
+    const report = rep.data?.[0] as Record<string, unknown> | undefined;
+    const verdict =
+      ((report?.payload as Record<string, unknown>)?.verdict as
+        | Record<string, unknown>
+        | undefined) ?? undefined;
+    const h: HoldingDiagnosis = {
+      symbol: inst.symbol,
+      name: inst.name,
+      sector: inst.sector ?? null,
+      weight: it.weight,
+      rating: (report?.rating as string) ?? null,
+      score: verdict?.score != null ? Number(verdict.score) : null,
+      composite_alpha: fac.data?.[0]?.composite_alpha ?? null,
+      upside_pct: val.data?.[0]?.upside_pct ?? null,
+      beta: risk.data?.[0]?.beta ?? null,
+      vol_annual: risk.data?.[0]?.vol_annual ?? null,
+      report_id: (report?.id as number) ?? null,
+      warnings: [],
+    };
+    if (!inst.active) h.warnings.push("비활성 종목(관리/상폐 가능성)");
+    if (h.rating === "거래 부적합") h.warnings.push("시스템 거래가능 게이트 미통과");
+    if (it.weight > 0.3) h.warnings.push("단일 종목 비중 30% 초과");
+    if (h.vol_annual != null && h.vol_annual > 0.6)
+      h.warnings.push("연 변동성 60% 초과(고위험)");
+    holdings.push(h);
+  }
+
+  const wsum = holdings.reduce((a, h) => a + h.weight, 0) || 1;
+  const wavg = (f: (h: HoldingDiagnosis) => number | null): number | null => {
+    let acc = 0;
+    let w = 0;
+    for (const h of holdings) {
+      const v = f(h);
+      if (v != null) {
+        acc += v * h.weight;
+        w += h.weight;
+      }
+    }
+    return w > 0 ? acc / w : null;
+  };
+
+  const bySector = new Map<string, number>();
+  for (const h of holdings) {
+    const s = h.sector ?? "미분류";
+    bySector.set(s, (bySector.get(s) ?? 0) + h.weight / wsum);
+  }
+  const top = [...bySector.entries()].sort((a, b) => b[1] - a[1])[0];
+
+  const warnings: string[] = [];
+  if (top && top[1] > 0.5)
+    warnings.push(`섹터 집중 — ${top[0]} 비중 ${(top[1] * 100).toFixed(0)}%`);
+  const wbeta = wavg((h) => h.beta);
+  if (wbeta != null && wbeta > 1.3)
+    warnings.push(`포트폴리오 베타 ${wbeta.toFixed(2)} — 시장 대비 고위험`);
+  const unfit = holdings.filter((h) => h.rating === "거래 부적합").length;
+  if (unfit > 0) warnings.push(`거래가능 게이트 미통과 종목 ${unfit}개 보유`);
+
+  return {
+    holdings,
+    notFound,
+    weighted_alpha: wavg((h) => h.composite_alpha),
+    weighted_beta: wbeta,
+    weighted_vol: wavg((h) => h.vol_annual),
+    top_sector: top ? { sector: top[0], weight: top[1] } : null,
+    warnings,
+  };
+}
+
 // ── 모닝 브리프 (report_type='market') ──
 export interface MorningBrief {
   as_of: string;
@@ -439,9 +582,16 @@ export interface PickRecord {
   target_price: number | null;
   stop_loss: number | null;
   last_close: number | null;
-  return_pct: number | null; // 진입가 대비 현재 종가
-  status: "진행중" | "목표 도달" | "손절" | "—";
+  return_pct: number | null; // 진입가 대비 (확정 픽은 청산가 기준)
+  status: "진행중" | "목표 도달" | "손절" | "만료" | "—";
+  closed: boolean; // 엔진이 확정 기록한 픽인지(0017) — 표시 구분용
 }
+
+const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
+  target: "목표 도달",
+  stopped: "손절",
+  expired: "만료",
+};
 
 export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> {
   try {
@@ -449,7 +599,7 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
     const { data, error } = await supabase
       .from("recommendations")
       .select(
-        "as_of,entry_price,target_price,stop_loss,instrument_id,instruments(symbol,name)",
+        "as_of,entry_price,target_price,stop_loss,instrument_id,status,closed_at,exit_price,close_return_pct,instruments(symbol,name)",
       )
       .eq("basket_type", "daily_focus")
       .order("as_of", { ascending: false })
@@ -462,6 +612,28 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
         const entry = r.entry_price as number | null;
         const target = r.target_price as number | null;
         const stop = r.stop_loss as number | null;
+        const base = {
+          as_of: r.as_of as string,
+          symbol: (inst.symbol as string) ?? "",
+          name: (inst.name as string) ?? "",
+          entry_price: entry,
+          target_price: target,
+          stop_loss: stop,
+        };
+
+        // 엔진이 확정(0017)한 픽 — 기록된 청산가/수익률 그대로 (트랙레코드)
+        const stored = r.status as string;
+        if (stored && stored !== "open") {
+          return {
+            ...base,
+            last_close: (r.exit_price as number) ?? null,
+            return_pct: (r.close_return_pct as number) ?? null,
+            status: PICK_STATUS_LABELS[stored] ?? "—",
+            closed: true,
+          };
+        }
+
+        // 열린 픽 — 읽기 시점 최신 종가로 추정 표시
         const price = await getLatestPrice(r.instrument_id as number);
         const last = price.data?.close ?? null;
         const ret =
@@ -472,17 +644,7 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
           else if (target != null && last >= target) status = "목표 도달";
           else status = "진행중";
         }
-        return {
-          as_of: r.as_of as string,
-          symbol: (inst.symbol as string) ?? "",
-          name: (inst.name as string) ?? "",
-          entry_price: entry,
-          target_price: target,
-          stop_loss: stop,
-          last_close: last,
-          return_pct: ret,
-          status,
-        };
+        return { ...base, last_close: last, return_pct: ret, status, closed: false };
       }),
     );
     return { data: rows, isSample: false };

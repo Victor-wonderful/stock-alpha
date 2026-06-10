@@ -4,7 +4,12 @@ from __future__ import annotations
 from datetime import date
 
 from engine.reports.context import EOD_STYLES, build_plan
-from engine.reports.daily import PICKS_MIN_SCORE, select_picks
+from engine.reports.daily import (
+    PICK_EXPIRE_DAYS,
+    PICKS_MIN_SCORE,
+    resolve_pick_status,
+    select_picks,
+)
 from engine.reports.runner import should_skip_unchanged
 
 
@@ -79,6 +84,31 @@ def test_skip_unchanged():
     assert not should_skip_unchanged(old, "중립", today, 3)       # 오래됨 → 발행
     assert not should_skip_unchanged(None, "중립", today, 3)      # 기존 없음 → 발행
     assert not should_skip_unchanged(prev, "중립", today, 0)      # 비활성(액션 트랙)
+
+
+# ── 픽 수명주기 ─────────────────────────────────────────────────────
+
+_PICK = {"as_of": "2026-06-10", "entry_price": 100.0,
+         "target_price": 120.0, "stop_loss": 95.0}
+
+
+def test_pick_status_target_stop_priority():
+    today = date(2026, 6, 11)
+    assert resolve_pick_status(_PICK, 121.0, today)["status"] == "target"
+    assert resolve_pick_status(_PICK, 94.0, today)["status"] == "stopped"
+    # 진행 중 — 변경 없음
+    assert resolve_pick_status(_PICK, 105.0, today) is None
+    # 종가 없음 — 판정 보류
+    assert resolve_pick_status(_PICK, None, today) is None
+
+
+def test_pick_status_expiry_and_return():
+    expired_day = date(2026, 7, 10)  # 발행 후 30일 경과
+    assert (expired_day - date(2026, 6, 10)).days >= PICK_EXPIRE_DAYS
+    out = resolve_pick_status(_PICK, 105.0, expired_day)
+    assert out["status"] == "expired"
+    assert out["close_return_pct"] == 0.05
+    assert out["exit_price"] == 105.0
 
 
 # ── EOD 스타일 필터 ─────────────────────────────────────────────────

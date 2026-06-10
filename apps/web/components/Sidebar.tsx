@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ClipboardCheck,
   LineChart,
   ListFilter,
   Star,
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 const ITEMS = [
   { href: "/focus", label: "오늘의 포커스", icon: Target },
   { href: "/reports", label: "종목 분석", icon: FileText },
+  { href: "/diagnosis", label: "포트폴리오 진단", icon: ClipboardCheck },
   { href: "/screener", label: "전체 시그널", icon: ListFilter },
   { href: "/market", label: "시장", icon: Globe },
   { href: "/strategies", label: "검증·트랙레코드", icon: ShieldCheck },
