@@ -26,6 +26,21 @@ def _load_ohlcv(instrument_id: int, limit: int = 120) -> pd.DataFrame:
     return df[["open", "high", "low", "close", "volume"]].astype(float)
 
 
+def load_flows_map() -> dict[int, pd.DataFrame]:
+    """flows 전체를 한 번에 로드 → {instrument_id: [date,foreign_net,inst_net] 오름차순}.
+
+    수급 셋업(flow_accumulation)용. 종목별 개별 조회 대신 페이지네이션 일괄 로드.
+    """
+    rows = select_all("flows", "instrument_id,date,foreign_net,inst_net")
+    if not rows:
+        return {}
+    df = pd.DataFrame(rows)
+    out: dict[int, pd.DataFrame] = {}
+    for iid, g in df.groupby("instrument_id"):
+        out[int(iid)] = g.sort_values("date").reset_index(drop=True)
+    return out
+
+
 def _rs_ranks(frames: dict[int, pd.DataFrame], window: int = 60) -> dict[int, float]:
     """종목별 window 수익률 → 횡단면 분위(0~1)."""
     rets: dict[int, float] = {}
@@ -67,6 +82,9 @@ def run(
     frames = filter_liquid_frames(frames)
     log.info("signals.universe", total=n_all, liquid=len(frames))
     ranks = _rs_ranks(frames)
+    flows_map = (
+        load_flows_map() if (setups is None or "flow_accumulation" in setups) else {}
+    )
 
     all_rows: list[dict] = []
     for iid, df in frames.items():
@@ -74,6 +92,7 @@ def run(
             generate_signals(
                 df, iid, risk_per_trade_pct=risk_per_trade_pct,
                 rs_rank=ranks.get(iid), setups=setups,
+                flows=flows_map.get(iid),
             )
         )
 

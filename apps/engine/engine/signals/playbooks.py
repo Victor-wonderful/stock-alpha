@@ -130,9 +130,144 @@ def detect_close_betting(df: pd.DataFrame, vol_mult: float = 1.2) -> Candidate |
     )
 
 
+def detect_pullback(df: pd.DataFrame) -> Candidate | None:
+    """눌림목: 상승 추세(MA20>MA60, 종가>MA60) 중 MA20 부근까지 조정 후 당일 반등.
+
+    과대낙폭반등(하락 종목 역추세)과 다름 — 살아있는 추세의 '쉬어가는 자리' 매수.
+    돌파의 거울상: 추격이 아닌 대기 진입이라 손절이 타이트(MA20 하단) → R:R 우위.
+    """
+    if len(df) < 60:
+        return None
+    o, close = df["open"], df["close"]
+    ma20, ma60 = ind.sma(close, 20), ind.sma(close, 60)
+    c, m20, m60 = _last(close), _last(ma20), _last(ma60)
+    if not (m20 > m60 and c > m60):                 # 추세 살아있음
+        return None
+    if not (-0.02 <= c / m20 - 1 <= 0.03):          # MA20 부근(-2%~+3%)
+        return None
+    hi10 = float(df["high"].iloc[-11:-1].max())
+    pull = c / hi10 - 1
+    if not (-0.12 <= pull <= -0.02):                # 직전 고점 대비 -2~-12% 조정
+        return None
+    if not (c > float(close.iloc[-2]) and c > _last(o)):  # 당일 반등 양봉
+        return None
+    atr = _last(ind.atr(df))
+    vol_up = _last(df["volume"]) > float(df["volume"].iloc[-21:-1].mean())
+    strength = 0.6 + (0.1 if vol_up else 0.0)
+    return Candidate(
+        setup="pullback", side="buy", style="swing", session="regular",
+        entry_ref=c, atr=atr, support=m20, resistance=hi10,
+        strength=min(1.0, strength),
+        rationale=["상승 추세 유지(MA20>MA60)", f"고점 대비 {pull:.1%} 조정",
+                   "MA20 지지 반등"],
+        payload={"ma20": m20, "pullback_pct": pull},
+    )
+
+
+def detect_high_52w(df: pd.DataFrame, lookback: int = 250, vol_mult: float = 1.3) -> Candidate | None:
+    """52주 신고가: 1년 신고가 갱신 + 거래량 확인 — 장기 모멘텀(포지션 스타일).
+
+    breakout(20일 박스)과 다른 시간 지평. 신고가 종목은 매물대(손실 보유자)가
+    없어 상승 마찰이 적다는 고전적 모멘텀 이상현상.
+    """
+    if len(df) < lookback + 1:
+        return None
+    high, close, vol = df["high"], df["close"], df["volume"]
+    prior_high = float(high.iloc[-(lookback + 1):-1].max())
+    c = _last(close)
+    if c <= prior_high:
+        return None
+    avg_vol = float(vol.iloc[-21:-1].mean())
+    if avg_vol > 0 and _last(vol) < avg_vol * vol_mult:
+        return None
+    atr = _last(ind.atr(df))
+    strength = 0.65 + (0.15 if (avg_vol > 0 and _last(vol) > avg_vol * 2) else 0.0)
+    return Candidate(
+        setup="high_52w", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=prior_high,
+        strength=min(1.0, strength),
+        rationale=[f"{lookback}일(52주) 신고가 갱신", "거래량 확인"],
+        payload={"prior_52w_high": prior_high},
+    )
+
+
+def detect_vol_squeeze(
+    df: pd.DataFrame, window: int = 60, squeeze_pct: float = 0.25, vol_mult: float = 1.5,
+) -> Candidate | None:
+    """변동성 수축 돌파(VCP): 변동성이 바짝 줄어든 뒤 거래량과 함께 20일 고가 돌파.
+
+    수축(에너지 응축) 후 확장은 돌파의 질 좋은 부분집합 — 가짜 돌파 비율이 낮다.
+    """
+    if len(df) < window + 21:
+        return None
+    high, close, vol = df["high"], df["close"], df["volume"]
+    atr_pct = (ind.atr(df) / close).dropna()
+    if len(atr_pct) < window:
+        return None
+    recent = float(atr_pct.iloc[-2])                  # 돌파 전일까지의 수축 상태
+    rank = float((atr_pct.iloc[-window:-1] <= recent).mean())
+    if rank > squeeze_pct:                            # 최근 변동성이 하위 25% 가 아님
+        return None
+    prior20 = float(high.iloc[-21:-1].max())
+    c = _last(close)
+    if c <= prior20:
+        return None
+    avg_vol = float(vol.iloc[-21:-1].mean())
+    if avg_vol > 0 and _last(vol) < avg_vol * vol_mult:
+        return None
+    atr = _last(ind.atr(df))
+    strength = 0.65 + (0.1 if rank <= 0.1 else 0.0)
+    return Candidate(
+        setup="vol_squeeze", side="buy", style="swing", session="regular",
+        entry_ref=c, atr=atr, support=prior20,
+        strength=min(1.0, strength),
+        rationale=[f"변동성 하위 {rank:.0%} 수축", "20일 고가 돌파", "거래량 확인"],
+        payload={"squeeze_rank": rank, "breakout_level": prior20},
+    )
+
+
+def detect_flow_accumulation(
+    df: pd.DataFrame, flows: pd.DataFrame | None = None,
+    window: int = 10, min_pos_days: int = 7,
+) -> Candidate | None:
+    """수급 동반 매집: 외국인+기관 동반 순매수 누적 + 가격 확인(종가>MA20).
+
+    한국 시장 고유 셋업 — flows(투자자별 순매매) 데이터 필요.
+    flows: [date, foreign_net, inst_net] 날짜 오름차순, 현재 봉 이전까지.
+    """
+    if flows is None or len(flows) < window or len(df) < 20:
+        return None
+    w = flows.iloc[-window:]
+    f_sum = float(w["foreign_net"].fillna(0).sum())
+    i_sum = float(w["inst_net"].fillna(0).sum())
+    pos_days = int(((w["foreign_net"].fillna(0) + w["inst_net"].fillna(0)) > 0).sum())
+    if not (f_sum > 0 and i_sum > 0 and pos_days >= min_pos_days):
+        return None
+    close = df["close"]
+    c, m20 = _last(close), _last(ind.sma(close, 20))
+    if c <= m20:                                      # 수급이 가격으로 확인돼야 함
+        return None
+    atr = _last(ind.atr(df))
+    strength = 0.6 + (0.1 if pos_days >= window - 1 else 0.0)
+    return Candidate(
+        setup="flow_accumulation", side="buy", style="swing", session="regular",
+        entry_ref=c, atr=atr, support=m20,
+        strength=min(1.0, strength),
+        rationale=[f"외국인 {window}일 순매수 {f_sum:+,.0f}주",
+                   f"기관 {i_sum:+,.0f}주", f"동반 순매수 {pos_days}/{window}일",
+                   "MA20 상회(가격 확인)"],
+        payload={"foreign_net_sum": f_sum, "inst_net_sum": i_sum,
+                 "pos_days": pos_days},
+    )
+
+
 ALL_DETECTORS = {
     "leader_trend": detect_leader_trend,
     "oversold_bounce": detect_oversold_bounce,
     "breakout": detect_breakout,
     "close_betting": detect_close_betting,
+    "pullback": detect_pullback,
+    "high_52w": detect_high_52w,
+    "vol_squeeze": detect_vol_squeeze,
+    "flow_accumulation": detect_flow_accumulation,
 }

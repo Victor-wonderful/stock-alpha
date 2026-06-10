@@ -17,6 +17,10 @@ export type TradeSetup =
   | 'oversold_bounce'
   | 'breakout'
   | 'close_betting'
+  | 'flow_accumulation'
+  | 'pullback'
+  | 'high_52w'
+  | 'vol_squeeze'
   | 'theme'
   | 'new_listing';
 export type TradeSession = 'pre' | 'regular' | 'close' | 'after';
@@ -36,6 +40,10 @@ export const TRADE_SETUP_LABELS: Record<TradeSetup, string> = {
   oversold_bounce: '과대낙폭 반등',
   breakout: '돌파',
   close_betting: '종가베팅',
+  flow_accumulation: '수급 동반 매집',
+  pullback: '눌림목',
+  high_52w: '52주 신고가',
+  vol_squeeze: '변동성 수축 돌파',
   theme: '테마주',
   new_listing: '신규주',
 };

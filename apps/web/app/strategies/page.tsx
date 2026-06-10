@@ -25,6 +25,22 @@ const SETUP_GUIDE: Partial<Record<TradeSetup, { name: string; desc: string }>> =
     name: "종가베팅",
     desc: "장 마감 무렵 매수해 다음 날 오전에 파는 단기 매매",
   },
+  flow_accumulation: {
+    name: "수급 동반 매집",
+    desc: "외국인과 기관이 동시에 꾸준히 사 모으는 종목을 따라 매수",
+  },
+  pullback: {
+    name: "눌림목",
+    desc: "상승 추세 종목이 잠시 쉬어갈 때(20일선 부근) 좋은 가격에 진입",
+  },
+  high_52w: {
+    name: "52주 신고가",
+    desc: "1년 최고가를 갱신한 종목의 장기 상승 흐름에 올라타는 매매",
+  },
+  vol_squeeze: {
+    name: "변동성 수축 돌파",
+    desc: "움직임이 바짝 줄었던 종목이 거래량과 함께 터질 때 진입",
+  },
   factor_composite: {
     name: "멀티팩터 종합",
     desc: "가치·품질·모멘텀 등 6개 지표 종합 점수 상위 종목 매수",

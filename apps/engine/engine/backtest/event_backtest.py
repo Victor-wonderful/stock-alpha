@@ -26,10 +26,18 @@ def backtest_playbook(
     *,
     risk_per_trade_pct: float = 1.0,
     min_lookback: int = 60,
+    flows: pd.DataFrame | None = None,
 ) -> list[Trade]:
-    """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트."""
+    """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
+
+    flows: 수급 셋업용 [date, foreign_net, inst_net] 오름차순 — 각 봉 시점까지로
+    슬라이스해 전달(point-in-time). df 에 ts 컬럼이 없으면 전체를 그대로 전달.
+    """
     detector = playbooks.ALL_DETECTORS.get(setup)
     if detector is None or len(df) < min_lookback + 2:
+        return []
+    needs_flows = setup == "flow_accumulation"
+    if needs_flows and (flows is None or flows.empty):
         return []
 
     trades: list[Trade] = []
@@ -37,7 +45,15 @@ def backtest_playbook(
     n = len(df)
     while i < n - 1:
         window = df.iloc[: i + 1]
-        cand = detector(window)
+        if needs_flows:
+            if "ts" in df.columns:
+                now_ts = str(df["ts"].iloc[i])[:10]
+                fwin = flows[flows["date"] <= now_ts]
+            else:
+                fwin = flows
+            cand = detector(window, flows=fwin)
+        else:
+            cand = detector(window)
         if cand is None or cand.side != "buy":  # 현재 플레이북은 모두 매수
             i += 1
             continue

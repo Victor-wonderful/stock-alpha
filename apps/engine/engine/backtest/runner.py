@@ -43,12 +43,17 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
     frames = filter_liquid_frames(frames)
     log.info("backtest.universe", total=n_all, liquid=len(frames))
 
+    from engine.signals.runner import load_flows_map
+    flows_map = load_flows_map()
+
     passed: dict[str, bool] = {}
     bt_rows: list[dict] = []
     for setup in playbooks.ALL_DETECTORS:
         trades: list[Trade] = []
-        for df in frames.values():
-            trades.extend(backtest_playbook(df, setup))
+        for iid, df in frames.items():
+            trades.extend(
+                backtest_playbook(df, setup, flows=flows_map.get(iid))
+            )
         # 시간순 정렬 — MDD 는 순서 민감. DB 행 순서(임의)로 이어붙이면 런마다
         # 값이 흔들려 경계선 셋업이 PASS/FAIL 을 오간다. 시간순 = 실제 시퀀스.
         trades.sort(key=lambda t: t.entry_ts)
