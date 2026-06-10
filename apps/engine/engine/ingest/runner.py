@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from engine.db import upsert
+from engine.db import select_all, upsert
 from engine.ingest import dart, krx, naver
 from engine.ingest.instruments import load_instrument_map
 from engine.logging import get_logger
@@ -57,34 +57,54 @@ def ingest_krx_prices(days: int = 30, workers: int = 12) -> int:
     return total
 
 
-def ingest_krx_flows(days: int = 30, pages: int = 3) -> int:
+def ingest_krx_flows(days: int = 30, pages: int = 3, workers: int = 8, resume: bool = True) -> int:
     """투자자별 순매수(외국인·기관) 적재 — 네이버 금융 소스.
 
     pykrx 의 KRX 투자자수급·공매도 엔드포인트가 업스트림 breakage(빈 응답)라
     네이버 금융(item/frgn.naver)에서 외국인·기관 순매매를 받아 적재한다.
     공매도(short_*)·개인·프로그램은 이 소스에 없어 미적재(다른 소스 필요).
     `days` 는 호환 위해 받지만 네이버는 page 단위 → pages(페이지당 ~20거래일) 사용.
+
+    활성 주식만 대상(펀드/파생 제외). fetch_frgn(페이지 순차)이 병목 → 스레드풀
+    병렬(workers, 네이버 차단 회피 위해 보수적). resume=True 면 이미 flows 있는
+    종목 건너뜀(재시작 효율).
     """
-    imap = load_instrument_map("KRX")
-    total = 0
-    empty_symbols = 0
-    for (symbol, _exchange), iid in imap.items():
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    inst = select_all("instruments", "id,symbol", eq={"active": True, "exchange": "KRX"})
+    have = (
+        {r["instrument_id"] for r in select_all("flows", "instrument_id")}
+        if resume else set()
+    )
+    targets = [(it["symbol"], it["id"]) for it in inst if it["id"] not in have]
+
+    def _fetch(t: tuple) -> tuple:
+        symbol, iid = t
         try:
             df = naver.fetch_frgn(symbol, pages=pages)
-            rows = naver.normalize_flows(df, iid)
-            if not rows:
-                empty_symbols += 1
-                continue
-            total += upsert("flows", rows, on_conflict="instrument_id,date")
+            return symbol, naver.normalize_flows(df, iid), None
         except Exception as e:  # noqa: BLE001
-            log.warning("flows.fail", symbol=symbol, error=str(e))
-    if total == 0 and empty_symbols:
-        log.warning(
-            "flows.empty",
-            symbols=empty_symbols,
-            detail="네이버 수급 파싱 0행 — 페이지 구조 변경 가능성 점검 필요.",
-        )
-    log.info("ingest_krx_flows.done", rows=total, source="naver")
+            return symbol, [], str(e)
+
+    total = 0
+    done = 0
+    empty = 0
+    failed = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(_fetch, t) for t in targets]
+        for fut in as_completed(futures):
+            symbol, rows, err = fut.result()
+            if err:
+                failed += 1
+                log.warning("flows.fail", symbol=symbol, error=err)
+            elif rows:
+                total += upsert("flows", rows, on_conflict="instrument_id,date")
+            else:
+                empty += 1
+            done += 1
+            if done % 200 == 0:
+                log.info("flows.progress", done=done, of=len(targets), rows=total, failed=failed)
+    log.info("ingest_krx_flows.done", rows=total, targets=len(targets), empty=empty, failed=failed, source="naver")
     return total
 
 

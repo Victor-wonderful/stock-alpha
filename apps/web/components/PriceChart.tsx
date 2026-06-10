@@ -42,7 +42,15 @@ function sampleCandles(anchor: number, n = 120): CandlestickData[] {
   return out;
 }
 
-export function PriceChart({ anchor, levels }: { anchor: number; levels: Levels }) {
+export function PriceChart({
+  anchor,
+  levels,
+  candles,
+}: {
+  anchor: number;
+  levels: Levels;
+  candles?: CandlestickData[];
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,7 +81,9 @@ export function PriceChart({ anchor, levels }: { anchor: number; levels: Levels 
       wickUpColor: "#2ebd85",
       wickDownColor: "#f6465d",
     });
-    series.setData(sampleCandles(anchor));
+    series.setData(
+      candles && candles.length > 0 ? candles : sampleCandles(anchor),
+    );
 
     const line = (price: number | null | undefined, color: string, title: string) => {
       if (price == null) return;
@@ -98,7 +108,16 @@ export function PriceChart({ anchor, levels }: { anchor: number; levels: Levels 
       ro.disconnect();
       chart.remove();
     };
-  }, [anchor, levels.entry, levels.stop, levels.tp1]);
+    // candles 식별키: 길이 + 마지막 캔들 시각·종가 (참조 동일성 대신 값 기반).
+  }, [
+    anchor,
+    levels.entry,
+    levels.stop,
+    levels.tp1,
+    candles?.length ?? 0,
+    candles?.[candles.length - 1]?.time ?? 0,
+    candles?.[candles.length - 1]?.close ?? 0,
+  ]);
 
   return <div ref={ref} className="h-80 w-full" />;
 }

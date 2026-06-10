@@ -7,11 +7,14 @@ import {
   getFactor,
   getFlows,
   getInstrumentBySymbol,
+  getLatestPrice,
+  getOhlcv,
   getRisk,
   getSignalsForSymbol,
   getValuation,
 } from "@/lib/data";
 import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
+import type { UTCTimestamp } from "lightweight-charts";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +30,22 @@ export default async function StockDetailPage({
   const sigs = await getSignalsForSymbol(symbol);
   const flows = await getFlows(inst.data.id, symbol);
   const risk = await getRisk(inst.data.id, symbol);
+  const price = await getLatestPrice(inst.data.id);
+  const ohlcv = await getOhlcv(inst.data.id);
 
   const anySample =
     inst.isSample || val.isSample || fac.isSample || sigs.isSample || flows.isSample || risk.isSample;
   const lead = sigs.data[0];
-  const anchor = lead?.entry_price ?? val.data?.dcf_value ?? 70000;
+  // 참조가: 최신 KIS 종가 우선 → 없으면 시그널 진입가 → DCF → 기본값.
+  const anchor = price.data?.close ?? lead?.entry_price ?? val.data?.dcf_value ?? 70000;
+  const changePct = price.data?.changePct ?? null;
+  const candles = ohlcv.data.map((c) => ({
+    time: c.time as UTCTimestamp,
+    open: c.open,
+    high: c.high,
+    low: c.low,
+    close: c.close,
+  }));
   const upside = val.data?.upside_pct ?? null;
 
   return (
@@ -45,12 +59,23 @@ export default async function StockDetailPage({
       {/* 가격 헤더 */}
       <div className="mb-4 flex flex-wrap items-end gap-x-8 gap-y-2">
         <div>
-          <p className="text-2xs uppercase tracking-wide text-text-mute">참조가</p>
+          <p className="text-2xs uppercase tracking-wide text-text-mute">
+            {price.data ? `종가 · ${price.data.date}` : "참조가"}
+          </p>
           <p className="tnum text-3xl font-bold">
             {fmtPrice(anchor, inst.data.currency)}
             <span className="ml-1 text-sm font-normal text-text-mute">
               {inst.data.currency}
             </span>
+            {changePct != null && (
+              <span
+                className={`ml-2 text-base font-semibold ${
+                  changePct >= 0 ? "text-bull" : "text-bear"
+                }`}
+              >
+                {fmtPct(changePct)}
+              </span>
+            )}
           </p>
         </div>
         {upside != null && (
@@ -76,10 +101,12 @@ export default async function StockDetailPage({
             <PriceChart
               anchor={anchor}
               levels={{ entry: lead?.entry_price, stop: lead?.stop_loss, tp1: lead?.tp1 }}
+              candles={candles.length > 0 ? candles : undefined}
             />
             <p className="mt-2 text-2xs text-text-mute">
-              * 실 OHLCV 연결 전 합성 캔들로 구조를 표시합니다. 점선은 대표 시그널의
-              진입/손절/TP1.
+              {candles.length > 0
+                ? `* KIS 일봉 ${candles.length}개. 점선은 대표 시그널의 진입/손절/TP1.`
+                : "* 실 OHLCV 연결 전 합성 캔들로 구조를 표시합니다. 점선은 대표 시그널의 진입/손절/TP1."}
             </p>
           </Panel>
 

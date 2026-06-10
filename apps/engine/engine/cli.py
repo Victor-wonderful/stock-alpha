@@ -33,7 +33,7 @@ def ingest(
     if market == "kr" and target == "prices":
         n = runner.ingest_krx_prices(days=days, workers=workers)
     elif market == "kr" and target == "flows":
-        n = runner.ingest_krx_flows(days=days)
+        n = runner.ingest_krx_flows(days=days, workers=workers)
     elif market == "kr" and target == "fundamentals":
         n = runner.ingest_krx_financials(year=year, workers=workers)
     else:

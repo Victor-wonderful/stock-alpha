@@ -226,14 +226,107 @@ export async function getSignalsForSymbol(
   }
 }
 
-// ── 시장(마켓) ── 레짐/섹터는 파생(전용 테이블 없음) → 현재 샘플. macro 는 테이블 시도.
+// FRED series_id → 표시 메타. spark 는 최근 값 시퀀스.
+const MACRO_META: Record<string, { label: string; unit: string }> = {
+  DGS10: { label: "미 국채 10Y", unit: "%" },
+  DEXKOUS: { label: "원/달러", unit: "원" },
+  VIXCLS: { label: "VIX", unit: "" },
+  DCOILWTICO: { label: "WTI 유가", unit: "$" },
+};
+
+// ── 시장(마켓) ── regime·sectors·macro 모두 엔진/외부 실데이터. 셋 다 실이면
+//    isSample=false 로 "예시" 배지 제거. 하나라도 폴백이면 true.
 export async function getMarket(): Promise<
   Loaded<{ regime: RegimeView; macro: MacroSeriesView[]; sectors: SectorRotationView[] }>
 > {
-  // regime/sectors 는 엔진 파생 산출물 — 전용 테이블 도입 전까지 샘플 제공.
+  let regime: RegimeView = SAMPLE_REGIME;
+  let sectors: SectorRotationView[] = SAMPLE_SECTORS;
+  let macro: MacroSeriesView[] = SAMPLE_MACRO;
+  let regimeReal = false, sectorsReal = false, macroReal = false;
+
+  try {
+    const supabase = await createClient();
+
+    // 레짐
+    const { data: rg } = await supabase
+      .from("market_regime")
+      .select("regime,score,drivers")
+      .order("date", { ascending: false })
+      .limit(1)
+      .single();
+    if (rg) {
+      regime = {
+        regime: rg.regime as RegimeView["regime"],
+        score: Number(rg.score),
+        drivers: (rg.drivers as string[]) ?? [],
+      };
+      regimeReal = true;
+    }
+
+    // 섹터 로테이션 (최신 date)
+    const { data: srDate } = await supabase
+      .from("sector_rotation")
+      .select("date")
+      .order("date", { ascending: false })
+      .limit(1)
+      .single();
+    if (srDate?.date) {
+      const { data: sr } = await supabase
+        .from("sector_rotation")
+        .select("sector,momentum,flow")
+        .eq("date", srDate.date)
+        .order("momentum", { ascending: false });
+      if (sr && sr.length > 0) {
+        sectors = sr.map((r: Record<string, unknown>) => ({
+          sector: r.sector as string,
+          momentum: Number(r.momentum ?? 0),
+          flow: Number(r.flow ?? 0),
+        }));
+        sectorsReal = true;
+      }
+    }
+
+    // 매크로 (FRED) — series 별 최신값·전일대비·스파크
+    const ids = Object.keys(MACRO_META);
+    const { data: mc } = await supabase
+      .from("macro")
+      .select("series_id,date,value")
+      .in("series_id", ids)
+      .order("date", { ascending: true });
+    if (mc && mc.length > 0) {
+      const bySeries = new Map<string, number[]>();
+      for (const row of mc as { series_id: string; value: number }[]) {
+        const arr = bySeries.get(row.series_id) ?? [];
+        arr.push(Number(row.value));
+        bySeries.set(row.series_id, arr);
+      }
+      const built: MacroSeriesView[] = [];
+      for (const id of ids) {
+        const vals = bySeries.get(id);
+        if (!vals || vals.length === 0) continue;
+        const value = vals[vals.length - 1];
+        const prev = vals.length > 1 ? vals[vals.length - 2] : value;
+        built.push({
+          series_id: id,
+          label: MACRO_META[id].label,
+          value,
+          unit: MACRO_META[id].unit,
+          change: Number((value - prev).toFixed(4)),
+          spark: vals.slice(-16),
+        });
+      }
+      if (built.length > 0) {
+        macro = built;
+        macroReal = true;
+      }
+    }
+  } catch {
+    /* 폴백 유지 */
+  }
+
   return {
-    data: { regime: SAMPLE_REGIME, macro: SAMPLE_MACRO, sectors: SAMPLE_SECTORS },
-    isSample: true,
+    data: { regime, macro, sectors },
+    isSample: !(regimeReal && sectorsReal && macroReal),
   };
 }
 
@@ -316,10 +409,133 @@ export async function getFlows(
   }
 }
 
-// ── 리스크 (종목 상세) ── 파생 산출물 → 현재 심볼별 샘플
+// ── 가격 (종목 상세) ── KIS 일봉 OHLCV.
+export interface OhlcvCandle {
+  time: number; // unix seconds (UTC 자정)
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export interface LatestPrice {
+  close: number;
+  prevClose: number | null;
+  changePct: number | null;
+  date: string;
+}
+
+function tsToUnix(ts: string): number {
+  return Math.floor(new Date(ts.slice(0, 10) + "T00:00:00Z").getTime() / 1000);
+}
+
+export async function getOhlcv(
+  instrumentId: number,
+  days = 180,
+): Promise<Loaded<OhlcvCandle[]>> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("ohlcv")
+      .select("ts,open,high,low,close")
+      .eq("instrument_id", instrumentId)
+      .eq("interval", "1d")
+      .order("ts", { ascending: false })
+      .limit(days);
+    if (error || !data || data.length === 0) throw error ?? new Error("empty");
+    // 차트는 오름차순 필요 → 뒤집기. 중복 날짜 제거.
+    const seen = new Set<number>();
+    const candles: OhlcvCandle[] = [];
+    for (const r of data as Record<string, number | string>[]) {
+      const time = tsToUnix(r.ts as string);
+      if (seen.has(time)) continue;
+      seen.add(time);
+      candles.push({
+        time,
+        open: Number(r.open),
+        high: Number(r.high),
+        low: Number(r.low),
+        close: Number(r.close),
+      });
+    }
+    candles.reverse();
+    return { data: candles, isSample: false };
+  } catch {
+    return { data: [], isSample: true };
+  }
+}
+
+export async function getLatestPrice(
+  instrumentId: number,
+): Promise<Loaded<LatestPrice | null>> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("ohlcv")
+      .select("ts,close")
+      .eq("instrument_id", instrumentId)
+      .eq("interval", "1d")
+      .order("ts", { ascending: false })
+      .limit(2);
+    if (error || !data || data.length === 0) throw error ?? new Error("empty");
+    const close = Number(data[0].close);
+    const prevClose = data[1] != null ? Number(data[1].close) : null;
+    // 비율(fraction) 로 저장 — 표시는 fmtPct 가 ×100 처리.
+    const changePct =
+      prevClose != null && prevClose !== 0
+        ? (close - prevClose) / prevClose
+        : null;
+    return {
+      data: { close, prevClose, changePct, date: (data[0].ts as string).slice(0, 10) },
+      isSample: false,
+    };
+  } catch {
+    return { data: null, isSample: true };
+  }
+}
+
+// ── 리스크 (종목 상세) ── 엔진 risk_metrics(베타·변동성·VaR·MDD) + factor_scores
+//    (팩터 노출). 둘 다 없을 때만 샘플 폴백.
 export async function getRisk(
-  _instrumentId: number,
+  instrumentId: number,
   symbol = "",
 ): Promise<Loaded<RiskView>> {
-  return { data: sampleRiskFor(symbol), isSample: true };
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("risk_metrics")
+      .select("beta,vol_annual,var_95,max_drawdown")
+      .eq("instrument_id", instrumentId)
+      .order("date", { ascending: false })
+      .limit(1)
+      .single();
+    if (error || !data) throw error ?? new Error("none");
+
+    // 팩터 노출: 시장(beta) + factor_scores 의 size/value/momentum z-score.
+    const { data: fac } = await supabase
+      .from("factor_scores")
+      .select("size_z,value_z,momentum_z")
+      .eq("instrument_id", instrumentId)
+      .order("date", { ascending: false })
+      .limit(1)
+      .single();
+    const factor_exposure = [
+      { label: "시장", value: Number(data.beta ?? 0) },
+      { label: "사이즈", value: Number(fac?.size_z ?? 0) },
+      { label: "밸류", value: Number(fac?.value_z ?? 0) },
+      { label: "모멘텀", value: Number(fac?.momentum_z ?? 0) },
+    ];
+    return {
+      data: {
+        beta: data.beta as number | null,
+        vol_annual: data.vol_annual as number | null,
+        var_95: data.var_95 as number | null,
+        max_drawdown: data.max_drawdown as number | null,
+        factor_exposure,
+      },
+      isSample: false,
+    };
+  } catch {
+    return { data: sampleRiskFor(symbol), isSample: true };
+  }
 }
