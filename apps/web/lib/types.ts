@@ -130,6 +130,97 @@ export interface RiskView {
   factor_exposure: { label: string; value: number }[];
 }
 
+// ── AI 애널리스트 리포트 ──
+export interface ReportListItem {
+  id: number;
+  report_type: string;
+  symbol: string | null;
+  name: string | null;
+  title: string;
+  as_of: string;
+  rating: string | null;
+  target_price: number | null;
+  summary: string | null;
+  model_version: string | null;
+}
+
+// 엔진 reports/context.py 가 만드는 구조화 페이로드 (수치 원본)
+export interface ReportGateCheck {
+  key: string;
+  label: string;
+  passed: boolean;
+  value: number | string[] | null;
+}
+export interface ReportPlanRow {
+  style: TradeStyle;
+  setup: TradeSetup;
+  session: TradeSession | null;
+  strength: number;
+  entry_price: number;
+  stop_loss: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  tp3: number | null;
+  risk_reward: number | null;
+  holding_horizon: string | null;
+  rationale: string | null;
+  valid_until: string | null;
+}
+export interface ReportPayload {
+  instrument: {
+    id: number;
+    symbol: string;
+    name: string;
+    exchange: string | null;
+    sector: string | null;
+  };
+  last_close: number | null;
+  verdict: {
+    score: number;
+    rating: string;
+    components: Record<string, number>;
+    weights: Record<string, number>;
+  };
+  tradability: { passed: boolean; checks: ReportGateCheck[] };
+  plan: ReportPlanRow[];
+  valuation: {
+    date: string | null;
+    per: number | null;
+    pbr: number | null;
+    roe: number | null;
+    dcf_value: number | null;
+    upside_pct: number | null;
+  } | null;
+  factor: (FactorView & { date: string | null }) | null;
+  flows: {
+    window_days: number;
+    foreign_net: number | null;
+    inst_net: number | null;
+    last_date: string | null;
+  } | null;
+  backtests: {
+    setup: TradeSetup;
+    win_rate: number | null;
+    avg_rr: number | null;
+    mdd: number | null;
+    sharpe: number | null;
+    passed: boolean;
+  }[];
+  narrative: {
+    thesis: string;
+    trader_view: string;
+    quant_view: string;
+    risks: string[];
+  };
+}
+
+export interface ReportDetail extends ReportListItem {
+  payload: ReportPayload | null;
+  body_md: string | null;
+  source_refs: unknown[] | null;
+  created_at: string;
+}
+
 // 데이터 조회 결과 — 비어 있거나 DB 미연결 시 isSample 로 폴백 여부 표시
 export interface Loaded<T> {
   data: T;

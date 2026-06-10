@@ -12,6 +12,8 @@ import type {
   MacroSeriesView,
   RecommendationView,
   RegimeView,
+  ReportDetail,
+  ReportListItem,
   RiskView,
   SectorRotationView,
   SignalView,
@@ -322,4 +324,70 @@ export async function getRisk(
   symbol = "",
 ): Promise<Loaded<RiskView>> {
   return { data: sampleRiskFor(symbol), isSample: true };
+}
+
+// ── AI 애널리스트 리포트 ──
+// 샘플 폴백 없음 — 발행 전에는 빈 목록(EmptyState)이 정직한 상태.
+
+function mapReportRow(row: Record<string, unknown>): ReportListItem {
+  const inst = (row.instruments ?? {}) as Record<string, unknown>;
+  return {
+    id: row.id as number,
+    report_type: row.report_type as string,
+    symbol: (inst.symbol as string) ?? null,
+    name: (inst.name as string) ?? null,
+    title: row.title as string,
+    as_of: row.as_of as string,
+    rating: row.rating as string | null,
+    target_price: row.target_price as number | null,
+    summary: row.summary as string | null,
+    model_version: row.model_version as string | null,
+  };
+}
+
+export async function getReports(limit = 30): Promise<Loaded<ReportListItem[]>> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("reports")
+      .select(
+        "id,report_type,title,as_of,rating,target_price,summary,model_version,instruments(symbol,name)",
+      )
+      .eq("status", "published")
+      .order("as_of", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit);
+    if (error || !data) throw error ?? new Error("empty");
+    return { data: data.map(mapReportRow), isSample: false };
+  } catch {
+    return { data: [], isSample: false };
+  }
+}
+
+export async function getReportById(
+  id: number,
+): Promise<Loaded<ReportDetail | null>> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("reports")
+      .select("*, instruments(symbol,name)")
+      .eq("id", id)
+      .limit(1)
+      .single();
+    if (error || !data) throw error ?? new Error("not found");
+    const row = data as Record<string, unknown>;
+    return {
+      data: {
+        ...mapReportRow(row),
+        payload: (row.payload as ReportDetail["payload"]) ?? null,
+        body_md: (row.body_md as string) ?? null,
+        source_refs: (row.source_refs as unknown[]) ?? null,
+        created_at: (row.created_at as string) ?? "",
+      },
+      isSample: false,
+    };
+  } catch {
+    return { data: null, isSample: false };
+  }
 }
