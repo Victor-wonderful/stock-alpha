@@ -380,6 +380,69 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
   }
 }
 
+// ── 픽 기록 (실발행 트랙레코드) ──
+// 발행한 모든 daily_focus 픽의 진입가 대비 현재가·상태를 읽기 시점에 계산.
+// 종가 기반(장중 터치 미반영) — 목표/손절 "도달"은 종가 기준 근사임을 화면에 고지.
+export interface PickRecord {
+  as_of: string;
+  symbol: string;
+  name: string;
+  entry_price: number | null;
+  target_price: number | null;
+  stop_loss: number | null;
+  last_close: number | null;
+  return_pct: number | null; // 진입가 대비 현재 종가
+  status: "진행중" | "목표 도달" | "손절" | "—";
+}
+
+export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("recommendations")
+      .select(
+        "as_of,entry_price,target_price,stop_loss,instrument_id,instruments(symbol,name)",
+      )
+      .eq("basket_type", "daily_focus")
+      .order("as_of", { ascending: false })
+      .limit(limit);
+    if (error || !data || data.length === 0) throw error ?? new Error("empty");
+
+    const rows: PickRecord[] = await Promise.all(
+      (data as Record<string, unknown>[]).map(async (r) => {
+        const inst = (r.instruments ?? {}) as Record<string, unknown>;
+        const entry = r.entry_price as number | null;
+        const target = r.target_price as number | null;
+        const stop = r.stop_loss as number | null;
+        const price = await getLatestPrice(r.instrument_id as number);
+        const last = price.data?.close ?? null;
+        const ret =
+          entry != null && entry > 0 && last != null ? last / entry - 1 : null;
+        let status: PickRecord["status"] = "—";
+        if (last != null && entry != null) {
+          if (stop != null && last <= stop) status = "손절";
+          else if (target != null && last >= target) status = "목표 도달";
+          else status = "진행중";
+        }
+        return {
+          as_of: r.as_of as string,
+          symbol: (inst.symbol as string) ?? "",
+          name: (inst.name as string) ?? "",
+          entry_price: entry,
+          target_price: target,
+          stop_loss: stop,
+          last_close: last,
+          return_pct: ret,
+          status,
+        };
+      }),
+    );
+    return { data: rows, isSample: false };
+  } catch {
+    return { data: [], isSample: false };
+  }
+}
+
 // ── 전략·백테스트 ──
 export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
   try {

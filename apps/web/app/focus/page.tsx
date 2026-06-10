@@ -4,7 +4,12 @@ import { AppShell } from "@/components/AppShell";
 import { StyleChip } from "@/components/AxisChips";
 import { EmptyState, Panel, SampleBadge, Stat, StrengthBar } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { getRecommendations, getReports, getUserRiskPct } from "@/lib/data";
+import {
+  getPickHistory,
+  getRecommendations,
+  getReports,
+  getUserRiskPct,
+} from "@/lib/data";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import { computePositionSizePct } from "@/lib/position";
 
@@ -49,6 +54,8 @@ export default async function FocusPage() {
   const reportBySymbol = new Map(reports.map((r) => [r.symbol, r]));
   // 권장 비중 — 사용자 리스크 설정(비로그인 1%) 기준 읽기 시점 계산
   const riskPct = await getUserRiskPct();
+  // 픽 기록 — 발행한 모든 픽의 결과를 공개 (실발행 트랙레코드)
+  const { data: history } = await getPickHistory();
 
   return (
     <AppShell
@@ -237,6 +244,92 @@ export default async function FocusPage() {
             </Link>
             . 매수/중립인데 포커스가 아닌 종목은 실행플랜(검증 플레이북 시그널)이
             없거나 점수 순위가 정원(5) 밖인 경우입니다.
+          </p>
+        </Panel>
+
+        {/* 픽 기록 — 실발행 트랙레코드 (첫날부터 전부 공개, 삭제 없음) */}
+        <Panel
+          title="픽 기록 — 우리가 말한 것의 결과"
+          action={
+            <span className="text-2xs text-text-mute">
+              발행한 모든 픽을 기록하고 지우지 않습니다
+            </span>
+          }
+        >
+          {history.length === 0 ? (
+            <p className="text-sm text-text-mute">
+              아직 기록이 없습니다. 첫 픽부터 결과를 전부 공개합니다.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-sm">
+                <thead>
+                  <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
+                    <th className="py-2 pl-1 text-left font-medium">발행일</th>
+                    <th className="px-3 py-2 text-left font-medium">종목</th>
+                    <th className="px-3 py-2 text-right font-medium">진입가</th>
+                    <th className="px-3 py-2 text-right font-medium">현재가</th>
+                    <th className="px-3 py-2 text-right font-medium">수익률</th>
+                    <th className="px-3 py-2 text-center font-medium">상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h, i) => (
+                    <tr
+                      key={i}
+                      className="border-b border-border/50 last:border-0 hover:bg-surface-2"
+                    >
+                      <td className="mono py-2.5 pl-1 text-2xs text-text-mute">
+                        {h.as_of}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Link
+                          href={`/stocks/${h.symbol}`}
+                          className="font-medium hover:text-accent"
+                        >
+                          {h.name}
+                        </Link>
+                        <span className="mono ml-2 text-2xs text-text-mute">
+                          {h.symbol}
+                        </span>
+                      </td>
+                      <td className="mono px-3 py-2.5 text-right">
+                        {fmtPrice(h.entry_price)}
+                      </td>
+                      <td className="mono px-3 py-2.5 text-right">
+                        {fmtPrice(h.last_close)}
+                      </td>
+                      <td
+                        className={`mono px-3 py-2.5 text-right font-semibold ${
+                          (h.return_pct ?? 0) >= 0 ? "text-bull" : "text-bear"
+                        }`}
+                      >
+                        {fmtPct(h.return_pct)}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <Badge
+                          variant={
+                            h.status === "목표 도달"
+                              ? "bull"
+                              : h.status === "손절"
+                                ? "bear"
+                                : "neutral"
+                          }
+                          size="md"
+                        >
+                          {h.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="mt-3 text-2xs text-text-mute">
+            수익률은 발행 시 진입가 대비 최신 종가 기준이며, 목표/손절 도달은 종가
+            기준 근사입니다(장중 터치 미반영). 과거 픽의 성과는 미래 수익을
+            보장하지 않습니다.
           </p>
         </Panel>
 
