@@ -35,6 +35,8 @@ export default async function FocusPage() {
   const { data: reports } = await getReports(100);
   const buys = reports.filter((r) => r.rating === "매수");
   const neutrals = reports.filter((r) => r.rating === "중립").slice(0, 6);
+  // 픽 ↔ 근거 리포트 연결 (심볼 매칭) — 카드에서 판정·리포트 링크 표시용
+  const reportBySymbol = new Map(reports.map((r) => [r.symbol, r]));
   // 권장 비중 — 사용자 리스크 설정(비로그인 1%) 기준 읽기 시점 계산
   const riskPct = await getUserRiskPct();
 
@@ -56,6 +58,15 @@ export default async function FocusPage() {
             ) : undefined
           }
         >
+          {/* 선정 기준 — 왜 이 종목들인가를 화면에 명시 */}
+          <p className="mb-3 rounded-md border border-border bg-surface-2 px-3 py-2 text-2xs leading-relaxed text-text-dim">
+            <span className="font-medium text-text">선정 기준 (매일 자동, 사람 개입 없음):</span>{" "}
+            그날 발행된 종목 심층분석 전체에서 ① 판정 &lsquo;매수&rsquo; 또는 종합점수
+            60점 이상(멀티팩터 40 + 밸류에이션 30 + 시그널 30) ② 거래가능 게이트
+            통과(유동성·변동성·관리종목 제외) ③ 검증 통과 플레이북의 실행플랜
+            보유 — 를 모두 만족하는 종목을 점수순 상위 5개까지. 기준 미달이면 그날은
+            비워둡니다.
+          </p>
           {picks.length === 0 ? (
             <EmptyState message="오늘은 기준(판정·거래가능 게이트·백테스트)을 통과한 종목이 없습니다. 억지로 채우지 않습니다 — 기준 미달이면 빈 날입니다." />
           ) : (
@@ -65,16 +76,40 @@ export default async function FocusPage() {
                   p.target_price && p.entry_price
                     ? p.target_price / p.entry_price - 1
                     : null;
+                const report = reportBySymbol.get(p.symbol);
+                const score = Math.round(p.conviction * 1000) / 10;
                 return (
-                  <Link key={p.symbol} href={`/stocks/${p.symbol}`} className="block">
-                    <div className="h-full rounded-lg border border-border bg-surface-2 p-4 transition-colors hover:border-border-strong">
+                  <div
+                    key={p.symbol}
+                    className="flex h-full flex-col rounded-lg border border-border bg-surface-2 p-4 transition-colors hover:border-border-strong"
+                  >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold">{p.name}</span>
+                          <Link
+                            href={`/stocks/${p.symbol}`}
+                            className="font-semibold hover:text-accent"
+                          >
+                            {p.name}
+                          </Link>
                           <span className="mono text-2xs text-text-mute">{p.symbol}</span>
+                          {report?.rating && (
+                            <Badge
+                              variant={report.rating === "매수" ? "bull" : "neutral"}
+                              size="md"
+                            >
+                              {report.rating}
+                            </Badge>
+                          )}
                         </div>
                         <StyleChip style={p.style} />
                       </div>
+                      <p className="mt-1 text-2xs text-text-mute">
+                        선정 이유 — 종합 <span className="tnum font-semibold text-text">{score}점</span>
+                        {report?.rating === "매수"
+                          ? " (매수 판정)"
+                          : " (점수 기준 통과)"}{" "}
+                        + 거래가능 게이트·검증 플레이북 플랜 보유
+                      </p>
                       <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-text-dim">
                         {p.thesis}
                       </p>
@@ -108,8 +143,15 @@ export default async function FocusPage() {
                           목표수익 {fmtPct(upside)}
                         </span>
                       </div>
-                    </div>
-                  </Link>
+                      {report && (
+                        <Link
+                          href={`/reports/${report.id}`}
+                          className="mt-3 text-right text-2xs text-accent hover:underline"
+                        >
+                          왜 이 종목인가 — 근거 리포트 →
+                        </Link>
+                      )}
+                  </div>
                 );
               })}
             </div>
