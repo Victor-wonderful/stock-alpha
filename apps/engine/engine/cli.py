@@ -54,6 +54,15 @@ def seed_universe(
     typer.echo(f"seeded instruments: {n}")
 
 
+@app.command("backfill-exchange")
+def backfill_exchange() -> None:
+    """레거시 exchange='KRX' 행을 KOSPI/KOSDAQ 로 백필 (네이버 시장별 목록 기준)."""
+    from engine.ingest import universe
+
+    r = universe.backfill_exchange()
+    typer.echo(f"updated — KOSPI: {r.get('KOSPI', 0)}  KOSDAQ: {r.get('KOSDAQ', 0)}")
+
+
 @app.command("classify-universe")
 def classify_universe() -> None:
     """실기업 vs 펀드/파생(ETF/ETN) 분류 — corp_code 없는 종목·스팩 비활성화."""

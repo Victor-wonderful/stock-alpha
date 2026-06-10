@@ -6,6 +6,10 @@ from engine.logging import get_logger
 
 log = get_logger(__name__)
 
+# 한국 시장 거래소 값 — 시딩은 KOSPI/KOSDAQ 로 구분 저장(2026-06-10),
+# 'KRX' 는 구분 백필 전 레거시 값(점진 소멸).
+KR_EXCHANGES = ("KOSPI", "KOSDAQ", "KRX")
+
 
 def load_instrument_map(exchange: str | None = None) -> dict[tuple[str, str], int]:
     """{(symbol, exchange): id} 매핑 로드 (전체 페이지네이션 — 1000행 제한 우회)."""
@@ -14,6 +18,16 @@ def load_instrument_map(exchange: str | None = None) -> dict[tuple[str, str], in
         eq={"exchange": exchange} if exchange else None,
     )
     return {(r["symbol"], r["exchange"]): r["id"] for r in rows}
+
+
+def load_kr_instrument_map() -> dict[tuple[str, str], int]:
+    """한국 시장(KOSPI/KOSDAQ/레거시 KRX) 전체 매핑."""
+    rows = select_all("instruments", "id,symbol,exchange")
+    return {
+        (r["symbol"], r["exchange"]): r["id"]
+        for r in rows
+        if r["exchange"] in KR_EXCHANGES
+    }
 
 
 def ensure_instruments(rows: list[dict]) -> dict[tuple[str, str], int]:

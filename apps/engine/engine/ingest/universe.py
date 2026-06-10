@@ -79,23 +79,57 @@ def fetch_market_codes(market: str, max_pages: int = 60) -> list[dict]:
 
 
 def seed_universe(markets: tuple[str, ...] = ("KOSPI", "KOSDAQ")) -> int:
-    """전 종목을 instruments 에 업서트(exchange='KRX'). 시드 건수 반환."""
+    """전 종목을 instruments 에 업서트(exchange=KOSPI|KOSDAQ). 시드 건수 반환.
+
+    과거에는 exchange='KRX' + industry=시장 으로 저장했으나, DART 재무 배치가
+    industry 를 업종코드로 덮어쓰며 시장 구분이 소실되는 사고가 있었다(2026-06-10).
+    시장은 exchange 컬럼이 정위치. 레거시 'KRX' 행은 backfill_exchange() 로 갱신.
+    """
     rows: list[dict] = []
     for m in markets:
         for it in fetch_market_codes(m):
             rows.append({
                 "symbol": it["symbol"],
-                "exchange": "KRX",
+                "exchange": m,
                 "name": it["name"],
                 "asset_type": "stock",
                 "currency": "KRW",
-                "industry": m,          # 서브마켓(KOSPI/KOSDAQ) 기록
             })
     if not rows:
         return 0
     ensure_instruments(rows)
     log.info("universe.seed.done", rows=len(rows))
     return len(rows)
+
+
+def backfill_exchange(markets: tuple[str, ...] = ("KOSPI", "KOSDAQ")) -> dict[str, int]:
+    """레거시 exchange='KRX' 행을 네이버 시장별 목록으로 KOSPI/KOSDAQ 백필.
+
+    unique(symbol, exchange) 라 신규 insert 가 아닌 in-place UPDATE 만 수행
+    (중복 행 생성 없음). 목록에 없는 잔여 KRX 행(상폐 등)은 그대로 둔다.
+    """
+    from engine.db import get_client
+
+    client = get_client()
+    out: dict[str, int] = {}
+    for m in markets:
+        symbols = [it["symbol"] for it in fetch_market_codes(m)]
+        n = 0
+        for i in range(0, len(symbols), 200):        # IN 필터 길이 제한 → 청크
+            chunk = symbols[i:i + 200]
+            res = (
+                client.table("instruments").update({"exchange": m})
+                .in_("symbol", chunk).eq("exchange", "KRX").execute()
+            )
+            n += len(res.data or [])
+        out[m] = n
+        log.info("universe.backfill_exchange", market=m, updated=n)
+    # 구버전 시딩이 industry 에 남긴 시장 라벨 제거(업종코드 자리)
+    for m in markets:
+        client.table("instruments").update({"industry": None}).eq(
+            "industry", m
+        ).execute()
+    return out
 
 
 _SPAC_RE = re.compile(r"스팩|기업인수목적")
@@ -111,8 +145,13 @@ def classify_universe() -> dict[str, int]:
     from engine.db import get_client
     from engine.ingest.dart import fetch_corp_code_map
 
+    from engine.ingest.instruments import KR_EXCHANGES
+
     cmap = fetch_corp_code_map()
-    rows = select_all("instruments", "id,symbol,exchange,name", eq={"exchange": "KRX"})
+    rows = [
+        r for r in select_all("instruments", "id,symbol,exchange,name")
+        if r["exchange"] in KR_EXCHANGES
+    ]
 
     fund = [r["symbol"] for r in rows if r["symbol"] not in cmap]
     spac = [
@@ -126,8 +165,8 @@ def classify_universe() -> dict[str, int]:
     def _update(symbols: list[str], patch: dict) -> None:
         for i in range(0, len(symbols), 200):       # IN 필터 길이 제한 → 청크
             chunk = symbols[i:i + 200]
-            client.table("instruments").update(patch).in_("symbol", chunk).eq(
-                "exchange", "KRX"
+            client.table("instruments").update(patch).in_("symbol", chunk).in_(
+                "exchange", list(KR_EXCHANGES)
             ).execute()
 
     _update(fund, {"active": False, "asset_type": "etf"})

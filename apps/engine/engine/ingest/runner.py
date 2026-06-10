@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from engine.db import select_all, upsert
 from engine.ingest import dart, krx, naver
-from engine.ingest.instruments import load_instrument_map
+from engine.ingest.instruments import KR_EXCHANGES, load_kr_instrument_map
 from engine.logging import get_logger
 
 log = get_logger(__name__)
@@ -24,7 +24,7 @@ def ingest_krx_prices(days: int = 30, workers: int = 12) -> int:
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    imap = load_instrument_map("KRX")
+    imap = load_kr_instrument_map()
     todate = date.today()
     fromdate = todate - timedelta(days=days)
     f, t = _yyyymmdd(fromdate), _yyyymmdd(todate)
@@ -71,7 +71,10 @@ def ingest_krx_flows(days: int = 30, pages: int = 3, workers: int = 8, resume: b
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    inst = select_all("instruments", "id,symbol", eq={"active": True, "exchange": "KRX"})
+    inst = [
+        r for r in select_all("instruments", "id,symbol,exchange", eq={"active": True})
+        if r["exchange"] in KR_EXCHANGES
+    ]
     have = (
         {r["instrument_id"] for r in select_all("flows", "instrument_id")}
         if resume else set()
@@ -117,7 +120,7 @@ def ingest_krx_financials(year: str, reprt_code: str = "11011", workers: int = 6
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    imap = load_instrument_map("KRX")
+    imap = load_kr_instrument_map()
     corp_map = dart.fetch_corp_code_map()
     period = f"{year}{'FY' if reprt_code == '11011' else reprt_code}"
     # 재개 가능: 이미 해당 기간 재무가 있는 종목은 건너뜀(재시작 시 중복 호출 방지).
