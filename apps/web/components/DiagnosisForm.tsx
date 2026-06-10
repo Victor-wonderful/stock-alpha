@@ -44,8 +44,8 @@ export function DiagnosisForm() {
           <input
             value={r.symbol}
             onChange={(e) => update(i, { symbol: e.target.value })}
-            placeholder="종목코드 (예: 005930)"
-            className="mono w-44 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent focus:outline-none"
+            placeholder="종목명 또는 코드 (예: 삼성전자, 005930)"
+            className="w-56 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent focus:outline-none"
           />
           <input
             value={r.weight}

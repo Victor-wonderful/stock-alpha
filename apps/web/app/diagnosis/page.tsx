@@ -58,7 +58,8 @@ export default async function DiagnosisPage({
           <>
             {diag.notFound.length > 0 && (
               <p className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
-                찾을 수 없는 종목코드: {diag.notFound.join(", ")}
+                찾지 못했거나 이름이 여러 종목과 겹칩니다: {diag.notFound.join(", ")} —
+                정확한 종목명 또는 6자리 코드로 입력해 주세요.
               </p>
             )}
 

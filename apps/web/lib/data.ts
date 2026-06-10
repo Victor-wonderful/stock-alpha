@@ -416,13 +416,36 @@ export async function getPortfolioDiagnosis(
   const holdings: HoldingDiagnosis[] = [];
   const notFound: string[] = [];
 
-  for (const it of items) {
-    const { data: inst } = await supabase
+  // 종목코드(6자리) 또는 종목명 어느 쪽이든 해석.
+  // 이름은 정확 일치 → 부분 일치(유일할 때만) 순서. 모호하면 notFound 로 안내.
+  async function resolveInstrument(term: string) {
+    const t = term.trim();
+    if (/^\d{6}$/.test(t)) {
+      const { data } = await supabase
+        .from("instruments")
+        .select("id,symbol,name,sector,active")
+        .eq("symbol", t)
+        .limit(1);
+      return data?.[0] ?? null;
+    }
+    const { data: exact } = await supabase
       .from("instruments")
       .select("id,symbol,name,sector,active")
-      .eq("symbol", it.symbol)
-      .limit(1)
-      .single();
+      .eq("name", t)
+      .limit(2);
+    if (exact && exact.length >= 1) return exact[0];
+    const { data: partial } = await supabase
+      .from("instruments")
+      .select("id,symbol,name,sector,active")
+      .ilike("name", `%${t}%`)
+      .eq("active", true)
+      .limit(2);
+    if (partial && partial.length === 1) return partial[0];
+    return null; // 없음 또는 모호(2건 이상)
+  }
+
+  for (const it of items) {
+    const inst = await resolveInstrument(it.symbol);
     if (!inst) {
       notFound.push(it.symbol);
       continue;
