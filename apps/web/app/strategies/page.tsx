@@ -13,8 +13,8 @@ export default async function StrategiesPage() {
 
   return (
     <AppShell
-      title="전략 · 백테스트"
-      subtitle="플레이북별 검증 · 품질 게이트"
+      title="검증 · 트랙레코드"
+      subtitle="플레이북별 백테스트 — 미통과 전략은 발행하지 않습니다"
       badge={isSample ? <SampleBadge /> : undefined}
     >
       <div className="space-y-4">

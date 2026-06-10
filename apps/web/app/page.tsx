@@ -37,10 +37,10 @@ export default function Home() {
             </p>
             <div className="mt-8 flex gap-3">
               <Link
-                href="/screener"
+                href="/focus"
                 className="rounded-md bg-text px-5 py-2.5 font-medium text-bg hover:opacity-90"
               >
-                스크리너 열기
+                오늘의 포커스 보기
               </Link>
               <Link
                 href="/login"

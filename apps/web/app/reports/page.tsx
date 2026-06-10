@@ -19,7 +19,7 @@ export default async function ReportsPage() {
   const { data: reports } = await getReports(100);
 
   return (
-    <AppShell title="리포트" subtitle="AI 애널리스트 — 판정·게이트·실행플랜">
+    <AppShell title="종목 분석" subtitle="AI 애널리스트 — 판정·게이트·실행플랜">
       {reports.length === 0 ? (
         <EmptyState message="발행된 리포트가 없습니다. 엔진에서 `report indepth` 실행 시 여기에 게시됩니다." />
       ) : (

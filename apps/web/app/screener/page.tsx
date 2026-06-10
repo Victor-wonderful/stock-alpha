@@ -39,8 +39,8 @@ export default async function ScreenerPage({
 
   return (
     <AppShell
-      title="스크리너"
-      subtitle="스타일 × 셋업 × 세션 3축 시그널"
+      title="전체 시그널"
+      subtitle="스타일 × 셋업 × 세션 3축 — 직접 탐색"
       badge={isSample ? <SampleBadge /> : undefined}
     >
       <div className="space-y-4">

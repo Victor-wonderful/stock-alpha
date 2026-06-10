@@ -3,24 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   LineChart,
   ListFilter,
   Star,
   FileText,
   Globe,
-  Briefcase,
-  FlaskConical,
+  ShieldCheck,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// IA 원칙(2026-06-10): 첫 화면이 답이고, 도구는 뒤로, 검증은 자랑으로.
+// 메뉴 순서 = 사용자 질문 순서 (뭘 사나 → 이 종목 어떤가 → 직접 탐색 → 맥락 → 신뢰)
 const ITEMS = [
-  { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
-  { href: "/screener", label: "스크리너", icon: ListFilter },
+  { href: "/focus", label: "오늘의 포커스", icon: Target },
+  { href: "/reports", label: "종목 분석", icon: FileText },
+  { href: "/screener", label: "전체 시그널", icon: ListFilter },
   { href: "/market", label: "시장", icon: Globe },
-  { href: "/portfolio", label: "모델 포트폴리오", icon: Briefcase },
-  { href: "/strategies", label: "전략·백테스트", icon: FlaskConical },
-  { href: "/reports", label: "리포트", icon: FileText },
+  { href: "/strategies", label: "검증·트랙레코드", icon: ShieldCheck },
   { href: "/watchlist", label: "워치리스트", icon: Star },
 ];
 
