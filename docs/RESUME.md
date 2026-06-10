@@ -40,6 +40,8 @@
    - 엔진 `engine/reports/`: context(수치+source_refs, 환각 차단) → 거래가능 게이트(활성·유동성 1억·ATR12%·백테스트 게이트) → 종합판정(팩터40/밸류30/시그널30, 매수≥65/중립≥45/관망/거래부적합) → Claude 서술(`claude-opus-4-8`, 키 없으면 템플릿 폴백) → reports 업서트(0014 자연키 `report_type,instrument_id,as_of`).
    - CLI: `report indepth --symbols 005930` 또는 `--top N`(합성알파 상위 자동). 웹 `/reports`(목록)·`/reports/[id]`(5섹션 상세) — 검증 완료(HTTP 200, Claude 서술 실데이터).
    - **함정 발견**: backtests 테이블이 비어 있었음(M6 구현됐지만 실DB 적재는 처음) → `engine backtest` 첫 실행으로 채움. 부분 유니크 인덱스는 PostgREST on_conflict 불가 → 전체 유니크로 변경.
+   - **게이트 재캘리브레이션 완료(같은 날)**: 승률/손익비 개별 하한 → **기대값 ≥ +0.05R 통합**, MDD → **R 곡선(리스크 1%)**, 이상치 위생(손절폭 < ¼ATR·0.1% 제외 + ±10R 윈저라이즈). 진단: +53R 급 이상치 17건이 기대값 부호를 뒤집고 있었음(`scripts/diag_r_dist.py`). 판정은 `backtests.passed`(0015)에 저장, 웹·리포트는 read만.
+   - **정직한 결론: 전 유니버스(2,561종목) 기준 4개 이벤트 플레이북 전부 게이트 FAIL** (leader_trend +0.028R·close_betting +0.028R·나머지 음수). 발행 가능한 엣지는 이벤트 플레이북이 아니라 **멀티팩터 횡단면** 쪽 — factor_composite 는 이벤트 백테스트 부재로 게이트 미평가. **다음 작업: 횡단면 백테스트(IC·분위수 스프레드, ohlcv 기반 point-in-time 모멘텀부터)** 구현해 factor_composite 게이트 통과 여부 검증.
 10. **미구현 마일스톤**: M8 결제 · 마켓/포트폴리오 리포트 타입 · 포트폴리오 진단. (Phase 3 봇은 피벗으로 폐기)
 
 ## 사용자(나) 준비물 — 실데이터 라운드트립 전제
