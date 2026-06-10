@@ -32,16 +32,19 @@ export default async function FocusPage() {
   // 국내 가격은 장외에 움직이지 않으므로 레벨은 다음 장 시작까지 그대로 유효.
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
 
-  const { data: reports } = await getReports(100);
-  // 매수 판정 섹션은 포커스와 역할 분리: 포커스 = 실행플랜 있는 최상위 후보(카드),
-  // 여기는 등급이 매수인데 포커스에 들지 않은 종목(실행플랜 없음/정원 밖)만.
+  // 판정 보드용 — 부적합 포함 전체 발행분에서 최신 발행일 것만 등급별 분류.
+  // 포커스 선정 종목은 ⭐ 마킹(중복 노출이 아니라 분포 속 위치 표시).
+  const { data: reports } = await getReports(150, { includeUnfit: true });
   const pickSymbols = new Set(picks.map((p) => p.symbol));
-  const buys = reports.filter(
-    (r) => r.rating === "매수" && !pickSymbols.has(r.symbol ?? ""),
-  );
-  const neutrals = reports
-    .filter((r) => r.rating === "중립" && !pickSymbols.has(r.symbol ?? ""))
-    .slice(0, 6);
+  const latestDay = reports[0]?.as_of ?? null;
+  const todayReports = reports.filter((r) => r.as_of === latestDay);
+  const gradeBoard = {
+    매수: todayReports.filter((r) => r.rating === "매수"),
+    중립: todayReports.filter((r) => r.rating === "중립"),
+    관망: todayReports.filter((r) => r.rating === "관망"),
+    부적합: todayReports.filter((r) => r.rating === "거래 부적합").length,
+    total: todayReports.length,
+  };
   // 픽 ↔ 근거 리포트 연결 (심볼 매칭) — 카드에서 판정·리포트 링크 표시용
   const reportBySymbol = new Map(reports.map((r) => [r.symbol, r]));
   // 권장 비중 — 사용자 리스크 설정(비로그인 1%) 기준 읽기 시점 계산
@@ -173,64 +176,69 @@ export default async function FocusPage() {
           )}
         </Panel>
 
-        {/* 매수 판정 — 포커스 제외분 */}
+        {/* 오늘의 판정 현황 — 발행 전체를 등급별로 한눈에 (⭐ = 포커스 선정) */}
         <Panel
-          title="그 외 매수 판정 종목"
+          title="오늘의 판정 현황"
           action={
-            <span className="text-2xs text-text-mute">
-              등급은 매수지만 포커스 미선정(실행플랜 없음 또는 정원 밖)
+            <span className="tnum text-2xs text-text-mute">
+              {latestDay ?? "—"} 발행 {gradeBoard.total}건 — 매수{" "}
+              {gradeBoard.매수.length} · 중립 {gradeBoard.중립.length} · 관망{" "}
+              {gradeBoard.관망.length}
             </span>
           }
         >
-          {buys.length === 0 ? (
-            <p className="text-sm text-text-mute">
-              포커스 외 매수 판정 종목이 없습니다 — 매수 판정(65점 이상)을 받은
-              종목은 현재 모두 위 포커스에 올라가 있습니다.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {buys.map((r) => (
-                <li key={r.id}>
-                  <Link
-                    href={`/reports/${r.id}`}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-3 py-2.5 transition-colors hover:border-border-strong"
+          <div className="space-y-3">
+            {(["매수", "중립", "관망"] as const).map((grade) => {
+              const rows = gradeBoard[grade];
+              return (
+                <div key={grade} className="flex flex-wrap items-start gap-2">
+                  <Badge
+                    variant={
+                      grade === "매수"
+                        ? "bull"
+                        : grade === "중립"
+                          ? "neutral"
+                          : "warn"
+                    }
+                    size="md"
+                    className="mt-0.5 shrink-0"
                   >
-                    <span className="flex items-center gap-2">
-                      <Badge variant="bull" size="md">매수</Badge>
-                      <span className="text-sm font-medium">{r.name}</span>
-                      <span className="mono text-2xs text-text-mute">{r.symbol}</span>
-                    </span>
-                    <span className="text-2xs text-text-mute">
-                      {r.target_price != null && (
-                        <span className="tnum mr-3 text-text-dim">
-                          목표 {fmtPrice(r.target_price)}원
-                        </span>
-                      )}
-                      {r.as_of} · 분석 보기 →
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+                    {grade} {rows.length}
+                  </Badge>
+                  {rows.length === 0 ? (
+                    <span className="py-0.5 text-2xs text-text-mute">없음</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {rows.map((r) => (
+                        <Link
+                          key={r.id}
+                          href={`/reports/${r.id}`}
+                          className={`rounded-md border px-2.5 py-1 text-xs transition-colors hover:border-border-strong hover:text-text ${
+                            pickSymbols.has(r.symbol ?? "")
+                              ? "border-accent/50 bg-accent/10 text-text"
+                              : "border-border bg-surface-2 text-text-dim"
+                          }`}
+                        >
+                          {pickSymbols.has(r.symbol ?? "") && "⭐ "}
+                          {r.name}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-2xs text-text-mute">
+            ⭐ = 오늘의 포커스 선정 종목. 거래 부적합 {gradeBoard.부적합}건은 기본
+            숨김 —{" "}
+            <Link href="/reports?all=1" className="text-accent hover:underline">
+              포함해서 보기
+            </Link>
+            . 매수/중립인데 포커스가 아닌 종목은 실행플랜(검증 플레이북 시그널)이
+            없거나 점수 순위가 정원(5) 밖인 경우입니다.
+          </p>
         </Panel>
-
-        {/* 중립 상위 — 차순위 관찰 대상 */}
-        {neutrals.length > 0 && (
-          <Panel title="관찰 대상 (중립 판정 상위)">
-            <div className="flex flex-wrap gap-2">
-              {neutrals.map((r) => (
-                <Link
-                  key={r.id}
-                  href={`/reports/${r.id}`}
-                  className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs text-text-dim transition-colors hover:border-border-strong hover:text-text"
-                >
-                  {r.name} <span className="mono text-2xs text-text-mute">{r.symbol}</span>
-                </Link>
-              ))}
-            </div>
-          </Panel>
-        )}
 
         <div className="flex flex-wrap gap-3 text-xs">
           <Link href="/reports" className="text-accent hover:underline">
