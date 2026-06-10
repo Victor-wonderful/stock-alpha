@@ -34,6 +34,11 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
     inst = select_all("instruments", "id", eq={"active": True})
     frames = {it["id"]: _load_ohlcv(it["id"]) for it in inst}
     frames = {k: v for k, v in frames.items() if not v.empty}
+    # 유동성 필터 — 시그널 발행 유니버스와 동일 모집단으로 백테스트(engine/liquidity).
+    from engine.liquidity import filter_liquid_frames
+    n_all = len(frames)
+    frames = filter_liquid_frames(frames)
+    log.info("backtest.universe", total=n_all, liquid=len(frames))
 
     passed: dict[str, bool] = {}
     bt_rows: list[dict] = []

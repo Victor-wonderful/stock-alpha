@@ -10,8 +10,10 @@ from typing import Any
 
 from engine.backtest.gate import GateThresholds
 
+from engine.liquidity import REPORT_TURNOVER_FLOOR_KRW
+
 # ── 거래가능(tradability) 게이트 기준 ──
-TURNOVER_FLOOR_KRW = 100_000_000  # 20일 평균 거래대금 하한(1억원)
+TURNOVER_FLOOR_KRW = REPORT_TURNOVER_FLOOR_KRW  # 20일 평균 거래대금 하한(1억원)
 ATR_PCT_CEILING = 0.12            # 일중 변동성 상한(ATR/종가 12%) — 투기성 과열 배제
 
 # ── 종합 판정 등급 임계 (0~100점) ──

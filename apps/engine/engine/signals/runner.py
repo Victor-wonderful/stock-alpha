@@ -60,6 +60,12 @@ def run(
     inst = select_all("instruments", "id", eq={"active": True})
     frames = {it["id"]: _load_ohlcv(it["id"]) for it in inst}
     frames = {k: v for k, v in frames.items() if not v.empty}
+    # 유동성 필터 — 백테스트로 검증된 모집단(거래대금 10억+)에만 시그널 발행.
+    # 비유동 구간은 기대값 음수(scripts/diag_playbook_breakdown) → 발행 금지.
+    from engine.liquidity import filter_liquid_frames
+    n_all = len(frames)
+    frames = filter_liquid_frames(frames)
+    log.info("signals.universe", total=n_all, liquid=len(frames))
     ranks = _rs_ranks(frames)
 
     all_rows: list[dict] = []
