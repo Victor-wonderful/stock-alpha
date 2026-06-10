@@ -5,8 +5,9 @@ import { AppShell } from "@/components/AppShell";
 import { SetupChip, StyleChip } from "@/components/AxisChips";
 import { Panel, Stat, StrengthBar } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { getLatestPrice, getReportById } from "@/lib/data";
+import { getLatestPrice, getReportById, getUserRiskPct } from "@/lib/data";
 import { fmtDateTime, fmtNum, fmtPct, fmtPrice } from "@/lib/format";
+import { computePositionSizePct } from "@/lib/position";
 import type { ReportPlanRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,8 @@ export default async function ReportDetailPage({
   // 진입 상태 판정용 — 읽는 시점의 최신가 (없으면 상태 미표시)
   const latest = await getLatestPrice(p.instrument.id);
   const lastNow = latest.data?.close ?? null;
+  // 권장 비중 — 사용자 리스크 설정(비로그인 1%) 기준 읽기 시점 계산
+  const riskPct = await getUserRiskPct();
 
   return (
     <AppShell
@@ -137,6 +140,7 @@ export default async function ReportDetailPage({
                     <th className="px-3 py-2 text-right font-medium">TP1</th>
                     <th className="px-3 py-2 text-right font-medium">TP2</th>
                     <th className="px-3 py-2 text-right font-medium">R:R</th>
+                    <th className="px-3 py-2 text-right font-medium">권장 비중</th>
                     <th className="px-3 py-2 text-left font-medium">신뢰도</th>
                     <th className="px-3 py-2 text-left font-medium">상태</th>
                   </tr>
@@ -167,6 +171,16 @@ export default async function ReportDetailPage({
                       </td>
                       <td className="mono px-3 py-2.5 text-right">
                         {fmtNum(row.risk_reward, 2)}
+                      </td>
+                      <td className="mono px-3 py-2.5 text-right">
+                        {(() => {
+                          const sz = computePositionSizePct(
+                            row.entry_price,
+                            row.stop_loss,
+                            riskPct,
+                          );
+                          return sz != null ? `${sz.toFixed(1)}%` : "—";
+                        })()}
                       </td>
                       <td className="px-3 py-2.5">
                         <StrengthBar value={row.strength} />

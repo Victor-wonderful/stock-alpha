@@ -4,8 +4,9 @@ import { AppShell } from "@/components/AppShell";
 import { StyleChip } from "@/components/AxisChips";
 import { EmptyState, Panel, SampleBadge, Stat, StrengthBar } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { getRecommendations, getReports } from "@/lib/data";
+import { getRecommendations, getReports, getUserRiskPct } from "@/lib/data";
 import { fmtPct, fmtPrice } from "@/lib/format";
+import { computePositionSizePct } from "@/lib/position";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,8 @@ export default async function FocusPage() {
   const { data: reports } = await getReports(100);
   const buys = reports.filter((r) => r.rating === "매수");
   const neutrals = reports.filter((r) => r.rating === "중립").slice(0, 6);
+  // 권장 비중 — 사용자 리스크 설정(비로그인 1%) 기준 읽기 시점 계산
+  const riskPct = await getUserRiskPct();
 
   return (
     <AppShell
@@ -75,10 +78,22 @@ export default async function FocusPage() {
                       <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-text-dim">
                         {p.thesis}
                       </p>
-                      <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                         <Stat label="진입" value={fmtPrice(p.entry_price)} />
                         <Stat label="목표" value={fmtPrice(p.target_price)} tone="bull" />
                         <Stat label="손절" value={fmtPrice(p.stop_loss)} tone="bear" />
+                        <Stat
+                          label="권장 비중"
+                          value={(() => {
+                            const sz = computePositionSizePct(
+                              p.entry_price,
+                              p.stop_loss,
+                              riskPct,
+                            );
+                            return sz != null ? `${sz.toFixed(1)}%` : "—";
+                          })()}
+                          sub={`리스크 ${riskPct}%/건`}
+                        />
                       </div>
                       <div className="mt-3 flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -98,6 +113,14 @@ export default async function FocusPage() {
                 );
               })}
             </div>
+          )}
+          {picks.length > 0 && (
+            <p className="mt-3 text-2xs text-text-mute">
+              권장 비중은 손절 시 손실이 계좌의 {riskPct}%가 되도록 역산한
+              값입니다(상한 25%). 포커스 {picks.length}종목을 전부 집행하면 총
+              리스크는 계좌의 약 {(picks.length * riskPct).toFixed(1)}%입니다 —
+              동시 보유는 본인의 총 리스크 한도 안에서 선택하세요.
+            </p>
           )}
         </Panel>
 

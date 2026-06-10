@@ -42,7 +42,7 @@ export interface SignalFilters {
 
 // 로그인 사용자의 트레이드당 리스크(%). 비로그인/조회 실패 시 기본값.
 // (RLS: profiles 는 본인만 read → anon 은 자동으로 기본값)
-async function getUserRiskPct(): Promise<number> {
+export async function getUserRiskPct(): Promise<number> {
   try {
     const supabase = await createClient();
     const {
