@@ -479,10 +479,12 @@ export async function getPortfolioDiagnosis(
         .limit(1),
     ]);
     const report = rep.data?.[0] as Record<string, unknown> | undefined;
-    const verdict =
-      ((report?.payload as Record<string, unknown>)?.verdict as
-        | Record<string, unknown>
-        | undefined) ?? undefined;
+    const payload = (report?.payload as Record<string, unknown>) ?? undefined;
+    const verdict = (payload?.verdict as Record<string, unknown>) ?? undefined;
+    const gateChecks =
+      ((payload?.tradability as Record<string, unknown>)?.checks as
+        | { key: string; passed: boolean }[]
+        | undefined) ?? [];
     const h: HoldingDiagnosis = {
       symbol: inst.symbol,
       name: inst.name,
@@ -498,7 +500,12 @@ export async function getPortfolioDiagnosis(
       warnings: [],
     };
     if (!inst.active) h.warnings.push("비활성 종목(관리/상폐 가능성)");
-    if (h.rating === "거래 부적합") h.warnings.push("시스템 거래가능 게이트 미통과");
+    // 게이트 체크별 구분 — 종목 자체의 위험(①~③)만 보유 경고로.
+    // ④(검증 시그널 부재)는 "신규 진입 근거 없음"이지 보유 위험이 아님.
+    const failed = new Set(gateChecks.filter((c) => !c.passed).map((c) => c.key));
+    if (failed.has("liquidity")) h.warnings.push("유동성 부족(거래대금 1억 미만)");
+    if (failed.has("volatility")) h.warnings.push("변동성 과열(ATR 12% 초과)");
+    if (failed.has("active")) h.warnings.push("거래 제한 종목(ETF/스팩/비활성)");
     if (it.weight > 0.3) h.warnings.push("단일 종목 비중 30% 초과");
     if (h.vol_annual != null && h.vol_annual > 0.6)
       h.warnings.push("연 변동성 60% 초과(고위험)");
@@ -532,8 +539,11 @@ export async function getPortfolioDiagnosis(
   const wbeta = wavg((h) => h.beta);
   if (wbeta != null && wbeta > 1.3)
     warnings.push(`포트폴리오 베타 ${wbeta.toFixed(2)} — 시장 대비 고위험`);
-  const unfit = holdings.filter((h) => h.rating === "거래 부적합").length;
-  if (unfit > 0) warnings.push(`거래가능 게이트 미통과 종목 ${unfit}개 보유`);
+  const risky = holdings.filter((h) =>
+    h.warnings.some((w) => w.startsWith("유동성") || w.startsWith("변동성") || w.startsWith("거래 제한")),
+  ).length;
+  if (risky > 0)
+    warnings.push(`유동성·변동성·거래제한 주의 종목 ${risky}개 보유`);
 
   return {
     holdings,
