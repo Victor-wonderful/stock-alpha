@@ -118,6 +118,21 @@ def backtest() -> None:
         typer.echo(f"{'PASS' if ok else 'FAIL'}  {setup}")
 
 
+@app.command("backtest-factor")
+def backtest_factor() -> None:
+    """횡단면 백테스트 — factor_composite 검증 (IC·상위10% 초과수익) → backtests."""
+    from engine.backtest import cross_section as xs
+
+    r = xs.run()
+    typer.echo(
+        f"{'PASS' if r.passed else 'FAIL'}  factor_composite — "
+        f"기간 {r.n_periods} · 평균IC {r.mean_ic} · IC양수 {r.ic_positive_ratio} · "
+        f"초과수익 {r.excess_mean} (t={r.excess_t}) · MDD {r.excess_mdd}"
+    )
+    if r.reasons:
+        typer.echo("사유: " + " / ".join(r.reasons))
+
+
 @app.command()
 def report(
     report_type: str = typer.Argument(..., help="indepth|market|portfolio|custom"),
