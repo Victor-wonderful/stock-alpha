@@ -94,6 +94,28 @@ def equity_r_curve(
     return eq
 
 
+def daily_r_curve(
+    trades: list[Trade], risk_frac: float = 0.01, start: float = 1.0
+) -> list[float]:
+    """일별 리스크 예산 자산 곡선 — 하루 risk_frac 을 그날 진입 트레이드에 균등 분할.
+
+    실행 모델 정정(2026-06-10): 같은 셋업이 같은 날 수십 종목에서 동시
+    트리거되는데, 트레이드당 1% 순차 복리는 "모든 시그널을 전부 받는" 가정이라
+    손실 군집일에 MDD 가 폭발한다(시간순 정렬 후 70~99%). 실제 구독자/픽은
+    하루 소수만 집행 → 하루 손익(R) = 그날 트레이드 R 평균, 하루 리스크는
+    risk_frac 고정. 진입일 기준 근사(보유기간 중 분산은 무시 — 보수적 군집 유지).
+    entry_ts 없는 트레이드는 단일 일자로 묶인다.
+    """
+    by_day: dict[str, list[float]] = {}
+    for t in trades:
+        by_day.setdefault(t.entry_ts[:10], []).append(t.r_multiple)
+    eq = [start]
+    for day in sorted(by_day):
+        rs = by_day[day]
+        eq.append(eq[-1] * (1 + risk_frac * (sum(rs) / len(rs))))
+    return eq
+
+
 def information_coefficient(scores: list[float], fwd_returns: list[float]) -> float | None:
     """팩터 점수 vs 미래수익률 스피어만 상관(IC)."""
     if len(scores) != len(fwd_returns) or len(scores) < 3:

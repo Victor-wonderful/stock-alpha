@@ -120,6 +120,17 @@ def test_gate_fails_negative_expectancy():
     assert any("기대값" in r for r in gr.reasons)
 
 
+def test_daily_r_curve_groups_by_entry_day():
+    # 같은 날 진입한 트레이드는 하루 리스크 예산(1%)을 균등 분할 — 군집 손실이
+    # 트레이드 수에 비례해 MDD 를 부풀리지 않는다.
+    d1 = [Trade(r_multiple=-1.0, ret_pct=-0.01, bars_held=1, entry_ts="2026-01-05")] * 50
+    d2 = [Trade(r_multiple=2.0, ret_pct=0.02, bars_held=1, entry_ts="2026-01-06")]
+    eq = m.daily_r_curve(d1 + d2, risk_frac=0.01)
+    assert len(eq) == 3                      # 시작 + 2일
+    assert eq[1] == pytest.approx(0.99)      # 하루 -1R 평균 → -1%
+    assert eq[2] == pytest.approx(0.99 * 1.02)
+
+
 def test_equity_r_curve_fixed_risk():
     # +1R 트레이드는 리스크 1% 기준 자산 +1% — 표본이 커져도 MDD 왜곡 없음
     eq = m.equity_r_curve(_trades([1.0, -1.0]), risk_frac=0.01)

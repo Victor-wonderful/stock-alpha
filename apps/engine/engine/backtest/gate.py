@@ -12,6 +12,10 @@ docs/PLAN.md: "백테스트 미통과 시그널은 발행 금지".
 - **윈저라이즈(±10R)**: 전 유니버스 진단(2026-06-10)에서 +53R 급 이상치
   소수가 기대값 부호를 뒤집는 것으로 확인(클립 전 +0.045R → 클립 후 -0.018R).
   이상치는 손절폭≈0 인 비현실 트레이드 → 게이트 평가는 클립된 분포로.
+- **MDD 실행 모델 = 일별 리스크 예산(daily_r_curve)**: 트레이드당 1% 순차
+  복리는 "모든 시그널 전부 집행" 가정 — 같은 날 수십 종목 동시 트리거(군집)
+  시 MDD 폭발(시간순 70~99%)·임의 순서면 비결정. 실제 발행(픽 일 5개 상한)과
+  일치하는 모델은 하루 리스크 1% 를 그날 진입 시그널에 균등 분할.
 """
 from __future__ import annotations
 
@@ -20,7 +24,7 @@ from dataclasses import dataclass, replace
 from engine.backtest.metrics import (
     Trade,
     avg_rr,
-    equity_r_curve,
+    daily_r_curve,
     expectancy_r,
     max_drawdown,
     win_rate,
@@ -31,8 +35,8 @@ from engine.backtest.metrics import (
 class GateThresholds:
     min_trades: int = 20            # 표본 수 (과적합·우연 방지)
     min_expectancy_r: float = 0.05  # 트레이드당 기대값(R) — 비용 감안 실질 우위
-    max_mdd: float = 0.40           # R 곡선(트레이드당 리스크 1%) 최대 낙폭
-    risk_frac: float = 0.01         # R 곡선 트레이드당 리스크 비율
+    max_mdd: float = 0.40           # 일별 리스크예산 곡선(daily_r_curve) 최대 낙폭
+    risk_frac: float = 0.01         # 하루 리스크 예산 비율
     winsor_r: float = 10.0          # R 멀티플 클립(±) — 이상치의 기대값 왜곡 차단
 
 
@@ -69,7 +73,7 @@ def evaluate_gate(trades: list[Trade], thr: GateThresholds | None = None) -> Gat
     wr = win_rate(clipped)              # 부호 보존 — 클립 영향 없음
     rr = avg_rr(clipped)
     exp = expectancy_r(clipped)
-    mdd = max_drawdown(equity_r_curve(clipped, thr.risk_frac))
+    mdd = max_drawdown(daily_r_curve(clipped, thr.risk_frac))
 
     reasons: list[str] = []
     if n < thr.min_trades:
