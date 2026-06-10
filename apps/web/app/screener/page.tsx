@@ -13,7 +13,12 @@ export default async function ScreenerPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const filters = { style: sp.style, setup: sp.setup, session: sp.session };
+  const filters = {
+    style: sp.style,
+    setup: sp.setup,
+    session: sp.session,
+    market: sp.market,
+  };
   const pageSize = 100;
   const page = Math.max(1, Number(sp.page) || 1);
   const { data: signals, isSample, total } = await getSignals(
@@ -27,6 +32,7 @@ export default async function ScreenerPage({
     if (filters.style) params.set("style", filters.style);
     if (filters.setup) params.set("setup", filters.setup);
     if (filters.session) params.set("session", filters.session);
+    if (filters.market) params.set("market", filters.market);
     params.set("page", String(p));
     return `?${params.toString()}`;
   };

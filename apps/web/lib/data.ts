@@ -37,6 +37,7 @@ export interface SignalFilters {
   style?: string;
   setup?: string;
   session?: string;
+  market?: string; // instruments.exchange — KOSPI | KOSDAQ
 }
 
 // 로그인 사용자의 트레이드당 리스크(%). 비로그인/조회 실패 시 기본값.
@@ -101,7 +102,11 @@ export async function getSignals(
     const supabase = await createClient();
     let q = supabase
       .from("signals")
-      .select("*, instruments(symbol,name,exchange,currency)", { count: "exact" })
+      // !inner — 시장(market) 필터가 임베드 컬럼(instruments.exchange) 대상이라
+      // 내부 조인 필요. instrument_id 는 not null FK 라 결과 집합은 동일.
+      .select("*, instruments!inner(symbol,name,exchange,currency)", {
+        count: "exact",
+      })
       // 강도(strength) 내림차순 — 같은 배치라 created_at 정렬은 무의미. 강한 시그널 우선.
       .order("strength", { ascending: false })
       .order("created_at", { ascending: false })
@@ -109,6 +114,7 @@ export async function getSignals(
     if (filters.style) q = q.eq("style", filters.style);
     if (filters.setup) q = q.eq("setup", filters.setup);
     if (filters.session) q = q.eq("session", filters.session);
+    if (filters.market) q = q.eq("instruments.exchange", filters.market);
 
     const { data, error, count } = await q;
     if (error) throw error;
@@ -133,7 +139,8 @@ function applyFilters(rows: SignalView[], f: SignalFilters): SignalView[] {
     (r) =>
       (!f.style || r.style === f.style) &&
       (!f.setup || r.setup === f.setup) &&
-      (!f.session || r.session === f.session),
+      (!f.session || r.session === f.session) &&
+      (!f.market || r.exchange === f.market),
   );
 }
 

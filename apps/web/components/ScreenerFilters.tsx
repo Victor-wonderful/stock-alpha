@@ -9,6 +9,7 @@ import {
 } from "@stock-alpha/db";
 
 const GROUPS: { key: string; label: string; options: Record<string, string> }[] = [
+  { key: "market", label: "시장", options: { KOSPI: "코스피", KOSDAQ: "코스닥" } },
   { key: "style", label: "스타일", options: TRADE_STYLE_LABELS },
   { key: "setup", label: "셋업", options: TRADE_SETUP_LABELS },
   { key: "session", label: "세션", options: TRADE_SESSION_LABELS },
@@ -17,12 +18,13 @@ const GROUPS: { key: string; label: string; options: Record<string, string> }[] 
 export function ScreenerFilters() {
   const router = useRouter();
   const params = useSearchParams();
-  const anyActive = ["style", "setup", "session"].some((k) => params.get(k));
+  const anyActive = GROUPS.some((g) => params.get(g.key));
 
   function toggle(key: string, value: string) {
     const next = new URLSearchParams(params.toString());
     if (next.get(key) === value) next.delete(key);
     else next.set(key, value);
+    next.delete("page"); // 필터 변경 시 1페이지부터
     router.push(`/screener?${next.toString()}`);
   }
 
