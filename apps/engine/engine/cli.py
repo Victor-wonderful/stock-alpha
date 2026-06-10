@@ -105,9 +105,22 @@ def backtest() -> None:
 @app.command()
 def report(
     report_type: str = typer.Argument(..., help="indepth|market|portfolio|custom"),
+    symbols: str = typer.Option("", help="쉼표구분 심볼 (비우면 합성알파 상위 자동 선정)"),
+    top: int = typer.Option(3, help="자동 선정 시 발행 종목 수"),
+    llm: bool = typer.Option(True, help="Claude 서술 생성 (False면 템플릿)"),
+    draft: bool = typer.Option(False, help="draft 상태로 저장 (기본 published)"),
 ) -> None:
-    """AI 애널리스트 북 발행 (Phase 2). 현재는 골격."""
-    log.info("report", report_type=report_type, status="not_implemented")
+    """AI 애널리스트 리포트 발행 — indepth: ①판정 ②게이트 ③실행플랜 ④근거 ⑤리스크."""
+    if report_type != "indepth":
+        log.info("report", report_type=report_type, status="not_implemented")
+        return
+    from engine.reports import runner as rr
+
+    sym_list = [s.strip() for s in symbols.split(",") if s.strip()] or None
+    results = rr.run_indepth(sym_list, top=top, use_llm=llm, publish=not draft)
+    for r in results:
+        typer.echo(f"{r['symbol']}  {r['rating']:<6}  llm={r['llm']}  {r['title']}")
+    typer.echo(f"published reports: {len(results)}")
 
 
 @app.command("levels-demo")
