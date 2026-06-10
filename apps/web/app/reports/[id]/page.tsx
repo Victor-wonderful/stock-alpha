@@ -5,8 +5,9 @@ import { AppShell } from "@/components/AppShell";
 import { SetupChip, StyleChip } from "@/components/AxisChips";
 import { Panel, Stat, StrengthBar } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { getReportById } from "@/lib/data";
-import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
+import { getLatestPrice, getReportById } from "@/lib/data";
+import { fmtDateTime, fmtNum, fmtPct, fmtPrice } from "@/lib/format";
+import type { ReportPlanRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,28 @@ function eokwon(v: number | null): string {
   return v == null ? "—" : `${(v / 1e8).toFixed(1)}억원`;
 }
 
+// 실행플랜 행의 "지금 유효한가" — 발행은 과거여도 판정은 읽는 시점 기준.
+// 만료(valid_until 경과) > 무효(손절 하회/+5% 초과 추격) > 진입권(±2%) > 대기.
+function planStatus(
+  row: ReportPlanRow,
+  last: number | null,
+): { label: string; variant: "bull" | "bear" | "warn" | "neutral" } {
+  if (row.valid_until && new Date(row.valid_until).getTime() < Date.now()) {
+    return { label: "만료", variant: "neutral" };
+  }
+  if (last == null) return { label: "—", variant: "neutral" };
+  if (row.stop_loss != null && last <= row.stop_loss) {
+    return { label: "무효 · 손절가 하회", variant: "bear" };
+  }
+  if (last > row.entry_price * 1.05) {
+    return { label: "무효 · 진입가 이탈", variant: "bear" };
+  }
+  if (Math.abs(last - row.entry_price) / row.entry_price <= 0.02) {
+    return { label: "진입권", variant: "bull" };
+  }
+  return { label: "진입 대기", variant: "warn" };
+}
+
 export default async function ReportDetailPage({
   params,
 }: {
@@ -33,11 +56,14 @@ export default async function ReportDetailPage({
   if (!report || !report.payload) notFound();
   const p = report.payload;
   const n = p.narrative;
+  // 진입 상태 판정용 — 읽는 시점의 최신가 (없으면 상태 미표시)
+  const latest = await getLatestPrice(p.instrument.id);
+  const lastNow = latest.data?.close ?? null;
 
   return (
     <AppShell
       title={report.title}
-      subtitle={`${p.instrument.name} (${p.instrument.symbol}) · ${report.as_of} · ${report.model_version ?? ""}`}
+      subtitle={`${p.instrument.name} (${p.instrument.symbol}) · 발행 ${fmtDateTime(report.created_at)} · ${report.model_version ?? ""}`}
     >
       <div className="space-y-4">
         {/* ① 판정 */}
@@ -89,7 +115,14 @@ export default async function ReportDetailPage({
         </Panel>
 
         {/* ③ 실행 플랜 */}
-        <Panel title="③ 실행 플랜 — 얼마에 사고, 팔고, 손절하나">
+        <Panel
+          title="③ 실행 플랜 — 얼마에 사고, 팔고, 손절하나"
+          action={
+            <span className="text-2xs text-text-mute">
+              상태는 현재가 기준 실시간 판정 · 스윙/포지션 시그널만 (장중 시그널은 별도 발행 예정)
+            </span>
+          }
+        >
           {p.plan.length === 0 ? (
             <p className="text-sm text-text-mute">현재 발행된 매수 셋업이 없습니다.</p>
           ) : (
@@ -105,6 +138,7 @@ export default async function ReportDetailPage({
                     <th className="px-3 py-2 text-right font-medium">TP2</th>
                     <th className="px-3 py-2 text-right font-medium">R:R</th>
                     <th className="px-3 py-2 text-left font-medium">신뢰도</th>
+                    <th className="px-3 py-2 text-left font-medium">상태</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -136,6 +170,16 @@ export default async function ReportDetailPage({
                       </td>
                       <td className="px-3 py-2.5">
                         <StrengthBar value={row.strength} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {(() => {
+                          const s = planStatus(row, lastNow);
+                          return (
+                            <Badge variant={s.variant} size="md">
+                              {s.label}
+                            </Badge>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}

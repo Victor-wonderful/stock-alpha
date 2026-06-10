@@ -9,12 +9,25 @@ import type { RecommendationView } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+// 바스켓 내부 키 → 표시 라벨
+const BASKET_LABELS: Record<string, string> = {
+  daily_focus: "오늘의 포커스 — 시스템 기준 통과 후보",
+  screener: "스크리너 바스켓",
+  model_portfolio: "모델 포트폴리오",
+  theme: "테마 바스켓",
+};
+
 export default async function PortfolioPage() {
   const { data, isSample } = await getRecommendations();
 
-  // 바스켓별 그룹핑
+  // 바스켓별 그룹핑 — daily_focus(오늘의 포커스)를 최상단에.
   const baskets = new Map<string, RecommendationView[]>();
-  for (const r of data) {
+  const ordered = [...data].sort(
+    (a, b) =>
+      (a.basket_type === "daily_focus" ? 0 : 1) -
+      (b.basket_type === "daily_focus" ? 0 : 1),
+  );
+  for (const r of ordered) {
     const arr = baskets.get(r.basket_type) ?? [];
     arr.push(r);
     baskets.set(r.basket_type, arr);
@@ -29,13 +42,19 @@ export default async function PortfolioPage() {
       <div className="space-y-4">
         {[...baskets.entries()].map(([name, rows]) => {
           const total = rows.reduce((a, r) => a + r.weight, 0);
+          const isFocus = name === "daily_focus";
           return (
             <Panel
               key={name}
-              title={name}
+              title={BASKET_LABELS[name] ?? name}
               action={
                 <span className="tnum text-2xs text-text-mute">
-                  {rows.length}종목 · 합계 {(total * 100).toFixed(0)}%
+                  {rows.length}종목
+                  {isFocus
+                    ? rows[0]?.as_of
+                      ? ` · ${rows[0].as_of} 16:30 기준`
+                      : ""
+                    : ` · 합계 ${(total * 100).toFixed(0)}%`}
                 </span>
               }
             >
@@ -99,6 +118,12 @@ export default async function PortfolioPage() {
             * 추천 엔진(recommendations) 가동 전 예시 바스켓입니다. 리밸런싱 시 실데이터로 대체됩니다.
           </p>
         )}
+
+        <p className="text-2xs leading-relaxed text-text-mute">
+          본 정보는 유사투자자문업자가 불특정 다수에게 제공하는 투자 참고 정보이며,
+          특정 개인에 대한 맞춤형 투자자문이 아닙니다. 투자 판단의 책임은 투자자
+          본인에게 있습니다.
+        </p>
       </div>
     </AppShell>
   );

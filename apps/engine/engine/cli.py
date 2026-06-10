@@ -132,6 +132,46 @@ def report(
     typer.echo(f"published reports: {len(results)}")
 
 
+@app.command()
+def daily(
+    skip_ingest: bool = typer.Option(False, help="시세 인제스트 생략(데이터 최신일 때)"),
+    ingest_days: int = typer.Option(7, help="시세 인제스트 기간(일)"),
+    llm: bool = typer.Option(True, help="Claude 서술 생성"),
+    cap: int = typer.Option(100, help="일 발행 상한"),
+) -> None:
+    """일일 EOD 배치 (발행 규정 v1) — 인제스트→팩터→백테스트 게이트→시그널→리포트→오늘의 포커스.
+
+    매 영업일 16:30 실행 전제. 스윙·포지션 시그널만 발행(데이/종가베팅은 장중 배치 영역).
+    """
+    from engine.backtest import runner as br
+    from engine.factors import runner as fr
+    from engine.ingest import runner as ir
+    from engine.reports import daily as rd
+    from engine.signals import runner as sr
+
+    if not skip_ingest:
+        n = ir.ingest_krx_prices(days=ingest_days)
+        typer.echo(f"[1/5] ingest prices: {n} rows")
+    else:
+        typer.echo("[1/5] ingest skipped")
+
+    typer.echo(f"[2/5] factors: {fr.run()} rows")
+
+    gate = br.run()
+    passed = [s for s, ok in gate.items() if ok]
+    typer.echo(f"[3/5] backtest gate passed: {', '.join(passed) or '(없음)'}")
+
+    setups = passed + ["factor_composite"]  # 횡단면 전략은 이벤트 게이트 비대상
+    n = sr.run(setups=setups)
+    typer.echo(f"[4/5] signals: {n} rows ({', '.join(setups)})")
+
+    r = rd.run_daily(use_llm=llm, cap=cap)
+    typer.echo(
+        f"[5/5] reports — A:{r['track_a']} B:{r['track_b']} "
+        f"published:{r['published']} skipped:{r['skipped']} picks:{r['picks']}"
+    )
+
+
 @app.command("levels-demo")
 def levels_demo(
     style: str = typer.Option("swing", help=f"스타일: {', '.join(STYLES)}"),

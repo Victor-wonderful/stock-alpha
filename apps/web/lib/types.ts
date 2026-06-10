@@ -96,6 +96,7 @@ export interface RecommendationView {
   entry_price: number | null;
   target_price: number | null;
   stop_loss: number | null;
+  as_of?: string | null; // 발행 기준일 (daily_focus 스냅샷)
 }
 
 // ── 전략·백테스트 ──

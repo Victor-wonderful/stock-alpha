@@ -20,6 +20,12 @@ ATR_PCT_CEILING = 0.12            # 일중 변동성 상한(ATR/종가 12%) — 
 RATING_BUY = 65
 RATING_NEUTRAL = 45
 
+# ── EOD(장 마감 후) 발행에서 유효한 시그널 스타일 ──
+# 발행 규정 v1(2026-06-10): 16:30 배치 시점에 스캘핑/데이/종가베팅은 이미
+# 실행 시점이 지난 시그널 → 리포트 실행플랜·판정에서 제외. 종가베팅은
+# 향후 15:00 장중 배치에서, 데이는 KIS 실시간 연동 후 별도 발행.
+EOD_STYLES = ("swing", "position")
+
 
 def avg_turnover_krw(ohlcv: list[dict], window: int = 20) -> float | None:
     """최근 window 일 평균 거래대금(종가×거래량, KRW). ohlcv 는 ts 오름차순."""
@@ -144,11 +150,18 @@ def build_verdict(
     }
 
 
-def build_plan(signals: list[dict]) -> list[dict]:
-    """③얼마에 사고/팔고/손절 — 스타일별 실행 플랜 (시그널 가격레벨 그대로)."""
+def build_plan(
+    signals: list[dict], styles: tuple[str, ...] | None = None
+) -> list[dict]:
+    """③얼마에 사고/팔고/손절 — 스타일별 실행 플랜 (시그널 가격레벨 그대로).
+
+    styles 지정 시 해당 스타일만(EOD 발행은 스윙·포지션).
+    """
     plan = []
     for s in signals:
         if s.get("signal_type") != "buy" or s.get("entry_price") is None:
+            continue
+        if styles is not None and s.get("style") not in styles:
             continue
         plan.append({
             "style": s["style"],
@@ -196,9 +209,17 @@ def build_context(
     ohlcv: list[dict],
     flows: list[dict],
     backtests: list[dict],
+    plan_styles: tuple[str, ...] | None = EOD_STYLES,
 ) -> dict[str, Any]:
-    """리포트 5섹션의 수치 원본(payload) + source_refs 를 조립하는 순수 함수."""
+    """리포트 5섹션의 수치 원본(payload) + source_refs 를 조립하는 순수 함수.
+
+    plan_styles: 실행플랜·게이트·판정에 반영할 시그널 스타일.
+      기본 EOD_STYLES(스윙·포지션) — 장 마감 후 발행에서 이미 실행 시점이
+      지난 스타일(데이/종가베팅)을 배제. None 이면 전체.
+    """
     iid = instrument["id"]
+    if plan_styles is not None:
+        signals = [s for s in signals if s.get("style") in plan_styles]
     refs: list[dict] = []
 
     def ref(field: str, table: str, value: Any, key: dict) -> Any:
@@ -326,7 +347,9 @@ def _latest_row(table: str, instrument_id: int, order_col: str = "date") -> dict
     return (res.data or [None])[0]
 
 
-def load_context(symbol: str) -> dict[str, Any] | None:
+def load_context(
+    symbol: str, plan_styles: tuple[str, ...] | None = EOD_STYLES
+) -> dict[str, Any] | None:
     """심볼 1개의 리포트 컨텍스트 로드. instruments 에 없으면 None."""
     from engine.db import get_client, select_all
 
@@ -365,4 +388,5 @@ def load_context(symbol: str) -> dict[str, Any] | None:
     return build_context(
         instrument=inst, valuation=valuation, factor=factor,
         signals=signals, ohlcv=ohlcv, flows=flows, backtests=backtests,
+        plan_styles=plan_styles,
     )

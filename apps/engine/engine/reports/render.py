@@ -67,7 +67,7 @@ def render_body_md(ctx: dict, narrative: dict) -> str:
     inst = ctx["instrument"]
     v = ctx["verdict"]
     lines: list[str] = [
-        f"# {inst['name']} ({inst['symbol']}) 인뎁스 리포트",
+        f"# {inst['name']} ({inst['symbol']}) 종목 심층분석",
         "",
         f"## ① 판정 — {v['rating']} (종합 {v['score']}점)",
         "",

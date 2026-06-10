@@ -345,11 +345,20 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("recommendations")
-      .select("basket_type,style,weight,conviction,thesis,entry_price,target_price,stop_loss,instruments(symbol,name)")
+      .select("basket_type,style,weight,conviction,thesis,entry_price,target_price,stop_loss,as_of,instruments(symbol,name)")
       .order("as_of", { ascending: false })
       .limit(100);
     if (error || !data || data.length === 0) throw error ?? new Error("empty");
-    const rows: RecommendationView[] = data.map((r: Record<string, unknown>) => {
+    // 바스켓별 최신 as_of 스냅샷만 — 지난 날짜 픽이 섞여 중복 표시되지 않게.
+    const latestByBasket = new Map<string, string>();
+    for (const r of data as Record<string, unknown>[]) {
+      const b = (r.basket_type as string) ?? "";
+      if (!latestByBasket.has(b)) latestByBasket.set(b, r.as_of as string);
+    }
+    const current = (data as Record<string, unknown>[]).filter(
+      (r) => latestByBasket.get((r.basket_type as string) ?? "") === r.as_of,
+    );
+    const rows: RecommendationView[] = current.map((r: Record<string, unknown>) => {
       const inst = (r.instruments ?? {}) as Record<string, unknown>;
       return {
         basket_type: (r.basket_type as string) ?? "",
@@ -362,6 +371,7 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
         entry_price: r.entry_price as number | null,
         target_price: r.target_price as number | null,
         stop_loss: r.stop_loss as number | null,
+        as_of: (r.as_of as string) ?? null,
       };
     });
     return { data: rows, isSample: false };

@@ -32,8 +32,12 @@ def parse_narrative(text: str) -> dict | None:
     return {k: data[k] for k in NARRATIVE_KEYS}
 
 
-def generate_narrative(context: dict) -> dict | None:
-    """컨텍스트 → Claude 서술. 실패는 조용히 None (리포트 발행은 계속)."""
+def generate_narrative(context: dict, model: str | None = None) -> dict | None:
+    """컨텍스트 → Claude 서술. 실패는 조용히 None (리포트 발행은 계속).
+
+    model 미지정 시 settings.claude_report_model. 발행 규정 v1: 대량 발행은
+    claude_summary_model(Sonnet), '매수' 판정은 claude_report_model(Opus).
+    """
     s = get_settings()
     if not s.anthropic_api_key:
         log.warning("reports.llm.no_api_key")
@@ -43,7 +47,7 @@ def generate_narrative(context: dict) -> dict | None:
 
         client = anthropic.Anthropic(api_key=s.anthropic_api_key)
         msg = client.messages.create(
-            model=s.claude_report_model,
+            model=model or s.claude_report_model,
             max_tokens=2000,
             system=SYSTEM,
             messages=[{"role": "user", "content": user_prompt(context)}],
