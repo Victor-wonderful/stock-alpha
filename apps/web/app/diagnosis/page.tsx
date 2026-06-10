@@ -5,7 +5,7 @@ import { DiagnosisForm } from "@/components/DiagnosisForm";
 import { Panel, Stat } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { getPortfolioDiagnosis, type HoldingInput } from "@/lib/data";
-import { fmtNum, fmtPct } from "@/lib/format";
+import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +111,7 @@ export default async function DiagnosisPage({
                     <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
                       <th className="py-2 pl-1 text-left font-medium">종목</th>
                       <th className="px-3 py-2 text-right font-medium">비중</th>
+                      <th className="px-3 py-2 text-right font-medium">현재가</th>
                       <th className="px-3 py-2 text-center font-medium">판정</th>
                       <th className="px-3 py-2 text-right font-medium">점수</th>
                       <th className="px-3 py-2 text-right font-medium">합성알파</th>
@@ -138,6 +139,18 @@ export default async function DiagnosisPage({
                         </td>
                         <td className="tnum px-3 py-2.5 text-right">
                           {(h.weight * 100).toFixed(1)}%
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="mono">{fmtPrice(h.last_close)}</span>
+                          {h.change_pct != null && (
+                            <span
+                              className={`tnum ml-1.5 text-2xs ${
+                                h.change_pct >= 0 ? "text-bull" : "text-bear"
+                              }`}
+                            >
+                              {fmtPct(h.change_pct)}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-center">
                           {h.rating ? (

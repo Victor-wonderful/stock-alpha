@@ -390,6 +390,8 @@ export interface HoldingDiagnosis {
   name: string;
   sector: string | null;
   weight: number;
+  last_close: number | null; // 최신 종가
+  change_pct: number | null; // 전일 대비
   rating: string | null; // 최신 리포트 판정 (없으면 null)
   score: number | null; // 종합 점수
   composite_alpha: number | null;
@@ -450,7 +452,8 @@ export async function getPortfolioDiagnosis(
       notFound.push(it.symbol);
       continue;
     }
-    const [fac, val, risk, rep] = await Promise.all([
+    const [price, fac, val, risk, rep] = await Promise.all([
+      getLatestPrice(inst.id),
       supabase
         .from("factor_scores")
         .select("composite_alpha")
@@ -490,6 +493,8 @@ export async function getPortfolioDiagnosis(
       name: inst.name,
       sector: inst.sector ?? null,
       weight: it.weight,
+      last_close: price.data?.close ?? null,
+      change_pct: price.data?.changePct ?? null,
       rating: (report?.rating as string) ?? null,
       score: verdict?.score != null ? Number(verdict.score) : null,
       composite_alpha: fac.data?.[0]?.composite_alpha ?? null,
