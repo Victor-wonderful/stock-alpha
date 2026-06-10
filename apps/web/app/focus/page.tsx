@@ -5,6 +5,7 @@ import { StyleChip } from "@/components/AxisChips";
 import { EmptyState, Panel, SampleBadge, Stat, StrengthBar } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import {
+  getMorningBrief,
   getPickHistory,
   getRecommendations,
   getReports,
@@ -56,6 +57,8 @@ export default async function FocusPage() {
   const riskPct = await getUserRiskPct();
   // 픽 기록 — 발행한 모든 픽의 결과를 공개 (실발행 트랙레코드)
   const { data: history } = await getPickHistory();
+  // 시장 맥락 — 모닝 브리프(08:30 배치) + 레짐
+  const { data: brief } = await getMorningBrief();
 
   return (
     <AppShell
@@ -64,6 +67,77 @@ export default async function FocusPage() {
       badge={recs.isSample ? <SampleBadge /> : undefined}
     >
       <div className="space-y-4">
+        {/* 시장 맥락 — 모닝 브리프 (들어가기 전에 읽는 한 문단) */}
+        {brief && (
+          <Panel
+            title="시장 브리프"
+            action={
+              <span className="flex items-center gap-2 text-2xs text-text-mute">
+                {brief.regime && (
+                  <Badge
+                    variant={
+                      brief.regime.regime === "risk_on"
+                        ? "bull"
+                        : brief.regime.regime === "risk_off"
+                          ? "bear"
+                          : "neutral"
+                    }
+                    size="md"
+                  >
+                    {brief.regime.regime === "risk_on"
+                      ? "위험선호"
+                      : brief.regime.regime === "risk_off"
+                        ? "위험회피"
+                        : "중립"}
+                  </Badge>
+                )}
+                {brief.as_of} 발행
+              </span>
+            }
+          >
+            <p className="text-sm font-medium leading-relaxed text-text">
+              {brief.headline}
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-text-dim">
+              {brief.market_view}
+            </p>
+            {brief.watchpoints.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {brief.watchpoints.map((w, i) => (
+                  <li key={i} className="flex gap-2 text-xs text-text-dim">
+                    <span className="text-accent">▸</span>
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {brief.macro.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {brief.macro.map((m) => (
+                  <span
+                    key={m.series}
+                    className="rounded-md border border-border bg-surface-2 px-2 py-1 text-2xs text-text-mute"
+                  >
+                    {m.label}{" "}
+                    <span className="tnum text-text-dim">
+                      {m.value.toLocaleString()}
+                    </span>
+                    {m.change_pct != null && (
+                      <span
+                        className={`tnum ml-1 ${
+                          m.change_pct >= 0 ? "text-bull" : "text-bear"
+                        }`}
+                      >
+                        {fmtPct(m.change_pct)}
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+          </Panel>
+        )}
+
         {/* 픽 카드 */}
         <Panel
           title="포커스 종목"

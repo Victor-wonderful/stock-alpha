@@ -380,6 +380,54 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
   }
 }
 
+// ── 모닝 브리프 (report_type='market') ──
+export interface MorningBrief {
+  as_of: string;
+  headline: string;
+  market_view: string;
+  watchpoints: string[];
+  regime: { regime: string; score: number; drivers: string[] } | null;
+  macro: {
+    series: string;
+    label: string;
+    value: number;
+    change_pct: number | null;
+  }[];
+  created_at: string;
+}
+
+export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("reports")
+      .select("as_of,summary,payload,created_at")
+      .eq("report_type", "market")
+      .eq("status", "published")
+      .order("as_of", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) throw error ?? new Error("none");
+    const row = data[0] as Record<string, unknown>;
+    const p = (row.payload ?? {}) as Record<string, unknown>;
+    const n = (p.narrative ?? {}) as Record<string, unknown>;
+    return {
+      data: {
+        as_of: row.as_of as string,
+        headline: (n.headline as string) ?? (row.summary as string) ?? "",
+        market_view: (n.market_view as string) ?? "",
+        watchpoints: (n.watchpoints as string[]) ?? [],
+        regime: (p.regime as MorningBrief["regime"]) ?? null,
+        macro: (p.macro as MorningBrief["macro"]) ?? [],
+        created_at: (row.created_at as string) ?? "",
+      },
+      isSample: false,
+    };
+  } catch {
+    return { data: null, isSample: false };
+  }
+}
+
 // ── 픽 기록 (실발행 트랙레코드) ──
 // 발행한 모든 daily_focus 픽의 진입가 대비 현재가·상태를 읽기 시점에 계산.
 // 종가 기반(장중 터치 미반영) — 목표/손절 "도달"은 종가 기준 근사임을 화면에 고지.
@@ -671,6 +719,7 @@ export async function getReports(
         "id,report_type,title,as_of,rating,target_price,summary,model_version,instruments(symbol,name)",
       )
       .eq("status", "published")
+      .eq("report_type", "indepth") // 종목 분석만 — 마켓 브리프는 /focus 카드로
       .order("as_of", { ascending: false })
       .order("id", { ascending: false })
       .limit(limit);

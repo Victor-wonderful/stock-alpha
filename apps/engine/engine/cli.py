@@ -36,6 +36,9 @@ def ingest(
         n = runner.ingest_krx_flows(days=days, workers=workers)
     elif market == "kr" and target == "fundamentals":
         n = runner.ingest_krx_financials(year=year, workers=workers)
+    elif target == "macro":
+        from engine.ingest import fred
+        n = fred.ingest_macro(days=days)
     else:
         log.info("ingest", target=target, market=market, status="not_implemented")
         return
@@ -83,6 +86,10 @@ def analyze(
     elif target == "factors":
         from engine.factors import runner as kr
         typer.echo(f"factor_scores rows: {kr.run()}")
+    elif target == "regime":
+        from engine.market import regime
+        r = regime.run()
+        typer.echo(f"regime: {r['regime']} (score {r['score']}) — {' · '.join(r['drivers'])}")
     else:
         log.info("analyze", target=target, status="not_implemented")
 
@@ -133,6 +140,25 @@ def report(
 
 
 @app.command()
+def morning(
+    llm: bool = typer.Option(True, help="Claude 서술 생성"),
+) -> None:
+    """모닝 배치 (08:30) — FRED 매크로 갱신 → 레짐 → 모닝 브리프 발행.
+
+    밤사이 바뀌는 해외 변수만 갱신 — 픽/리포트는 전일 16:30 발행분 그대로 유효.
+    """
+    from engine.ingest import fred
+    from engine.market import regime
+    from engine.reports import morning as mb
+
+    typer.echo(f"[1/3] macro: {fred.ingest_macro(days=10)} rows")
+    r = regime.run()
+    typer.echo(f"[2/3] regime: {r['regime']} (score {r['score']})")
+    out = mb.publish_morning(use_llm=llm)
+    typer.echo(f"[3/3] morning brief — llm={out['llm']}  {out['headline']}")
+
+
+@app.command()
 def daily(
     skip_ingest: bool = typer.Option(False, help="시세 인제스트 생략(데이터 최신일 때)"),
     ingest_days: int = typer.Option(7, help="시세 인제스트 기간(일)"),
@@ -156,6 +182,10 @@ def daily(
         typer.echo("[1/5] ingest skipped")
 
     typer.echo(f"[2/5] factors: {fr.run()} rows")
+
+    from engine.market import regime as rg
+    r0 = rg.run()
+    typer.echo(f"      regime: {r0['regime']} (score {r0['score']})")
 
     gate = br.run()
     passed = [s for s, ok in gate.items() if ok]

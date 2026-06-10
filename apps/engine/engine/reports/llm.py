@@ -12,8 +12,8 @@ log = get_logger(__name__)
 NARRATIVE_KEYS = ("thesis", "trader_view", "quant_view", "risks")
 
 
-def parse_narrative(text: str) -> dict | None:
-    """LLM 응답 텍스트 → 서술 dict. 코드펜스 허용, 키 검증."""
+def parse_json_keys(text: str, keys: tuple[str, ...]) -> dict | None:
+    """LLM 응답 텍스트 → dict. 코드펜스 허용, 필수 키 검증. (범용)"""
     t = text.strip()
     if t.startswith("```"):
         t = t.split("```")[1]
@@ -25,11 +25,46 @@ def parse_narrative(text: str) -> dict | None:
         data = json.loads(t[start : end + 1])
     except json.JSONDecodeError:
         return None
-    if not all(k in data for k in NARRATIVE_KEYS):
+    if not all(k in data for k in keys):
         return None
-    if not isinstance(data["risks"], list):
+    return {k: data[k] for k in keys}
+
+
+def parse_narrative(text: str) -> dict | None:
+    """인뎁스 서술 파싱 — risks 는 리스트여야 함."""
+    data = parse_json_keys(text, NARRATIVE_KEYS)
+    if data is None or not isinstance(data["risks"], list):
         return None
-    return {k: data[k] for k in NARRATIVE_KEYS}
+    return data
+
+
+def generate_json(
+    system: str, user: str, keys: tuple[str, ...],
+    model: str | None = None, max_tokens: int = 1500,
+) -> dict | None:
+    """범용 Claude JSON 생성 — 실패는 조용히 None (발행은 템플릿 폴백)."""
+    s = get_settings()
+    if not s.anthropic_api_key:
+        log.warning("reports.llm.no_api_key")
+        return None
+    try:
+        import anthropic  # lazy import
+
+        client = anthropic.Anthropic(api_key=s.anthropic_api_key)
+        msg = client.messages.create(
+            model=model or s.claude_summary_model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        out = parse_json_keys(text, keys)
+        if out is None:
+            log.warning("reports.llm.parse_failed", raw=text[:200])
+        return out
+    except Exception as e:  # noqa: BLE001
+        log.warning("reports.llm.error", error=str(e))
+        return None
 
 
 def generate_narrative(context: dict, model: str | None = None) -> dict | None:
