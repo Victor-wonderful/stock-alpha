@@ -3,12 +3,15 @@ import { SignalTable } from "@/components/SignalTable";
 import { FactorBars } from "@/components/FactorBars";
 import { PriceChart } from "@/components/PriceChart";
 import { EmptyState, Panel, SampleBadge, Stat } from "@/components/ui";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import {
   getFactor,
   getFlows,
   getInstrumentBySymbol,
   getLatestPrice,
   getOhlcv,
+  getReportForInstrument,
   getRisk,
   getSignalsForSymbol,
   getValuation,
@@ -32,6 +35,7 @@ export default async function StockDetailPage({
   const risk = await getRisk(inst.data.id, symbol);
   const price = await getLatestPrice(inst.data.id);
   const ohlcv = await getOhlcv(inst.data.id);
+  const report = await getReportForInstrument(inst.data.id);
 
   const anySample =
     inst.isSample || val.isSample || fac.isSample || sigs.isSample || flows.isSample || risk.isSample;
@@ -91,6 +95,49 @@ export default async function StockDetailPage({
               {fmtPct(upside)}
             </p>
           </div>
+        )}
+      </div>
+
+      {/* AI 애널리스트 리포트 */}
+      <div className="mb-4">
+        {report.data ? (
+          <Link href={`/reports/${report.data.id}`} className="block">
+            <Panel className="transition-colors hover:border-border-strong">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xs font-semibold uppercase tracking-wide text-text-mute">
+                      AI 애널리스트 리포트
+                    </span>
+                    <Badge
+                      variant={
+                        report.data.rating === "매수"
+                          ? "bull"
+                          : report.data.rating === "거래 부적합"
+                            ? "bear"
+                            : "neutral"
+                      }
+                      size="md"
+                    >
+                      {report.data.rating ?? "—"}
+                    </Badge>
+                    <span className="text-2xs text-text-mute">{report.data.as_of}</span>
+                  </div>
+                  {report.data.summary && (
+                    <p className="mt-1.5 line-clamp-2 text-xs text-text-dim">
+                      {report.data.summary}
+                    </p>
+                  )}
+                </div>
+                <span className="shrink-0 text-xs text-accent">전체 리포트 →</span>
+              </div>
+            </Panel>
+          </Link>
+        ) : (
+          <p className="rounded-md border border-dashed border-border px-3 py-2 text-2xs text-text-mute">
+            이 종목의 AI 애널리스트 리포트는 아직 발행되지 않았습니다. (엔진 `report
+            indepth` 발행 대상에 포함되면 자동 게시)
+          </p>
         )}
       </div>
 

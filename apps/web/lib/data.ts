@@ -592,6 +592,30 @@ export async function getReports(limit = 30): Promise<Loaded<ReportListItem[]>> 
   }
 }
 
+// 종목 상세 페이지용 — 해당 종목의 최신 발행 인뎁스 리포트(없으면 null)
+export async function getReportForInstrument(
+  instrumentId: number,
+): Promise<Loaded<ReportListItem | null>> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("reports")
+      .select(
+        "id,report_type,title,as_of,rating,target_price,summary,model_version,instruments(symbol,name)",
+      )
+      .eq("instrument_id", instrumentId)
+      .eq("report_type", "indepth")
+      .eq("status", "published")
+      .order("as_of", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) throw error ?? new Error("none");
+    return { data: mapReportRow(data[0]), isSample: false };
+  } catch {
+    return { data: null, isSample: false };
+  }
+}
+
 export async function getReportById(
   id: number,
 ): Promise<Loaded<ReportDetail | null>> {
