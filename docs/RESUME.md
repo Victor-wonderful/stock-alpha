@@ -1,7 +1,8 @@
 # 재개 메모 (RESUME) — 다음에 여기서부터
 
-> 마지막 체크포인트: E2E 라운드트립 + 밸류에이션 실데이터 검증 완료(2026-06-07) · 브랜치 `master`
-> 작성 기준일: 2026-06-07 (갱신)
+> 마지막 체크포인트: AI 인뎁스 리포트 MVP 발행·웹 검증 완료(2026-06-10) · 브랜치 `master`
+> 작성 기준일: 2026-06-10 (갱신)
+> ⭐ 제품 피벗(2026-06): AI 리서치 애널리스트 + 유사투자자문 구독(신고 보유). 자동매매/일임 폐기. 메모리 `stock-alpha-product-strategy` 참조.
 
 ## 지금까지 (완료, 동작 검증됨)
 
@@ -34,8 +35,12 @@
 6. ~~**factor composite_alpha 빈약**~~ ✅ **가격팩터 산출로 해결**. `factors/runner._load_cross_section`이 ohlcv 히스토리로 **모멘텀(12-1)·변동성** 계산(전 종목). composite_alpha 3값→**2,651 distinct**(σ0.18, -0.56~0.84). + **`factor_composite` 시그널 생성기**(`signals/factor_signals.py`) 구현 — 합성알파 상위 10% → 매수 시그널(386건). 스크리너 '멀티팩터 종합' 필터 실작동. (가치/성장 팩터는 여전히 재무 5종목만 — 아래 #7. ETF/ETN이 모멘텀 상위에 섞임은 향후 asset_type 필터로 정제)
 7. ~~**유니버스 정제 + 전체 재무 배치**~~ ✅ **완료**. ETF/ETN/펀드(1,252)·스팩(46) 비활성화(`classify_universe`, DART corp_code 유무로 판정) → **활성 실주식 2,561**(=코스피+코스닥 전체 보통주). DART 재무 **2,544종목 배치 완료**(병렬20워커+재개가능, 실패0, 주식수 포함). 최종 재계산: factor_scores 2,566(**6팩터 활성** — value 2,375·quality 2,359, composite_alpha σ0.18→**0.39**·2,321 distinct), valuations **2,500**(PER/PBR/DCF 2,367종목), signals 739(factor_composite 256). 스크리너·종목상세 밸류탭 전 종목 실데이터.
    - **남은 것**: 수급(네이버)은 아직 5종목만 — 전체 배치 필요. growth 팩터는 다기간 재무 없어 미활성(단일 연도만). PER/PBR 높음은 2024실적 대비 2026가격 급등(정상).
-8. **파생 산출물 전용 테이블 없음** — 레짐/섹터로테이션/리스크는 현재 샘플만.
-9. **미구현 마일스톤**: M8 결제 · Phase 2 애널리스트 북(reports) · Phase 3 비수탁 봇(executor)
+8. **파생 산출물 전용 테이블** — 🟡 진행 중. 마이그레이션 0011_risk_metrics/0012_market_regime/0013_sector_rotation 적용됨 + 웹 연결 코드(6/9 WIP 커밋 `e435a81`). 엔진 계산 러너 연결·적재는 미완.
+9. ~~**Phase 2 애널리스트 리포트**~~ ✅ **인뎁스 MVP 완료(2026-06-10)**. 피벗(메모리 `stock-alpha-product-strategy` — AI 리서치+유사투자자문, 신고 보유) 후 첫 기능.
+   - 엔진 `engine/reports/`: context(수치+source_refs, 환각 차단) → 거래가능 게이트(활성·유동성 1억·ATR12%·백테스트 게이트) → 종합판정(팩터40/밸류30/시그널30, 매수≥65/중립≥45/관망/거래부적합) → Claude 서술(`claude-opus-4-8`, 키 없으면 템플릿 폴백) → reports 업서트(0014 자연키 `report_type,instrument_id,as_of`).
+   - CLI: `report indepth --symbols 005930` 또는 `--top N`(합성알파 상위 자동). 웹 `/reports`(목록)·`/reports/[id]`(5섹션 상세) — 검증 완료(HTTP 200, Claude 서술 실데이터).
+   - **함정 발견**: backtests 테이블이 비어 있었음(M6 구현됐지만 실DB 적재는 처음) → `engine backtest` 첫 실행으로 채움. 부분 유니크 인덱스는 PostgREST on_conflict 불가 → 전체 유니크로 변경.
+10. **미구현 마일스톤**: M8 결제 · 마켓/포트폴리오 리포트 타입 · 포트폴리오 진단. (Phase 3 봇은 피벗으로 폐기)
 
 ## 사용자(나) 준비물 — 실데이터 라운드트립 전제
 

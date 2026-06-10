@@ -11,6 +11,7 @@ alter table reports
   add column if not exists payload jsonb;
 
 -- 같은 종목·같은 날짜의 인뎁스 리포트는 1건 — 재실행 시 갱신(upsert).
+-- 부분 인덱스(where)는 PostgREST on_conflict 가 arbiter 로 못 쓰므로 전체 유니크.
+-- instrument_id NULL(마켓 리포트 등)은 NULL≠NULL 이라 중복 제약 없음(기존 의도 유지).
 create unique index if not exists reports_indepth_daily
-  on reports (report_type, instrument_id, as_of)
-  where instrument_id is not null;
+  on reports (report_type, instrument_id, as_of);
