@@ -109,7 +109,9 @@ export interface BacktestView {
   turnover: number | null;
   win_rate: number | null;
   avg_rr: number | null;
+  expectancy_r?: number | null; // 거래당 기대값(R) — 게이트 핵심 기준
   period: string | null;
+  verified_at?: string | null; // 마지막 검증일
   passed: boolean;
 }
 

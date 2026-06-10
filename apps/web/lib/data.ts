@@ -386,11 +386,22 @@ export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("backtests")
-      .select("setup,style,ic,sharpe,mdd,turnover,win_rate,avg_rr,period")
+      .select(
+        "setup,style,ic,sharpe,mdd,turnover,win_rate,avg_rr,expectancy_r,passed,period,created_at",
+      )
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(100);
     if (error || !data || data.length === 0) throw error ?? new Error("empty");
-    const rows: BacktestView[] = data.map((r: Record<string, unknown>) => ({
+    // 셋업별 최신 런만 — 백테스트는 재실행마다 행이 쌓이므로(이력 보존),
+    // 화면에는 현행 판정 하나만. 과거 런 혼재는 모순된 PASS/FAIL 로 보임.
+    const seen = new Set<string>();
+    const latest = (data as Record<string, unknown>[]).filter((r) => {
+      const key = `${r.setup}|${r.style ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const rows: BacktestView[] = latest.map((r: Record<string, unknown>) => ({
       setup: r.setup as BacktestView["setup"],
       style: r.style as BacktestView["style"],
       ic: r.ic as number | null,
@@ -399,7 +410,9 @@ export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
       turnover: r.turnover as number | null,
       win_rate: r.win_rate as number | null,
       avg_rr: r.avg_rr as number | null,
+      expectancy_r: (r.expectancy_r as number) ?? null,
       period: r.period as string | null,
+      verified_at: ((r.created_at as string) ?? "").slice(0, 10) || null,
       // 엔진이 저장한 게이트 판정(0015) 우선 — 구버전 행만 휴리스틱 폴백
       passed:
         typeof r.passed === "boolean"
