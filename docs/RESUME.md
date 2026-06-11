@@ -41,7 +41,9 @@
 - **디자인 시안**: `design/stock-alpha-ui.pen` (Pencil) — 실구조 기반 6화면(포커스·리포트 상세·종목 분석 리스트 × 웹/앱) + 공유 컴포넌트·토큰. 텍스트 다이어트(한줄요약+태그), 컬러 코딩(중립=앰버·목표/손절 틴트·PASS그린/FAIL레드), 선정 과정 3단계 스트립.
 - **코드 적용 완료(3화면)**: 토큰 스왑(globals.css가 단일 출처, bull=빨강/bear=파랑 한국 관례 전환 포함) → 전 페이지 라이트화. /focus(2단+스트립+판정 스탯+픽 기록 미니), /reports(날짜 그룹핑+판정 필터+⭐오늘의 픽 배지+점수), /reports/[id](2단+게이트 레일). getReports에 verdict.score 추가.
 - **시간대 버그 수정**: 날짜 라벨이 MSK 서버에서 하루 밀림(+09:00 앵커를 로컬 getter로 읽음) → UTC 달력 연산. focus 플랜일 라벨의 잠복 버그도 동일 수정.
-- **남은 화면(구 다크 스타일과 혼재)**: /screener·/market·/strategies·/watchlist·/diagnosis·/stocks/[s] — 토큰은 이미 라이트로 적용됨, 레이아웃 정리만 필요.
+- **나머지 화면 점검 완료**: /screener·/strategies·/diagnosis·/stocks/[s]는 토큰 전환만으로 양호. /market 레짐 게이지 복구 — **tailwind 컬러를 color-mix 래핑**해 CSS 변수 컬러에 알파 수정자(bg-bull/40, bg-bg/80 등) 작동 복원(전역 잠복 버그였음).
+- **리포트 상세 3층 구조**: 한눈에 보기(판정+결론+최우선 리스크 앰버 박스) / 행동 정보(플랜·게이트) / 근거 문단은 기본 접힘. /reports 리스트는 날짜 그룹당 10건+접기.
+- **Pencil 시안 동기화됨**: design/stock-alpha-ui.pen — 코드 변경(요약 히어로·근거 접힘·펼치기 버튼) 반영 완료.
 
 ## 📋 개발 백로그 (우선순위순)
 
