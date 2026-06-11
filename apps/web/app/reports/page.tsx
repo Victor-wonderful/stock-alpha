@@ -119,17 +119,11 @@ export default async function ReportsPage({
             const pickCount = rows.filter((r) =>
               pickKeys.has(`${r.as_of}:${r.symbol}`),
             ).length;
-            return (
-              <section key={asOf}>
-                <div className="mb-2 flex items-center gap-3">
-                  <h2 className="text-sm font-extrabold">{fmtDateHeader(asOf)}</h2>
-                  <span className="rounded-md bg-surface-2 px-2 py-0.5 text-2xs font-medium text-text-dim">
-                    {rows.length}건{pickCount > 0 && ` · 픽 ${pickCount}`}
-                  </span>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
-                <div className="space-y-2">
-                  {rows.map((r) => {
+            // 그룹당 상위 10건만 펼침 — 나머지는 접어서 페이지 길이 억제 (UI V2)
+            const VISIBLE = 10;
+            const head = rows.slice(0, VISIBLE);
+            const rest = rows.slice(VISIBLE);
+            const renderRow = (r: (typeof rows)[number]) => {
                     const isPick = pickKeys.has(`${r.as_of}:${r.symbol}`);
                     return (
                       <Link key={r.id} href={`/reports/${r.id}`} className="block">
@@ -186,8 +180,28 @@ export default async function ReportsPage({
                         </div>
                       </Link>
                     );
-                  })}
+            };
+            return (
+              <section key={asOf}>
+                <div className="mb-2 flex items-center gap-3">
+                  <h2 className="text-sm font-extrabold">{fmtDateHeader(asOf)}</h2>
+                  <span className="rounded-md bg-surface-2 px-2 py-0.5 text-2xs font-medium text-text-dim">
+                    {rows.length}건{pickCount > 0 && ` · 픽 ${pickCount}`}
+                  </span>
+                  <div className="h-px flex-1 bg-border" />
                 </div>
+                <div className="space-y-2">{head.map(renderRow)}</div>
+                {rest.length > 0 && (
+                  <details className="group mt-2">
+                    <summary className="cursor-pointer list-none rounded-xl border border-dashed border-border py-2.5 text-center text-xs font-semibold text-accent transition-colors hover:border-accent/50 hover:bg-accent-dim/40">
+                      <span className="group-open:hidden">
+                        나머지 {rest.length}건 펼치기 ↓
+                      </span>
+                      <span className="hidden group-open:inline">접기 ↑</span>
+                    </summary>
+                    <div className="mt-2 space-y-2">{rest.map(renderRow)}</div>
+                  </details>
+                )}
               </section>
             );
           })}
