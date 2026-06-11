@@ -145,6 +145,7 @@ export interface ReportListItem {
   target_price: number | null;
   summary: string | null;
   model_version: string | null;
+  score: number | null; // 종합 점수 (payload.verdict.score)
 }
 
 // 엔진 reports/context.py 가 만드는 구조화 페이로드 (수치 원본)

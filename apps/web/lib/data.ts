@@ -904,6 +904,7 @@ function mapReportRow(row: Record<string, unknown>): ReportListItem {
     target_price: row.target_price as number | null,
     summary: row.summary as string | null,
     model_version: row.model_version as string | null,
+    score: row.score != null ? Math.round(Number(row.score) * 10) / 10 : null,
   };
 }
 
@@ -916,7 +917,7 @@ export async function getReports(
     let q = supabase
       .from("reports")
       .select(
-        "id,report_type,title,as_of,rating,target_price,summary,model_version,instruments(symbol,name)",
+        "id,report_type,title,as_of,rating,target_price,summary,model_version,score:payload->verdict->>score,instruments(symbol,name)",
       )
       .eq("status", "published")
       .eq("report_type", "indepth") // 종목 분석만 — 마켓 브리프는 /focus 카드로
