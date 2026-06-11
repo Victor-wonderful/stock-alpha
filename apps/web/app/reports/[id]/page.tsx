@@ -76,8 +76,8 @@ export default async function ReportDetailPage({
       {/* UI V2: 좌측 본문(①③④⑤) + 우측 레일(②게이트·퀀트 수치·메타) */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
-          {/* ① 판정 */}
-          <Panel title="① 판정 — 사야 하나">
+          {/* ① 한눈에 보기 — 30초 요약: 판정 + 결론 + 최우선 리스크 */}
+          <Panel title="① 한눈에 보기 — 사야 하나">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat
                 label="투자의견"
@@ -98,6 +98,18 @@ export default async function ReportDetailPage({
               />
             </div>
             <p className="mt-3 text-sm leading-relaxed text-text-dim">{n.thesis}</p>
+            {n.risks.length > 0 && (
+              <p className="mt-3 flex items-start gap-2 rounded-lg bg-warn-soft px-3 py-2 text-xs leading-relaxed text-text-dim">
+                <TriangleAlert
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn"
+                  strokeWidth={2}
+                />
+                <span>
+                  <span className="font-bold text-warn">최우선 리스크</span> —{" "}
+                  {n.risks[0]}
+                </span>
+              </p>
+            )}
             <p className="mt-2 text-2xs text-text-mute">
               가중치 — 멀티팩터 {p.verdict.weights.factor} · 밸류에이션{" "}
               {p.verdict.weights.valuation} · 시그널 {p.verdict.weights.signal}
@@ -192,9 +204,19 @@ export default async function ReportDetailPage({
             )}
           </Panel>
 
-          {/* ④ 근거 — 두 관점 */}
-          <Panel title="④ 근거">
-            <div className="space-y-4">
+          {/* ④ 근거 — 깊이 읽기. 기본 접힘: 검증하고 싶은 사람만 펼친다 (UI V2) */}
+          <details className="group rounded-2xl border border-border bg-surface">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-bold">
+                <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
+                ④ 근거 자세히 보기 — 전문 트레이더 · 퀀트 모델 관점
+              </span>
+              <span className="text-2xs text-text-mute">
+                <span className="group-open:hidden">펼치기 ▾</span>
+                <span className="hidden group-open:inline">접기 ▴</span>
+              </span>
+            </summary>
+            <div className="space-y-4 border-t border-border p-4">
               <div>
                 <p className="flex items-center gap-1.5 text-[13px] font-bold">
                   <ChartCandlestick className="h-4 w-4 text-accent" strokeWidth={2} />
@@ -215,22 +237,27 @@ export default async function ReportDetailPage({
                 </p>
               </div>
             </div>
-          </Panel>
+          </details>
 
-          {/* ⑤ 리스크 */}
-          <Panel title="⑤ 리스크 요인">
-            <ul className="space-y-2">
-              {n.risks.map((r, i) => (
-                <li key={i} className="flex gap-2 text-sm leading-relaxed text-text-dim">
-                  <TriangleAlert
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn"
-                    strokeWidth={2}
-                  />
-                  {r}
-                </li>
-              ))}
-            </ul>
-          </Panel>
+          {/* ⑤ 추가 리스크 — 1번은 한눈에 보기에 노출, 나머지만 */}
+          {n.risks.length > 1 && (
+            <Panel title="⑤ 추가 리스크 요인">
+              <ul className="space-y-2">
+                {n.risks.slice(1).map((r, i) => (
+                  <li
+                    key={i}
+                    className="flex gap-2 text-sm leading-relaxed text-text-dim"
+                  >
+                    <TriangleAlert
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn"
+                      strokeWidth={2}
+                    />
+                    {r}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
         </div>
 
         {/* ── 우측 레일 ── */}
