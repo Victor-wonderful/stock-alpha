@@ -141,11 +141,15 @@ def detect_pullback(df: pd.DataFrame) -> Candidate | None:
     o, close = df["open"], df["close"]
     ma20, ma60 = ind.sma(close, 20), ind.sma(close, 60)
     c, m20, m60 = _last(close), _last(ma20), _last(ma60)
+    if c <= 0 or m20 <= 0 or m60 <= 0:              # 거래정지 이력(0원) 가드
+        return None
     if not (m20 > m60 and c > m60):                 # 추세 살아있음
         return None
     if not (-0.02 <= c / m20 - 1 <= 0.03):          # MA20 부근(-2%~+3%)
         return None
     hi10 = float(df["high"].iloc[-11:-1].max())
+    if hi10 <= 0:
+        return None
     pull = c / hi10 - 1
     if not (-0.12 <= pull <= -0.02):                # 직전 고점 대비 -2~-12% 조정
         return None
@@ -201,7 +205,9 @@ def detect_vol_squeeze(
     if len(df) < window + 21:
         return None
     high, close, vol = df["high"], df["close"], df["volume"]
-    atr_pct = (ind.atr(df) / close).dropna()
+    if _last(close) <= 0:                            # 거래정지 이력(0원) 가드
+        return None
+    atr_pct = (ind.atr(df) / close.replace(0, pd.NA)).dropna()
     if len(atr_pct) < window:
         return None
     recent = float(atr_pct.iloc[-2])                  # 돌파 전일까지의 수축 상태

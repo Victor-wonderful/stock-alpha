@@ -44,6 +44,18 @@ def test_pullback_triggers_on_dip_bounce():
     assert cand.support is not None  # MA20 지지
 
 
+def test_detectors_survive_zero_prices():
+    # 거래정지 이력(0원 가격)이 섞여도 크래시 없이 None — 600일 이력 확장에서
+    # 실제로 ZeroDivisionError 가 발생했던 회귀 케이스.
+    closes = [0.0] * 40 + [100 + i for i in range(40)]
+    df = _df(closes)
+    assert detect_pullback(df) is None or detect_pullback(df) is not None  # no raise
+    assert detect_vol_squeeze(df) is None or True
+    zero_df = _df([0.0] * 80)
+    assert detect_pullback(zero_df) is None
+    assert detect_vol_squeeze(zero_df) is None
+
+
 def test_pullback_no_trigger_in_plain_uptrend():
     closes = [100 + i for i in range(80)]          # 조정 없는 직진 상승
     assert detect_pullback(_df(closes)) is None
