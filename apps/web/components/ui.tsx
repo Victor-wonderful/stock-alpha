@@ -47,13 +47,26 @@ export function Stat({
   label: string;
   value: string;
   sub?: string;
-  tone?: "default" | "bull" | "bear";
+  tone?: "default" | "bull" | "bear" | "accent" | "warn";
 }) {
-  const toneCls =
-    tone === "bull" ? "text-bull" : tone === "bear" ? "text-bear" : "text-text";
+  // 톤이 있으면 텍스트+배경 틴트 — 셀 자체가 의미(위/아래/강조)를 말하게 (UI V2)
+  const toneCls = {
+    bull: "text-bull",
+    bear: "text-bear",
+    accent: "text-accent",
+    warn: "text-warn",
+    default: "text-text",
+  }[tone];
+  const bgCls = {
+    bull: "bg-bull-soft",
+    bear: "bg-bear-soft",
+    accent: "bg-accent-dim",
+    warn: "bg-warn-soft",
+    default: "bg-surface-2",
+  }[tone];
   return (
-    <div className="rounded-md border border-border bg-surface-2 px-3 py-2.5">
-      <p className="text-2xs uppercase tracking-wide text-text-mute">{label}</p>
+    <div className={`rounded-lg px-3 py-2.5 ${bgCls}`}>
+      <p className="text-2xs text-text-mute">{label}</p>
       <p className={`tnum mt-1 text-lg font-semibold ${toneCls}`}>{value}</p>
       {sub && <p className="mt-0.5 text-2xs text-text-mute">{sub}</p>}
     </div>
