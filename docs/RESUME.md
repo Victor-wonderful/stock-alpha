@@ -36,6 +36,13 @@
   - 그 후 `engine backtest` → PEAD 게이트 판정 → 통과 시 스크리너 필터 추가(ACTIVE_SETUPS).
 - 오늘 사용량 ~16k/20k — 분할 필수.
 
+## ✅ 2026-06-11 밤 — UI V2 (라이트 토스 톤) 디자인 + 코드 적용
+
+- **디자인 시안**: `design/stock-alpha-ui.pen` (Pencil) — 실구조 기반 6화면(포커스·리포트 상세·종목 분석 리스트 × 웹/앱) + 공유 컴포넌트·토큰. 텍스트 다이어트(한줄요약+태그), 컬러 코딩(중립=앰버·목표/손절 틴트·PASS그린/FAIL레드), 선정 과정 3단계 스트립.
+- **코드 적용 완료(3화면)**: 토큰 스왑(globals.css가 단일 출처, bull=빨강/bear=파랑 한국 관례 전환 포함) → 전 페이지 라이트화. /focus(2단+스트립+판정 스탯+픽 기록 미니), /reports(날짜 그룹핑+판정 필터+⭐오늘의 픽 배지+점수), /reports/[id](2단+게이트 레일). getReports에 verdict.score 추가.
+- **시간대 버그 수정**: 날짜 라벨이 MSK 서버에서 하루 밀림(+09:00 앵커를 로컬 getter로 읽음) → UTC 달력 연산. focus 플랜일 라벨의 잠복 버그도 동일 수정.
+- **남은 화면(구 다크 스타일과 혼재)**: /screener·/market·/strategies·/watchlist·/diagnosis·/stocks/[s] — 토큰은 이미 라이트로 적용됨, 레이아웃 정리만 필요.
+
 ## 📋 개발 백로그 (우선순위순)
 
 - **factor_composite point-in-time 재검증** — 분기 이력 확보로 6팩터 전체 재검증 경로 열림(현재 xsec FAIL, 하위 제외 필터 후보).
