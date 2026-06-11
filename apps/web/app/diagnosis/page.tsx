@@ -47,10 +47,10 @@ export default async function DiagnosisPage({
   return (
     <AppShell
       title="포트폴리오 진단"
-      subtitle="보유 종목을 시스템 잣대(판정·팩터·리스크)로 점검 — 자동화된 일반 분석"
+      subtitle="보유·관심 종목을 시스템 잣대(판정·팩터·리스크)로 점검 — 자동화된 일반 분석"
     >
       <div className="space-y-4">
-        <Panel title="보유 종목 입력">
+        <Panel title="종목 입력 — 보유 중이든, 매수 검토 중이든">
           <DiagnosisForm />
         </Panel>
 

@@ -50,7 +50,7 @@ export function DiagnosisForm() {
           <input
             value={r.weight}
             onChange={(e) => update(i, { weight: e.target.value })}
-            placeholder="비중 %"
+            placeholder="비중 % (생략 가능)"
             inputMode="decimal"
             className="tnum w-24 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent focus:outline-none"
           />
@@ -78,7 +78,8 @@ export function DiagnosisForm() {
         </button>
       </div>
       <p className="pt-1 text-2xs text-text-mute">
-        입력한 보유 내역은 서버에 저장되지 않습니다(주소창 쿼리로만 계산).
+        보유 중이 아니어도 됩니다 — 매수 전 검토용 조합도 그대로 진단됩니다. 비중을
+        비우면 동일 비중으로 계산하며, 입력 내역은 서버에 저장되지 않습니다.
       </p>
     </div>
   );
