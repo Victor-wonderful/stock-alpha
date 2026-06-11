@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import type { SignalView } from "@/lib/types";
 import { fmtNum, fmtPrice, strengthPct } from "@/lib/format";
 import { AxisRow } from "./AxisChips";
@@ -9,7 +9,7 @@ export function SignalCard({ s }: { s: SignalView }) {
   const dirLabel = isBuy ? "매수" : s.signal_type === "sell" ? "매도" : "관망";
 
   return (
-    <article className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+    <article className="rounded-xl border border-border bg-neutral-950 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <Link
@@ -37,7 +37,7 @@ export function SignalCard({ s }: { s: SignalView }) {
         </div>
         <div className="mt-1 h-1.5 w-full rounded-full bg-neutral-800">
           <div
-            className="h-1.5 rounded-full bg-neutral-300"
+            className="h-1.5 rounded-full bg-border-strong"
             style={{ width: `${strengthPct(s.strength)}%` }}
           />
         </div>
@@ -57,12 +57,12 @@ export function SignalCard({ s }: { s: SignalView }) {
           className="text-bull"
         />
       </dl>
-      <div className="mt-2 flex gap-4 text-xs text-neutral-400">
+      <div className="mt-2 flex gap-4 text-xs text-text-mute">
         <span>TP2 {fmtPrice(s.tp2, s.currency)}</span>
         <span>TP3 {fmtPrice(s.tp3, s.currency)}</span>
       </div>
 
-      <div className="mt-3 flex items-center justify-between border-t border-neutral-800 pt-3 text-xs text-neutral-400">
+      <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-xs text-text-mute">
         <span>R:R {fmtNum(s.risk_reward, 2)}</span>
         <span>비중 {s.position_size_pct != null ? `${s.position_size_pct}%` : "—"}</span>
         <span>{s.timeframe}</span>

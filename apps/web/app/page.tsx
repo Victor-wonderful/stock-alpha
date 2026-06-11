@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import {
   TRADE_SETUP_LABELS,
   TRADE_STYLE_LABELS,
@@ -58,17 +58,17 @@ export default function Home() {
             <Card
               title="스타일 (보유기간)"
               items={TRADE_STYLES.map((s) => TRADE_STYLE_LABELS[s])}
-              accent="text-sky-300"
+              accent="text-sky-600"
             />
             <Card
               title="셋업 (플레이북)"
               items={SETUPS.map((s) => TRADE_SETUP_LABELS[s])}
-              accent="text-violet-300"
+              accent="text-violet-600"
             />
             <Card
               title="세션"
               items={["프리장", "정규장", "종가단일가", "애프터장"]}
-              accent="text-amber-300"
+              accent="text-amber-600"
             />
           </div>
           <p className="mt-6 text-sm text-text-mute">

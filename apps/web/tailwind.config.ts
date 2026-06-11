@@ -17,8 +17,13 @@ const config: Config = {
         accent: "var(--accent)",
         "accent-dim": "var(--accent-dim)",
         bull: "var(--bull)",
+        "bull-soft": "var(--bull-soft)",
         bear: "var(--bear)",
+        "bear-soft": "var(--bear-soft)",
         warn: "var(--warn)",
+        "warn-soft": "var(--warn-soft)",
+        good: "var(--good)",
+        "good-soft": "var(--good-soft)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "Pretendard", "system-ui", "sans-serif"],

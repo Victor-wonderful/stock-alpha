@@ -4,30 +4,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ───────── 디자인 토큰 (다크 전용, 트레이딩 터미널) ───────── */
+/* ───────── 디자인 토큰 (UI V2 — 라이트, 토스 톤) ─────────
+   단일 출처: design/stock-alpha-ui.pen 의 변수와 동기화 */
 :root {
   --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  --bg: #0a0b0e;            /* 최하단 배경 */
-  --surface: #101319;       /* 패널 */
-  --surface-2: #161a22;     /* 패널 위 요소 */
-  --surface-3: #1c212b;     /* hover/강조 */
-  --border: #222732;        /* 기본 보더 */
-  --border-strong: #2d343f; /* 강조 보더 */
+  --bg: #f2f4f6;            /* 최하단 배경 */
+  --surface: #ffffff;       /* 카드/패널 */
+  --surface-2: #f9fafb;     /* 패널 위 요소 */
+  --surface-3: #f2f4f6;     /* hover/강조 */
+  --border: #e5e8eb;        /* 기본 보더 */
+  --border-strong: #d2d7dc; /* 강조 보더 */
 
-  --text: #e7eaef;          /* 본문 */
-  --text-dim: #9aa4b2;      /* 보조 */
-  --text-mute: #5a6472;     /* 약함 */
+  --text: #191f28;          /* 본문 */
+  --text-dim: #4e5968;      /* 보조 */
+  --text-mute: #8b95a1;     /* 약함 */
 
-  --accent: #3d7bff;        /* 브랜드 액센트 */
-  --accent-dim: #1e2a45;
+  --accent: #3182f6;        /* 브랜드 블루 */
+  --accent-dim: #ebf3fe;    /* 브랜드 소프트(틴트 배경) */
 
-  --bull: #2ebd85;          /* 상승/매수 (트레이딩 표준) */
-  --bear: #f6465d;          /* 하락/매도 */
-  --warn: #f0b429;
+  /* 한국 시장 관례: 상승/매수 = 빨강, 하락/매도 = 파랑 */
+  --bull: #f04452;
+  --bull-soft: #fdedee;
+  --bear: #3485fa;
+  --bear-soft: #eaf2fe;
 
-  color-scheme: dark;
+  --warn: #fa9538;          /* 주의/중립 판정 */
+  --warn-soft: #fef3e7;
+  --good: #12b886;          /* 통과/건전성 */
+  --good-soft: #e6f8f1;
+
+  color-scheme: light;
 }
 
 * {
