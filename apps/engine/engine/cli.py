@@ -25,6 +25,9 @@ def ingest(
     market: str = typer.Option("kr", help="kr|us"),
     days: int = typer.Option(30, help="조회 기간(일)"),
     year: str = typer.Option("2024", help="재무 회계연도(fundamentals)"),
+    reprt: str = typer.Option(
+        "11011", help="보고서 코드(fundamentals) — 11011=연간 11013=1Q 11012=반기 11014=3Q"
+    ),
     workers: int = typer.Option(12, help="prices 병렬 fetch 워커 수"),
 ) -> None:
     """데이터 인제스트 (M2). 현재 KRX prices/flows/fundamentals 구현."""
@@ -35,7 +38,7 @@ def ingest(
     elif market == "kr" and target == "flows":
         n = runner.ingest_krx_flows(days=days, workers=workers)
     elif market == "kr" and target == "fundamentals":
-        n = runner.ingest_krx_financials(year=year, workers=workers)
+        n = runner.ingest_krx_financials(year=year, reprt_code=reprt, workers=workers)
     elif target == "macro":
         from engine.ingest import fred
         n = fred.ingest_macro(days=days)

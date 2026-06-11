@@ -117,12 +117,17 @@ def ingest_krx_financials(year: str, reprt_code: str = "11011", workers: int = 6
     DART 호출(종목당 최대 3회: CFS/OFS 재무 + 주식수)이 병목 → 스레드풀 병렬화.
     DART 분당 throttle 을 고려해 워커는 보수적(기본 6). corp_code 없는 종목
     (ETF/ETN/스팩 등 비공시자)은 건너뜀. upsert 는 메인스레드 순차.
+
+    분기보고서(11013/11012/11014)도 동일 경로 — period 는 normalize 와 같은
+    형식(2025Q1 등)을 써야 재개(resume) 키가 맞는다. 주식수는 연간(11011)만
+    조회(분기 호출 절약 — DART 일일 한도 2만 건 가드).
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     imap = load_kr_instrument_map()
     corp_map = dart.fetch_corp_code_map()
-    period = f"{year}{'FY' if reprt_code == '11011' else reprt_code}"
+    is_annual = reprt_code == "11011"
+    period = f"{year}{dart._REPRT_TO_PERIOD.get(reprt_code, reprt_code)}"
     # 재개 가능: 이미 해당 기간 재무가 있는 종목은 건너뜀(재시작 시 중복 호출 방지).
     have = {
         r["instrument_id"]
@@ -143,7 +148,7 @@ def ingest_krx_financials(year: str, reprt_code: str = "11011", workers: int = 6
                 rows = dart.normalize_financials(api, iid, year, reprt_code, fs_div)
                 if rows:
                     break
-            if rows:
+            if rows and is_annual:
                 shares = dart.fetch_shares(corp, year, reprt_code)
                 if shares:
                     rows[0]["shares"] = shares

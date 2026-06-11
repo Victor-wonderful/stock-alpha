@@ -32,11 +32,16 @@ def _latest_close(instrument_id: int) -> float | None:
 
 
 def _latest_financials(instrument_id: int) -> dict | None:
+    """최신 '연간(FY)' 재무 — 분기 행이 섞여도 레벨 지표(PER 등)는 연간만.
+
+    분기 손익을 연간으로 오인하면 PER 가 4배 부풀려진다(periods.py 참조).
+    """
     res = (
         get_client()
         .table("financials")
         .select("*")
         .eq("instrument_id", instrument_id)
+        .like("period", "%FY")
         .order("period", desc=True)
         .limit(1)
         .execute()

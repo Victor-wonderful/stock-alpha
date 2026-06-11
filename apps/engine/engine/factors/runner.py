@@ -94,24 +94,33 @@ def _price_factors(closes: list[float]) -> tuple[float | None, float | None]:
 
 
 def _load_cross_section() -> pd.DataFrame:
-    """instruments + 최신 financials + 가격 히스토리(모멘텀·변동성) 로 단면 구성.
+    """instruments + financials + 가격 히스토리(모멘텀·변동성) 로 단면 구성.
 
     가격팩터(momentum/lowvol)는 ohlcv 히스토리에서 산출 → 전 종목 적용.
     재무팩터(value/quality/size)는 financials 있는 종목만(composite 가 가중 재정규화).
+
+    레벨 지표는 최신 '연간(FY)' 행만 사용 — 분기 행이 섞이면 문자열 정렬상
+    "2026Q1" > "2025FY" 라 분기 손익을 연간으로 오인한다(periods.py 참조).
+    growth 는 같은 보고서 타입의 전년 동기 YoY(분기 이력 확보 시 활성).
     """
+    from engine.fundamental.periods import latest_annual, yoy_growth
+
     client = get_client()
     inst = select_all("instruments", "id,sector", eq={"active": True})
     if not inst:
         return pd.DataFrame()
 
+    # financials 는 벌크 1회 로드(수천~수만 행) 후 종목별 그룹 — 종목당 쿼리 제거.
+    fins: dict[int, list[dict]] = {}
+    for r in select_all("financials", "*"):
+        fins.setdefault(r["instrument_id"], []).append(r)
+
     records: list[dict] = []
     for it in inst:
         iid = it["id"]
-        fin_res = (
-            client.table("financials").select("*")
-            .eq("instrument_id", iid).order("period", desc=True).limit(1).execute()
-        )
-        fin = (fin_res.data or [{}])[0]
+        fin_rows = fins.get(iid, [])
+        fin = latest_annual(fin_rows) or {}
+        rev_g, eps_g = yoy_growth(fin_rows)
         px_res = (
             client.table("ohlcv").select("close")
             .eq("instrument_id", iid).eq("interval", "1d")
@@ -138,5 +147,7 @@ def _load_cross_section() -> pd.DataFrame:
             "market_cap": (price * shares) if (price and shares) else None,
             "ret_12_1": mom,
             "volatility": vol,
+            "rev_growth": rev_g,
+            "eps_growth": eps_g,
         })
     return pd.DataFrame(records).set_index("instrument_id")
