@@ -8,10 +8,16 @@ import {
   TRADE_STYLE_LABELS,
 } from "@stock-alpha/db";
 
-// 셋업 필터는 구현·발행 중인 전략만 — 테마주/신규주는 탐지기 미구현,
-// 멀티팩터(factor_composite)·과대낙폭은 검증 미통과로 발행 중지(2026-06-10).
-// 게이트 통과로 복귀하면 여기에 추가.
-const ACTIVE_SETUPS = ["leader_trend", "breakout", "close_betting"] as const;
+// 셋업 필터는 구현·발행 중인 전략만(게이트 통과 6종, 2026-06-11 600일 검증).
+// 미통과(종가베팅·과대낙폭·멀티팩터)·미구현(테마/신규주)은 비노출 — 유령 필터 금지.
+const ACTIVE_SETUPS = [
+  "high_52w",
+  "vol_squeeze",
+  "breakout",
+  "leader_trend",
+  "pullback",
+  "flow_accumulation",
+] as const;
 const ACTIVE_SETUP_LABELS = Object.fromEntries(
   ACTIVE_SETUPS.map((s) => [s, TRADE_SETUP_LABELS[s]]),
 );
