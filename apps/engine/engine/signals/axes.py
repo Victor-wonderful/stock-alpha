@@ -16,6 +16,7 @@ TradeSetup = Literal[
     "pullback",
     "high_52w",
     "vol_squeeze",
+    "pead",
     "theme",
     "new_listing",
 ]
@@ -24,7 +25,7 @@ TradeSession = Literal["pre", "regular", "close", "after"]
 SETUPS: tuple[TradeSetup, ...] = (
     "factor_composite", "leader_trend", "oversold_bounce",
     "breakout", "close_betting",
-    "flow_accumulation", "pullback", "high_52w", "vol_squeeze",
+    "flow_accumulation", "pullback", "high_52w", "vol_squeeze", "pead",
     "theme", "new_listing",
 )
 SESSIONS: tuple[TradeSession, ...] = ("pre", "regular", "close", "after")
@@ -39,6 +40,7 @@ SETUP_LABELS: dict[TradeSetup, str] = {
     "pullback": "눌림목",
     "high_52w": "52주 신고가",
     "vol_squeeze": "변동성 수축 돌파",
+    "pead": "실적 모멘텀(PEAD)",
     "theme": "테마주",
     "new_listing": "신규주",
 }
@@ -54,6 +56,7 @@ SETUP_DEFAULT_STYLE = {
     "pullback": "swing",
     "high_52w": "position",
     "vol_squeeze": "swing",
+    "pead": "position",
 }
 SETUP_DEFAULT_SESSION = {
     "factor_composite": "regular",
@@ -65,4 +68,5 @@ SETUP_DEFAULT_SESSION = {
     "pullback": "regular",
     "high_52w": "regular",
     "vol_squeeze": "regular",
+    "pead": "regular",
 }

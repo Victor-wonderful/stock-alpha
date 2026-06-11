@@ -41,6 +41,10 @@ const SETUP_GUIDE: Partial<Record<TradeSetup, { name: string; desc: string }>> =
     name: "변동성 수축 돌파",
     desc: "움직임이 바짝 줄었던 종목이 거래량과 함께 터질 때 진입",
   },
+  pead: {
+    name: "실적 모멘텀(PEAD)",
+    desc: "깜짝 실적(영업이익 급증·흑자전환) 공시 직후의 추가 상승 흐름에 진입",
+  },
   factor_composite: {
     name: "멀티팩터 종합",
     desc: "가치·품질·모멘텀 등 6개 지표 종합 점수 상위 종목 매수",

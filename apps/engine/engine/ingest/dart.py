@@ -80,6 +80,11 @@ def normalize_financials(
         "fs_type": fs_type,
         "source": "DART",
     }
+    # 공시일(point-in-time) — rcept_no 앞 8자리 = 접수일자(YYYYMMDD).
+    # PEAD 등 이벤트 셋업은 이 날짜 이후에만 트리거해야 정직하다.
+    rcept = str(items[0].get("rcept_no") or "")
+    if len(rcept) >= 8 and rcept[:8].isdigit():
+        rec["disclosed_at"] = f"{rcept[:4]}-{rcept[4:6]}-{rcept[6:8]}"
     for it in items:
         name = (it.get("account_nm") or "").replace(" ", "")
         col = _ACCOUNT_MAP.get(name)

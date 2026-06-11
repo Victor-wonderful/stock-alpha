@@ -23,6 +23,7 @@ def generate_signals(
     rs_rank: float | None = None,
     setups: list[str] | None = None,
     flows: "pd.DataFrame | None" = None,
+    earnings: "pd.DataFrame | None" = None,
     now: datetime | None = None,
     market_close: datetime | None = None,
 ) -> list[dict]:
@@ -31,6 +32,7 @@ def generate_signals(
     df: open/high/low/close/volume (시간 오름차순)
     rs_rank: 상대강도 분위(0~1) — 주도주 판정 가산용
     flows: [date, foreign_net, inst_net] 오름차순 — 수급 셋업용(없으면 미발동)
+    earnings: [date, surprise, turnaround] 오름차순 — PEAD 용(없으면 미발동)
     setups: 활성화할 플레이북 키. None=전체.
     """
     enabled = setups or list(playbooks.ALL_DETECTORS.keys())
@@ -45,6 +47,8 @@ def generate_signals(
             cand = detector(df, rs_rank=rs_rank)
         elif key == "flow_accumulation":
             cand = detector(df, flows=flows)
+        elif key == "pead":
+            cand = detector(df, earnings=earnings)
         else:
             cand = detector(df)
         if cand is None:

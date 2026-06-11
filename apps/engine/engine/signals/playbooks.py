@@ -267,6 +267,56 @@ def detect_flow_accumulation(
     )
 
 
+def detect_pead(
+    df: pd.DataFrame, earnings: pd.DataFrame | None = None,
+    max_age_days: int = 6, min_surprise: float = 0.30,
+) -> Candidate | None:
+    """PEAD(실적 모멘텀): 어닝 서프라이즈 공시 직후 드리프트 매수.
+
+    공시 후 주가가 정보를 천천히 반영하는 고전적 이상현상 — 강한 YoY
+    영업이익 서프라이즈(또는 흑자전환) 공시 후 max_age_days 내 + 가격 확인
+    (종가>MA20)일 때 포지션 스타일 진입. earnings: build_earnings_events 산출
+    [date, surprise, turnaround] 오름차순.
+
+    point-in-time: '현재'는 마지막 봉의 ts(백테스트) — 라이브 df 에 ts 가
+    없으면 오늘 날짜. 공시일 이후의 봉에서만 트리거된다.
+    """
+    from datetime import date as _date
+
+    if earnings is None or len(earnings) == 0 or len(df) < 20:
+        return None
+    now = str(df["ts"].iloc[-1])[:10] if "ts" in df.columns else _date.today().isoformat()
+    past = earnings[earnings["date"] <= now]
+    if past.empty:
+        return None
+    ev = past.iloc[-1]
+    age = (_date.fromisoformat(now) - _date.fromisoformat(str(ev["date"])[:10])).days
+    if age > max_age_days:
+        return None
+    surprise = float(ev["surprise"])
+    if surprise < min_surprise:
+        return None
+    close = df["close"]
+    c = _last(close)
+    if c <= 0:                                       # 거래정지 이력(0원) 가드
+        return None
+    m20 = _last(ind.sma(close, 20))
+    if m20 <= 0 or c <= m20:                         # 가격 확인: 시장이 받아들이는 중
+        return None
+    atr = _last(ind.atr(df))
+    turnaround = bool(ev.get("turnaround", False))
+    strength = min(1.0, 0.6 + min(0.2, surprise * 0.2))
+    label = "흑자전환" if turnaround else f"영업이익 YoY {surprise:+.0%}"
+    return Candidate(
+        setup="pead", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=m20,
+        strength=strength,
+        rationale=[f"어닝 서프라이즈({label})", f"공시 {age}일 경과", "MA20 상회(가격 확인)"],
+        payload={"surprise": surprise, "turnaround": turnaround,
+                 "disclosed_at": str(ev["date"])[:10], "fin_period": ev.get("period")},
+    )
+
+
 ALL_DETECTORS = {
     "leader_trend": detect_leader_trend,
     "oversold_bounce": detect_oversold_bounce,
@@ -276,4 +326,5 @@ ALL_DETECTORS = {
     "high_52w": detect_high_52w,
     "vol_squeeze": detect_vol_squeeze,
     "flow_accumulation": detect_flow_accumulation,
+    "pead": detect_pead,
 }

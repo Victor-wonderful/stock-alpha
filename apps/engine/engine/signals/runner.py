@@ -41,6 +41,30 @@ def load_flows_map() -> dict[int, pd.DataFrame]:
     return out
 
 
+def load_earnings_map() -> dict[int, pd.DataFrame]:
+    """financials → 종목별 어닝 서프라이즈 이벤트 [date,surprise,turnaround] 오름차순.
+
+    PEAD 셋업용. 공시일(disclosed_at) 있는 행만 이벤트가 된다(point-in-time).
+    """
+    from engine.signals.earnings import build_earnings_events
+
+    rows = select_all(
+        "financials",
+        "instrument_id,period,fs_type,op_income,net_income,revenue,disclosed_at",
+    )
+    if not rows:
+        return {}
+    by_iid: dict[int, list[dict]] = {}
+    for r in rows:
+        by_iid.setdefault(r["instrument_id"], []).append(r)
+    out: dict[int, pd.DataFrame] = {}
+    for iid, fin_rows in by_iid.items():
+        events = build_earnings_events(fin_rows)
+        if events:
+            out[int(iid)] = pd.DataFrame(events)
+    return out
+
+
 def _rs_ranks(frames: dict[int, pd.DataFrame], window: int = 60) -> dict[int, float]:
     """종목별 window 수익률 → 횡단면 분위(0~1)."""
     rets: dict[int, float] = {}
@@ -85,6 +109,9 @@ def run(
     flows_map = (
         load_flows_map() if (setups is None or "flow_accumulation" in setups) else {}
     )
+    earnings_map = (
+        load_earnings_map() if (setups is None or "pead" in setups) else {}
+    )
 
     all_rows: list[dict] = []
     for iid, df in frames.items():
@@ -93,6 +120,7 @@ def run(
                 df, iid, risk_per_trade_pct=risk_per_trade_pct,
                 rs_rank=ranks.get(iid), setups=setups,
                 flows=flows_map.get(iid),
+                earnings=earnings_map.get(iid),
             )
         )
 

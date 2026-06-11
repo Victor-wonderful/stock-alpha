@@ -111,7 +111,9 @@ def ingest_krx_flows(days: int = 30, pages: int = 3, workers: int = 8, resume: b
     return total
 
 
-def ingest_krx_financials(year: str, reprt_code: str = "11011", workers: int = 6) -> int:
+def ingest_krx_financials(
+    year: str, reprt_code: str = "11011", workers: int = 6, refresh: bool = False,
+) -> int:
     """KRX 종목 연결재무제표 + 상장주식수 적재. CFS 없으면 OFS(별도) 폴백.
 
     DART 호출(종목당 최대 3회: CFS/OFS 재무 + 주식수)이 병목 → 스레드풀 병렬화.
@@ -129,10 +131,13 @@ def ingest_krx_financials(year: str, reprt_code: str = "11011", workers: int = 6
     is_annual = reprt_code == "11011"
     period = f"{year}{dart._REPRT_TO_PERIOD.get(reprt_code, reprt_code)}"
     # 재개 가능: 이미 해당 기간 재무가 있는 종목은 건너뜀(재시작 시 중복 호출 방지).
-    have = {
-        r["instrument_id"]
-        for r in select_all("financials", "instrument_id,period", eq={"period": period})
-    }
+    # refresh=True 면 전부 재인제스트 — disclosed_at 백필 등 컬럼 보강용.
+    have = (
+        set() if refresh else {
+            r["instrument_id"]
+            for r in select_all("financials", "instrument_id,period", eq={"period": period})
+        }
+    )
     targets = [
         (symbol, iid, corp_map[symbol])
         for (symbol, _exch), iid in imap.items()
