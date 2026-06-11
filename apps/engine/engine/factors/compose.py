@@ -1,6 +1,7 @@
 """팩터 합성 — 섹터 중립 z-score → 가중 합성 composite_alpha."""
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from engine.factors.factors import RAW_FACTORS
@@ -46,4 +47,6 @@ def composite_alpha(z: pd.DataFrame, weights: dict[str, float] | None = None) ->
         total = total.add((vals.fillna(0) * weight).where(mask, 0.0), fill_value=0.0)
         wsum = wsum.add(pd.Series(weight, index=z.index).where(mask, 0.0), fill_value=0.0)
 
-    return (total / wsum.replace(0, pd.NA)).astype(float)
+    # 팩터가 전무한 종목은 wsum=0 → NaN. pd.NA 를 쓰면 object dtype 이 되어
+    # astype(float) 가 NAType 에서 죽는다(잠복 버그, 2026-06-11 표면화).
+    return (total / wsum.replace(0, np.nan)).astype(float)

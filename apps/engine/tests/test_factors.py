@@ -90,6 +90,34 @@ def test_build_factor_scores_empty():
     assert build_factor_scores(pd.DataFrame()) == []
 
 
+def test_composite_alpha_all_nan_row():
+    """회귀: 팩터 전무 종목(wsum=0)이 pd.NA→object dtype 으로 astype(float)
+    를 죽이던 잠복 버그. 결과는 해당 종목만 NaN, 전체는 float."""
+    z = pd.DataFrame(
+        {"value_z": [1.0, np.nan], "momentum_z": [0.5, np.nan]},
+        index=[1, 2],
+    )
+    alpha = composite_alpha(z)
+    assert alpha.dtype == float
+    assert alpha.notna()[1] and pd.isna(alpha[2])
+
+
+def test_build_factor_scores_all_nan_instrument():
+    """팩터 입력이 전무한 종목(시세 이력·재무 모두 없음)이 유효 섹터에 섞여도
+    전체 런이 죽지 않는다 — 해당 종목의 z 가 전부 NaN → wsum=0 경로."""
+    cross = _cross()
+    # 섹터 A(다른 종목들은 유효값 보유)에 전무 종목 추가 → z 전부 NaN
+    empty = pd.DataFrame(
+        {c: [np.nan] for c in cross.columns if c != "sector"} | {"sector": ["A"]},
+        index=[5],
+    )
+    rows = build_factor_scores(pd.concat([cross, empty]), asof="2026-06-11")
+    assert len(rows) == 5
+    by_id = {r["instrument_id"]: r for r in rows}
+    assert by_id[5]["composite_alpha"] is None  # 팩터 전무 → NaN → None
+    assert by_id[1]["composite_alpha"] is not None  # 정상 종목은 영향 없음
+
+
 def test_build_factor_scores_object_dtype_none_mix():
     """회귀: None 혼합 컬럼(object dtype)이 concat/mean 경로에서 pd.NA 를
     만들어 astype(float) 를 죽이던 버그 (2026-06-11, growth YoY 배선 직후)."""
