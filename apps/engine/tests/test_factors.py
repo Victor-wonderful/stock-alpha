@@ -88,3 +88,20 @@ def test_build_factor_scores_rows_and_rank():
 
 def test_build_factor_scores_empty():
     assert build_factor_scores(pd.DataFrame()) == []
+
+
+def test_build_factor_scores_object_dtype_none_mix():
+    """회귀: None 혼합 컬럼(object dtype)이 concat/mean 경로에서 pd.NA 를
+    만들어 astype(float) 를 죽이던 버그 (2026-06-11, growth YoY 배선 직후)."""
+    cross = _cross()
+    # DB 로더처럼 None 이 섞인 object 컬럼 재현
+    cross["rev_growth"] = pd.Series([0.2, None, 0.4, None], index=cross.index, dtype=object)
+    cross["eps_growth"] = pd.Series([None, None, 0.5, 0.1], index=cross.index, dtype=object)
+    cross["net_income"] = pd.Series([150, None, 300, 100], index=cross.index, dtype=object)
+    rows = build_factor_scores(cross, asof="2026-06-11")
+    assert len(rows) == 4
+    by_id = {r["instrument_id"]: r for r in rows}
+    # growth 입력이 있는 종목은 growth_z 산출, 합성 알파는 전 종목 생성
+    assert by_id[3]["growth_z"] is not None
+    for r in rows:
+        assert r["composite_alpha"] is not None

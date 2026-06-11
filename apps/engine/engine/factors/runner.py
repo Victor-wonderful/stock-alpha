@@ -29,6 +29,13 @@ def build_factor_scores(
     asof = asof or date.today().isoformat()
     sectors = cross["sector"] if "sector" in cross else None
 
+    # None 혼합 컬럼(object dtype)은 concat/mean 경로에서 pd.NA 를 만들어
+    # 이후 astype(float) 를 죽인다 → 숫자 컬럼을 입구에서 강제 coerce.
+    cross = cross.copy()
+    for c in cross.columns:
+        if c != "sector":
+            cross[c] = pd.to_numeric(cross[c], errors="coerce")
+
     raw = compute_raw_factors(cross)
     z = zscore_factors(raw, sectors)
     alpha = composite_alpha(z, weights)
