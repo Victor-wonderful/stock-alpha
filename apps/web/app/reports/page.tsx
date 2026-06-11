@@ -17,9 +17,11 @@ function ratingVariant(rating: string | null) {
 }
 
 function fmtDateHeader(asOf: string): string {
-  const d = new Date(asOf + "T00:00:00+09:00");
+  // 서버 타임존(예: MSK)과 무관하게 KST 날짜 문자열을 그대로 표시 — UTC 달력 연산
+  const [y, m, d] = asOf.split("-").map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+  return `${m}월 ${d}일 (${days[wd]})`;
 }
 
 // 종목 분석 리스트 (UI V2) — 오늘의 포커스가 "어디서 뽑혔는지" 보이는 화면.

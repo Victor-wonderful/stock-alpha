@@ -18,13 +18,15 @@ import { computePositionSizePct } from "@/lib/position";
 export const dynamic = "force-dynamic";
 
 // 발행일(as_of, 장 마감 후) 다음 거래일 라벨 — 주말은 월요일로 (공휴일은 미반영).
+// 서버 타임존과 무관하도록 UTC 달력 연산 (예: MSK 서버에서 하루 밀림 방지).
 function nextTradingDayLabel(asOf: string): string {
-  const d = new Date(asOf + "T00:00:00+09:00");
+  const [y, m, dd] = asOf.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, dd));
   do {
-    d.setDate(d.getDate() + 1);
-  } while (d.getDay() === 0 || d.getDay() === 6);
+    d.setUTCDate(d.getUTCDate() + 1);
+  } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()]})`;
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${days[d.getUTCDay()]})`;
 }
 
 // 선정 과정 3단계 스트립 — "96개를 다 보고 걸러낸 결과"라는 신뢰 메시지 (UI V2)
