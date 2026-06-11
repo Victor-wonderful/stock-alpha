@@ -43,11 +43,13 @@ export function Stat({
   value,
   sub,
   tone = "default",
+  dense = false,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: "default" | "bull" | "bear" | "accent" | "warn";
+  dense?: boolean; // 카드 내 4분할 등 좁은 셀 — 숫자 잘림 방지
 }) {
   // 톤이 있으면 텍스트+배경 틴트 — 셀 자체가 의미(위/아래/강조)를 말하게 (UI V2)
   const toneCls = {
@@ -65,10 +67,20 @@ export function Stat({
     default: "bg-surface-2",
   }[tone];
   return (
-    <div className={`rounded-lg px-3 py-2.5 ${bgCls}`}>
-      <p className="text-2xs text-text-mute">{label}</p>
-      <p className={`tnum mt-1 text-lg font-semibold ${toneCls}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-2xs text-text-mute">{sub}</p>}
+    <div className={`rounded-lg ${dense ? "px-2 py-2" : "px-3 py-2.5"} ${bgCls}`}>
+      <p className={`${dense ? "truncate text-[10px]" : "text-2xs"} text-text-mute`}>
+        {label}
+      </p>
+      <p
+        className={`tnum mt-0.5 font-bold ${dense ? "text-[13px]" : "text-lg"} ${toneCls}`}
+      >
+        {value}
+      </p>
+      {sub && (
+        <p className={`mt-0.5 ${dense ? "truncate text-[9px]" : "text-2xs"} text-text-mute`}>
+          {sub}
+        </p>
+      )}
     </div>
   );
 }

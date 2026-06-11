@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { Calculator, ListFilter, ScanSearch } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
@@ -169,9 +169,9 @@ export default async function FocusPage() {
                       {p.thesis}
                     </p>
                     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <Stat label="진입" value={fmtPrice(p.entry_price)} />
-                      <Stat label="목표" value={fmtPrice(p.target_price)} tone="bull" />
-                      <Stat label="손절" value={fmtPrice(p.stop_loss)} tone="bear" />
+                      <Stat label="진입" value={fmtPrice(p.entry_price)} dense />
+                      <Stat label="목표" value={fmtPrice(p.target_price)} tone="bull" dense />
+                      <Stat label="손절" value={fmtPrice(p.stop_loss)} tone="bear" dense />
                       <Stat
                         label="권장 비중"
                         value={(() => {
@@ -184,6 +184,7 @@ export default async function FocusPage() {
                         })()}
                         sub={`리스크 ${riskPct}%/건`}
                         tone="accent"
+                        dense
                       />
                     </div>
                     <div className="mt-3 flex items-center justify-between">
