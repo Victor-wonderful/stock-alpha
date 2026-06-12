@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Activity, Bell, Search, Sparkles, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // IA 원칙(2026-06-10 + V3): 첫 화면이 답이고, 도구는 뒤로, 검증은 자랑으로.
@@ -30,15 +31,12 @@ export function GNB() {
           aria-label="Stock Alpha 홈"
         >
           <span
-            className="grid h-8 w-8 place-items-center rounded-[10px] bg-accent text-[15px] font-black text-on-accent leading-none select-none"
-            style={{ color: "var(--text-on-accent)" }}
+            className="grid h-8 w-8 place-items-center rounded-full bg-accent leading-none select-none"
             aria-hidden
           >
-            α
+            <Activity className="h-4 w-4 text-[#0B0C10]" strokeWidth={2.6} />
           </span>
-          <span className="text-sm font-bold text-text">
-            Stock <span className="text-text-mute font-medium">Alpha</span>
-          </span>
+          <span className="text-sm font-bold text-text">Stock Alpha</span>
         </Link>
 
         {/* 네비게이션 */}
@@ -65,8 +63,38 @@ export function GNB() {
           })}
         </nav>
 
-        {/* 우측 영역 — 향후 유저 요소 추가 자리 */}
-        <div className="ml-auto flex items-center gap-3" />
+        {/* 우측 영역 — 오늘의 픽 CTA + 검색/알림/프로필 */}
+        <div className="ml-auto flex shrink-0 items-center gap-2.5">
+          <Link
+            href="/focus"
+            className="flex items-center gap-1.5 rounded-[999px] bg-accent px-4 py-2 text-xs font-bold text-[#0B0C10] hover:bg-accent-2 transition-colors"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            오늘의 픽
+          </Link>
+          <Link
+            href="/screener"
+            aria-label="종목 검색"
+            className="grid h-9 w-9 place-items-center rounded-full border border-border bg-surface-2 text-text-dim hover:text-text transition-colors"
+          >
+            <Search className="h-4 w-4" />
+          </Link>
+          <Link
+            href="/alerts"
+            aria-label="알림"
+            className="grid h-9 w-9 place-items-center rounded-full border border-border bg-surface-2 text-text-dim hover:text-text transition-colors"
+          >
+            <Bell className="h-4 w-4" />
+          </Link>
+          <button
+            type="button"
+            aria-label="프로필 — 로그인 준비 중"
+            title="로그인 준비 중"
+            className="grid h-9 w-9 place-items-center rounded-full border border-border bg-surface-2 text-text-dim hover:text-text transition-colors"
+          >
+            <User className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </header>
   );
