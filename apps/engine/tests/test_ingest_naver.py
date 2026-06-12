@@ -103,3 +103,24 @@ def test_normalize_index():
         {"series_id": "KOSPI", "date": "2026-06-12", "value": 8123.62, "source": "NAVER"},
         {"series_id": "KOSPI", "date": "2026-06-11", "value": 7763.95, "source": "NAVER"},
     ]
+
+# ── KIS 지수 ──
+
+def test_kis_normalize_index_output():
+    from engine.ingest import kis
+    out = kis.normalize_index_output([
+        {"stck_bsop_date": "20260612", "bstp_nmix_prpr": "8123.62"},
+        {"stck_bsop_date": "20260611", "bstp_nmix_prpr": "7763.95"},
+        {"stck_bsop_date": "", "bstp_nmix_prpr": "1"},
+        {"stck_bsop_date": "20260610", "bstp_nmix_prpr": None},
+    ])
+    assert out == [
+        {"date": "2026-06-11", "close": 7763.95},
+        {"date": "2026-06-12", "close": 8123.62},
+    ]
+
+
+def test_kis_to_macro_rows():
+    from engine.ingest import kis
+    rows = kis.to_macro_rows("KOSPI", [{"date": "2026-06-12", "close": 8123.62}])
+    assert rows == [{"series_id": "KOSPI", "date": "2026-06-12", "value": 8123.62, "source": "KIS"}]

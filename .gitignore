@@ -52,3 +52,6 @@ data/cache/
 
 # 배치/인제스트 로그
 logs/
+
+# KIS 토큰 캐시 (24h, 민감)
+apps/engine/.kis_token.json
