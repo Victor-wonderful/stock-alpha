@@ -170,11 +170,11 @@ def morning(
 
     밤사이 바뀌는 해외 변수만 갱신 — 픽/리포트는 전일 16:30 발행분 그대로 유효.
     """
-    from engine.ingest import fred
+    from engine.ingest import fred, naver
     from engine.market import regime
     from engine.reports import morning as mb
 
-    typer.echo(f"[1/3] macro: {fred.ingest_macro(days=10)} rows")
+    typer.echo(f"[1/3] macro: {fred.ingest_macro(days=10)} rows · kr indices: {naver.ingest_kr_indices()} rows")
     r = regime.run()
     typer.echo(f"[2/3] regime: {r['regime']} (score {r['score']})")
     out = mb.publish_morning(use_llm=llm)
@@ -200,7 +200,8 @@ def daily(
 
     if not skip_ingest:
         n = ir.ingest_krx_prices(days=ingest_days)
-        typer.echo(f"[1/5] ingest prices: {n} rows")
+        from engine.ingest import naver as nv
+        typer.echo(f"[1/5] ingest prices: {n} rows · kr indices: {nv.ingest_kr_indices()} rows")
     else:
         typer.echo("[1/5] ingest skipped")
 

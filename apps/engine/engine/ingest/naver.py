@@ -96,6 +96,85 @@ def normalize_flows(df: pd.DataFrame, instrument_id: int) -> list[dict]:
     return rows
 
 
+# ── 지수(코스피·코스닥) ──
+# pykrx 지수 엔드포인트는 KRX 로그인 요구로 사망 → 네이버 일별시세 사용.
+# 적재는 macro 테이블(series_id=KOSPI/KOSDAQ) — FRED 시리즈와 동일 경로로 웹이 읽는다.
+
+_INDEX_BASE = "https://finance.naver.com/sise/sise_index_day.naver"
+INDEX_CODES = ("KOSPI", "KOSDAQ")
+
+
+def parse_index_table(html: str) -> pd.DataFrame:
+    """sise_index_day HTML → [date, close] DataFrame (순수)."""
+    tables = pd.read_html(io.StringIO(html))
+    target: pd.DataFrame | None = None
+    for t in tables:
+        cols = [str(c) for c in t.columns]
+        if "체결가" in cols and "날짜" in cols:
+            target = t
+            break
+    if target is None:
+        return pd.DataFrame(columns=["date", "close"])
+    out: list[dict] = []
+    for _, row in target.iterrows():
+        raw_date = str(row.get("날짜", "")).strip()
+        close = _to_float(row.get("체결가"))
+        if not raw_date or "." not in raw_date or close is None:
+            continue
+        out.append({"date": raw_date.replace(".", "-"), "close": close})
+    return pd.DataFrame(out)
+
+
+def normalize_index(df: pd.DataFrame, series_id: str) -> list[dict]:
+    """parse 결과 → macro 행 리스트 (순수). source_version 은 호출부가 채움."""
+    if df is None or df.empty:
+        return []
+    rows: list[dict] = []
+    for _, r in df.iterrows():
+        date, close = r.get("date"), r.get("close")
+        if not date or close is None or pd.isna(close):
+            continue
+        rows.append({
+            "series_id": series_id,
+            "date": str(date),
+            "value": float(close),
+            "source": "NAVER",
+        })
+    return rows
+
+
+def fetch_index(code: str, pages: int = 2) -> pd.DataFrame:
+    """지수 일별시세 — 최근 pages 페이지(페이지당 6거래일×N행)."""
+    import httpx
+
+    frames: list[pd.DataFrame] = []
+    headers = {**_HEADERS, "Referer": f"https://finance.naver.com/sise/sise_index.naver?code={code}"}
+    for p in range(1, pages + 1):
+        try:
+            r = httpx.get(_INDEX_BASE, params={"code": code, "page": str(p)}, headers=headers, timeout=20)
+            r.raise_for_status()
+            html = r.content.decode("euc-kr", errors="replace")
+            frames.append(parse_index_table(html))
+        except Exception as e:  # noqa: BLE001
+            log.warning("naver.index.page_fail", code=code, page=p, error=str(e))
+    if not frames:
+        return pd.DataFrame(columns=["date", "close"])
+    return pd.concat(frames, ignore_index=True).drop_duplicates(subset=["date"])
+
+
+def ingest_kr_indices(pages: int = 2) -> int:
+    """코스피·코스닥 지수 → macro 적재. 모닝/일일 배치에서 호출(업서트 멱등)."""
+    from engine.db import upsert
+
+    total = 0
+    for code in INDEX_CODES:
+        rows = normalize_index(fetch_index(code, pages=pages), code)
+        if rows:
+            total += upsert("macro", rows, on_conflict="series_id,date")
+    log.info("naver.index.done", rows=total)
+    return total
+
+
 # ── 네트워크 fetch ──
 
 def fetch_frgn(symbol: str, pages: int = 3) -> pd.DataFrame:

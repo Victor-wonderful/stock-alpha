@@ -1126,7 +1126,9 @@ export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
   ];
   try {
     const supabase = await createClient();
-    const macroIds = ["SP500", "NASDAQCOM", "VIXCLS", "DEXKOUS", "DGS10"];
+    // KOSPI/KOSDAQ 는 네이버 지수 인제스트(엔진 naver.ingest_kr_indices, 당일 종가),
+    // 나머지는 FRED(1~2일 지연 — 카드에 기준일 표시).
+    const macroIds = ["KOSPI", "KOSDAQ", "SP500", "NASDAQCOM", "VIXCLS", "DEXKOUS", "DGS10"];
     const { data: mc } = await supabase
       .from("macro")
       .select("series_id,date,value")

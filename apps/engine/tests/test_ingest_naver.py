@@ -71,3 +71,35 @@ def test_to_float():
     assert naver._to_float("") is None
     assert naver._to_float("-") is None
     assert naver._to_float(None) is None
+
+# ── 지수(코스피·코스닥) ──
+
+_INDEX_HTML = """
+<table>
+  <tr><th>날짜</th><th>체결가</th><th>전일비</th><th>등락률</th><th>거래량(천주)</th><th>거래대금(백만)</th></tr>
+  <tr><td>2026.06.12</td><td>8,123.62</td><td>359.67</td><td>+4.63%</td><td>493,406</td><td>52,257,644</td></tr>
+  <tr><td>2026.06.11</td><td>7,763.95</td><td>33.13</td><td>+0.43%</td><td>478,730</td><td>46,400,773</td></tr>
+  <tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+</table>
+"""
+
+
+def test_parse_index_table():
+    df = naver.parse_index_table(_INDEX_HTML)
+    assert len(df) == 2
+    assert df.iloc[0]["date"] == "2026-06-12"
+    assert df.iloc[0]["close"] == 8123.62
+
+
+def test_parse_index_table_no_match():
+    df = naver.parse_index_table("<table><tr><th>foo</th></tr><tr><td>1</td></tr></table>")
+    assert df.empty
+
+
+def test_normalize_index():
+    df = naver.parse_index_table(_INDEX_HTML)
+    rows = naver.normalize_index(df, "KOSPI")
+    assert rows == [
+        {"series_id": "KOSPI", "date": "2026-06-12", "value": 8123.62, "source": "NAVER"},
+        {"series_id": "KOSPI", "date": "2026-06-11", "value": 7763.95, "source": "NAVER"},
+    ]
