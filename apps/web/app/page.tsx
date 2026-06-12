@@ -138,9 +138,9 @@ export default async function DashboardPage() {
     getDashboardKpi(),
     getMarketQuotes(),
     getRecommendations(),
-    getReports(10),
+    getReports(150), // 판정 분포 표본 — 일 발행 상한(100) 이상으로 가져와야 분포가 안 잘림
     getBacktests(),
-    getPickHistory(20),
+    getPickHistory(300), // 트랙레코드 누적 집계 — 잘리면 수치가 거짓이 됨
     getMorningBrief(),
   ]);
 
@@ -243,7 +243,7 @@ export default async function DashboardPage() {
           <KpiCard
             label="발행 리포트"
             value={`${kpiDisplay.reportsTotal}건`}
-            sub="인뎁스 분석"
+            sub="오늘 인뎁스 발행 · 상한 100"
           />
           <KpiCard
             label="진행중 픽 수익률"
@@ -433,6 +433,8 @@ export default async function DashboardPage() {
                   </div>
                   <p className="mt-1.5 text-[10px] text-text-mute">
                     {latestDay ?? "—"} 발행 {dist.total}건
+                    {kpiDisplay.reportsTotal > dist.total &&
+                      ` · 거래 부적합 ${kpiDisplay.reportsTotal - dist.total}건 제외`}
                   </p>
                 </>
               )}

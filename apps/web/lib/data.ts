@@ -1022,13 +1022,25 @@ export async function getDashboardKpi(): Promise<DashboardKpi> {
       picksToday = count ?? 0;
     }
 
-    // 리포트 건수
-    const { count: reportsCount } = await supabase
+    // 리포트 건수 — 최신 발행일 기준(오늘 발행분). 누적이 아니라 일일 운영 현황.
+    const { data: latestRep } = await supabase
       .from("reports")
-      .select("id", { count: "exact", head: true })
+      .select("as_of")
       .eq("status", "published")
-      .eq("report_type", "indepth");
-    const reportsTotal = reportsCount ?? 0;
+      .eq("report_type", "indepth")
+      .order("as_of", { ascending: false })
+      .limit(1);
+    const latestRepDate = latestRep?.[0]?.as_of ?? null;
+    let reportsTotal = 0;
+    if (latestRepDate) {
+      const { count: reportsCount } = await supabase
+        .from("reports")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "published")
+        .eq("report_type", "indepth")
+        .eq("as_of", latestRepDate);
+      reportsTotal = reportsCount ?? 0;
+    }
 
     // 백테스트 통과 현황
     const { data: bts } = await supabase
