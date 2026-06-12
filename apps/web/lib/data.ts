@@ -408,6 +408,7 @@ export interface PortfolioDiagnosis {
   weighted_beta: number | null;
   weighted_vol: number | null;
   top_sector: { sector: string; weight: number } | null;
+  sectors: { sector: string; weight: number }[]; // 비중 내림차순 — 섹터 배분 도넛용
   warnings: string[];
 }
 
@@ -557,6 +558,9 @@ export async function getPortfolioDiagnosis(
     weighted_beta: wbeta,
     weighted_vol: wavg((h) => h.vol_annual),
     top_sector: top ? { sector: top[0], weight: top[1] } : null,
+    sectors: [...bySector.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([sector, weight]) => ({ sector, weight })),
     warnings,
   };
 }

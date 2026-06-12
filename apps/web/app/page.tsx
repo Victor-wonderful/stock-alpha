@@ -467,7 +467,7 @@ export default async function DashboardPage() {
                 </div>
               )}
               <Link
-                href="/focus"
+                href="/picks"
                 className="mt-2.5 block text-xs text-accent hover:underline"
               >
                 전체 기록 →

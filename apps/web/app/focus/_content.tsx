@@ -350,7 +350,12 @@ export default async function FocusContent() {
             <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-bold text-text">픽 기록</h2>
-                <span className="text-[10px] text-text-mute">전부 공개 · 삭제 없음</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-text-mute">전부 공개 · 삭제 없음</span>
+                  <Link href="/picks" className="text-[11px] font-semibold text-accent hover:underline">
+                    전체 기록 →
+                  </Link>
+                </div>
               </div>
               {history.data.length === 0 ? (
                 <p className="text-sm text-text-mute">
