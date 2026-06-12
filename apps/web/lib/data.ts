@@ -1153,3 +1153,81 @@ export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
     return { data: SAMPLE_MARKET_QUOTES, isSample: true };
   }
 }
+
+// ── 시그널 섹터 분포 / 스파크 (시장분석·추천종목) ──
+export interface SignalSectorCount {
+  sector: string;
+  count: number;
+}
+
+const SAMPLE_SIGNAL_SECTORS: SignalSectorCount[] = [
+  { sector: "반도체", count: 4 },
+  { sector: "2차전지", count: 2 },
+  { sector: "방산", count: 2 },
+  { sector: "바이오", count: 1 },
+  { sector: "자동차", count: 1 },
+  { sector: "금융", count: 1 },
+  { sector: "인터넷", count: 1 },
+];
+
+export async function getSignalSectorCounts(): Promise<Loaded<SignalSectorCount[]>> {
+  try {
+    const supabase = await createClient();
+    // 오늘 날짜 기준(UTC) — 가장 최근 created_at 배치의 날짜 그룹
+    const { data: latest } = await supabase
+      .from("signals")
+      .select("created_at")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+    if (!latest) throw new Error("no signals");
+    const latestDate = (latest.created_at as string).slice(0, 10);
+    const { data, error } = await supabase
+      .from("signals")
+      .select("instruments!inner(sector)")
+      .gte("created_at", `${latestDate}T00:00:00`)
+      .lte("created_at", `${latestDate}T23:59:59`);
+    if (error || !data || data.length === 0) throw error ?? new Error("empty");
+    const counts = new Map<string, number>();
+    for (const row of data as { instruments: { sector: string | null } }[]) {
+      const s = row.instruments?.sector ?? "기타";
+      counts.set(s, (counts.get(s) ?? 0) + 1);
+    }
+    const result = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([sector, count]) => ({ sector, count }));
+    return { data: result, isSample: false };
+  } catch {
+    return { data: SAMPLE_SIGNAL_SECTORS, isSample: true };
+  }
+}
+
+// ── ohlcv 최근 N봉 종가 스파크 ──
+// 스크리너 테이블의 12봉 미니 바에 사용
+export async function getSparkForSymbol(
+  symbol: string,
+  bars = 12,
+): Promise<number[]> {
+  try {
+    const supabase = await createClient();
+    const { data: inst } = await supabase
+      .from("instruments")
+      .select("id")
+      .eq("symbol", symbol)
+      .limit(1)
+      .single();
+    if (!inst) return [];
+    const { data, error } = await supabase
+      .from("ohlcv")
+      .select("close")
+      .eq("instrument_id", inst.id)
+      .eq("interval", "1d")
+      .order("ts", { ascending: false })
+      .limit(bars);
+    if (error || !data || data.length === 0) return [];
+    return (data as { close: number }[]).map((r) => Number(r.close)).reverse();
+  } catch {
+    return [];
+  }
+}
+

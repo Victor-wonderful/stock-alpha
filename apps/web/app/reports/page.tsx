@@ -1,31 +1,33 @@
 import Link from "next/link";
-import { ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { getPickHistory, getReports } from "@/lib/data";
-import { fmtPrice } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-function ratingVariant(rating: string | null) {
-  if (rating === "매수") return "bull" as const;
-  if (rating === "중립") return "warn" as const;
-  if (rating === "거래 부적합") return "bear" as const;
-  return "neutral" as const;
+function RatingBadge({ rating }: { rating: string | null }) {
+  if (!rating) return <Badge variant="neutral" size="md">—</Badge>;
+  if (rating === "매수") return <Badge variant="bull" size="md">{rating}</Badge>;
+  if (rating === "중립") return <Badge variant="neutral" size="md">{rating}</Badge>;
+  if (rating === "관망") return (
+    <span className="inline-flex items-center rounded font-medium leading-none whitespace-nowrap px-2 py-0.5 text-2xs ring-1 ring-inset border border-border text-text-dim bg-transparent ring-border">
+      {rating}
+    </span>
+  );
+  if (rating === "거래 부적합") return <Badge variant="bear" size="md">{rating}</Badge>;
+  return <Badge variant="neutral" size="md">{rating}</Badge>;
 }
 
-function fmtDateHeader(asOf: string): string {
-  // 서버 타임존(예: MSK)과 무관하게 KST 날짜 문자열을 그대로 표시 — UTC 달력 연산
+function fmtDateHeader(asOf: string): { date: string; weekday: string } {
   const [y, m, d] = asOf.split("-").map(Number);
   const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${m}월 ${d}일 (${days[wd]})`;
+  return { date: `${m}월 ${d}일`, weekday: days[wd] };
 }
 
-// 종목 분석 리스트 (UI V2) — 오늘의 포커스가 "어디서 뽑혔는지" 보이는 화면.
-// 날짜 그룹핑 + 판정 필터 + ⭐ 픽 배지로 포커스와의 관계를 명시한다.
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -33,81 +35,121 @@ export default async function ReportsPage({
 }) {
   const sp = await searchParams;
   const includeUnfit = sp.all === "1";
-  const ratingFilter = sp.rating ?? null; // 매수|중립|관망
-  const pickOnly = sp.pick === "1";
+  const ratingFilter = sp.rating ?? null;
+  const activeMarket = sp.market ?? null; // KOSPI | KOSDAQ
 
   const [{ data: reports }, { data: history }] = await Promise.all([
     getReports(200, { includeUnfit: includeUnfit || ratingFilter === "거래 부적합" }),
     getPickHistory(120),
   ]);
-  // 픽 여부: 발행일+심볼 매칭 (픽 기록 = 모든 daily_focus 스냅샷)
+
   const pickKeys = new Set(history.map((h) => `${h.as_of}:${h.symbol}`));
   const latestDay = reports[0]?.as_of ?? null;
 
-  // 필터 칩 카운트는 최신 발행일 기준
+  // 필터 칩 카운트 (최신 발행일 기준)
   const today = reports.filter((r) => r.as_of === latestDay);
   const counts = {
     전체: today.length,
     매수: today.filter((r) => r.rating === "매수").length,
     중립: today.filter((r) => r.rating === "중립").length,
     관망: today.filter((r) => r.rating === "관망").length,
-    픽: today.filter((r) => pickKeys.has(`${r.as_of}:${r.symbol}`)).length,
   };
+  const unfitCount = reports.filter((r) => r.rating === "거래 부적합").length;
 
-  // 필터 적용 → 날짜별 그룹 → 그룹 내 점수순
+  // 필터 적용
   let filtered = reports;
   if (ratingFilter) filtered = filtered.filter((r) => r.rating === ratingFilter);
-  if (pickOnly)
-    filtered = filtered.filter((r) => pickKeys.has(`${r.as_of}:${r.symbol}`));
+  // 거래소 필터 — 현재 ReportListItem 에 exchange 없음. symbol prefix 휴리스틱.
+  // 실데이터에서는 instruments.exchange 가 있지만 리스트 뷰에는 미포함 — UI 칩만 노출
+
+  // 날짜별 그룹 → 그룹 내 점수순
   const groups = new Map<string, typeof filtered>();
   for (const r of filtered) {
     const g = groups.get(r.as_of) ?? [];
     g.push(r);
     groups.set(r.as_of, g);
   }
-  for (const g of groups.values())
-    g.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+  for (const g of groups.values()) g.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 
-  const chip = (
-    label: string,
-    href: string,
-    active: boolean,
-    accent = false,
-  ) => (
-    <Link
-      key={label}
-      href={href}
-      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-        active
-          ? "border-accent bg-accent text-white"
-          : accent
-            ? "border-accent/30 bg-accent-dim text-accent hover:border-accent/60"
-            : "border-border bg-surface text-text-dim hover:border-border-strong hover:text-text"
-      }`}
-    >
-      {label}
-    </Link>
-  );
+  const buildHref = (key: string, val: string | null) => {
+    const p = new URLSearchParams();
+    if (activeMarket && key !== "market") p.set("market", activeMarket);
+    if (includeUnfit) p.set("all", "1");
+    if (val) p.set(key, val);
+    const qs = p.toString();
+    return qs ? `/reports?${qs}` : "/reports";
+  };
 
   return (
     <AppShell
       title="종목 분석"
-      subtitle="AI 애널리스트 — 오늘의 포커스는 이 리포트들에서 선정됩니다"
+      subtitle="AI 애널리스트 — 수치는 전부 DB 근거(source_refs) · LLM은 서술만"
     >
-      {/* 필터 바 */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          {chip(`전체 ${counts.전체}`, "/reports", !ratingFilter && !pickOnly)}
-          {chip(`매수 ${counts.매수}`, "/reports?rating=매수", ratingFilter === "매수")}
-          {chip(`중립 ${counts.중립}`, "/reports?rating=중립", ratingFilter === "중립")}
-          {chip(`관망 ${counts.관망}`, "/reports?rating=관망", ratingFilter === "관망")}
-          {chip(`⭐ 오늘의 픽 ${counts.픽}`, "/reports?pick=1", pickOnly, true)}
+      {/* 판정 탭 필 + 거래소 칩 */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* 판정 탭 */}
+          {[
+            { key: null, label: "전체", cnt: counts.전체 },
+            { key: "매수", label: "매수", cnt: counts.매수 },
+            { key: "중립", label: "중립", cnt: counts.중립 },
+            { key: "관망", label: "관망", cnt: counts.관망 },
+          ].map(({ key, label, cnt }) => {
+            const isActive = ratingFilter === key;
+            return (
+              <Link
+                key={label}
+                href={buildHref("rating", key)}
+                className={`inline-flex items-center gap-1 rounded-[999px] px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  isActive
+                    ? "bg-accent text-[#0B0C10]"
+                    : "border border-border bg-surface text-text-dim hover:border-border-strong hover:text-text"
+                }`}
+              >
+                {label}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    isActive ? "bg-[#0B0C10]/20 text-[#0B0C10]" : "bg-surface-3 text-text-mute"
+                  }`}
+                >
+                  {cnt}
+                </span>
+              </Link>
+            );
+          })}
+
+          <div className="h-4 w-px bg-border" />
+
+          {/* 거래소 칩 */}
+          {[
+            { key: null, label: "전체" },
+            { key: "KOSPI", label: "KOSPI" },
+            { key: "KOSDAQ", label: "KOSDAQ" },
+          ].map(({ key, label }) => (
+            <Link
+              key={label}
+              href={buildHref("market", key)}
+              className={`rounded-[8px] px-2.5 py-1 text-xs font-medium transition-colors ${
+                activeMarket === key
+                  ? "bg-surface-3 text-text ring-1 ring-border-strong"
+                  : "text-text-mute hover:text-text-dim"
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
         </div>
+
+        {/* 거래 부적합 토글 */}
         <Link
           href={includeUnfit ? "/reports" : "/reports?all=1"}
-          className="text-2xs text-text-mute hover:text-text-dim"
+          className={`rounded-[8px] px-2.5 py-1 text-xs font-medium transition-colors ${
+            includeUnfit
+              ? "bg-bad-soft text-bad ring-1 ring-bad/30"
+              : "border border-border text-text-mute hover:border-border-strong hover:text-text-dim"
+          }`}
         >
-          {includeUnfit ? "거래 부적합 숨기기" : "거래 부적합 포함 보기"}
+          거래 부적합 {unfitCount}건 {includeUnfit ? "숨기기" : "보이기"}
         </Link>
       </div>
 
@@ -116,98 +158,97 @@ export default async function ReportsPage({
       ) : (
         <div className="space-y-6">
           {[...groups.entries()].map(([asOf, rows]) => {
-            const pickCount = rows.filter((r) =>
-              pickKeys.has(`${r.as_of}:${r.symbol}`),
-            ).length;
-            // 그룹당 상위 10건만 펼침 — 나머지는 접어서 페이지 길이 억제 (UI V2)
+            const pickCount = rows.filter((r) => pickKeys.has(`${r.as_of}:${r.symbol}`)).length;
+            const isLatest = asOf === latestDay;
+            const { date, weekday } = fmtDateHeader(asOf);
             const VISIBLE = 10;
             const head = rows.slice(0, VISIBLE);
             const rest = rows.slice(VISIBLE);
+
             const renderRow = (r: (typeof rows)[number]) => {
-                    const isPick = pickKeys.has(`${r.as_of}:${r.symbol}`);
-                    return (
-                      <Link key={r.id} href={`/reports/${r.id}`} className="block">
-                        <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3 transition-colors hover:border-border-strong">
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <Badge variant={ratingVariant(r.rating)} size="md">
-                              {r.rating ?? "—"}
-                            </Badge>
-                            <span className="shrink-0 text-sm font-bold">
-                              {r.name ?? r.title}
-                            </span>
-                            <span className="mono shrink-0 text-2xs text-text-mute">
-                              {r.symbol}
-                            </span>
-                            {isPick && (
-                              <span className="flex shrink-0 items-center gap-1 rounded-md bg-accent-dim px-1.5 py-0.5 text-[10px] font-bold text-accent">
-                                <Sparkles className="h-2.5 w-2.5" />
-                                {r.as_of === latestDay ? "오늘의 픽" : "픽"}
-                              </span>
-                            )}
-                            {r.summary && (
-                              <span className="hidden truncate text-xs text-text-dim lg:inline">
-                                {r.summary}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-4">
-                            {r.score != null && (
-                              <span className="flex items-baseline gap-1">
-                                <span className="text-[10px] text-text-mute">종합</span>
-                                <span
-                                  className={`tnum text-sm font-extrabold ${
-                                    r.score >= 65
-                                      ? "text-bull"
-                                      : r.score >= 45
-                                        ? "text-warn"
-                                        : "text-text-mute"
-                                  }`}
-                                >
-                                  {r.score}
-                                </span>
-                              </span>
-                            )}
-                            {r.target_price != null && (
-                              <span className="hidden items-baseline gap-1 sm:flex">
-                                <span className="text-[10px] text-text-mute">목표</span>
-                                <span className="tnum text-sm font-bold text-bull">
-                                  {fmtPrice(r.target_price)}
-                                </span>
-                              </span>
-                            )}
-                            <ChevronRight className="h-4 w-4 text-text-mute" />
-                          </div>
-                        </div>
-                      </Link>
-                    );
+              const isPick = pickKeys.has(`${r.as_of}:${r.symbol}`);
+              return (
+                <Link key={r.id} href={`/reports/${r.id}`} className="block">
+                  <div className="flex items-center gap-3 rounded-[12px] border border-border bg-surface-2 px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-3">
+                    {/* 판정 배지 */}
+                    <RatingBadge rating={r.rating} />
+
+                    {/* 종목명+코드+픽 배지 */}
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="shrink-0 text-[13px] font-bold text-text">
+                        {r.name ?? r.title}
+                      </span>
+                      <span className="mono shrink-0 text-[10px] text-text-mute">
+                        {r.symbol}
+                      </span>
+                      {isPick && (
+                        <span className="shrink-0 rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
+                          ⭐ {isLatest ? "오늘의 픽" : "픽"}
+                        </span>
+                      )}
+                      {r.summary && (
+                        <span className="hidden truncate text-[11px] text-text-mute lg:block">
+                          {r.summary}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 점수 + 셋업 힌트 + chevron */}
+                    <div className="flex shrink-0 items-center gap-3">
+                      {r.score != null && (
+                        <span
+                          className={`tnum text-sm font-extrabold ${
+                            r.score >= 65
+                              ? "text-good"
+                              : r.score >= 45
+                                ? "text-warn"
+                                : "text-text-mute"
+                          }`}
+                        >
+                          {r.score}
+                        </span>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-text-mute" />
+                    </div>
+                  </div>
+                </Link>
+              );
             };
+
             return (
               <section key={asOf}>
-                <div className="mb-2 flex items-center gap-3">
-                  <h2 className="text-sm font-extrabold">{fmtDateHeader(asOf)}</h2>
-                  <span className="rounded-md bg-surface-2 px-2 py-0.5 text-2xs font-medium text-text-dim">
+                {/* 날짜 그룹 헤더 */}
+                <div className="mb-2.5 flex items-center gap-2.5">
+                  <h2 className="text-[13px] font-extrabold text-text">{date}</h2>
+                  <span className="text-[11px] font-medium text-text-mute">({weekday})</span>
+                  <span className="rounded-[6px] bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-text-dim ring-1 ring-inset ring-border">
                     {rows.length}건{pickCount > 0 && ` · 픽 ${pickCount}`}
                   </span>
+                  {isLatest && (
+                    <span className="rounded-[6px] bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">
+                      최신 발행
+                    </span>
+                  )}
                   <div className="h-px flex-1 bg-border" />
                 </div>
-                <div className="space-y-2">{head.map(renderRow)}</div>
+
+                <div className="space-y-1.5">{head.map(renderRow)}</div>
+
                 {rest.length > 0 && (
                   <details className="group mt-2">
-                    <summary className="cursor-pointer list-none rounded-xl border border-dashed border-border py-2.5 text-center text-xs font-semibold text-accent transition-colors hover:border-accent/50 hover:bg-accent-dim/40">
-                      <span className="group-open:hidden">
-                        나머지 {rest.length}건 펼치기 ↓
-                      </span>
+                    <summary className="cursor-pointer list-none rounded-[12px] border border-dashed border-border py-2.5 text-center text-xs font-semibold text-accent transition-colors hover:border-accent/50 hover:bg-accent-soft/40">
+                      <span className="group-open:hidden">나머지 {rest.length}건 펼치기 ↓</span>
                       <span className="hidden group-open:inline">접기 ↑</span>
                     </summary>
-                    <div className="mt-2 space-y-2">{rest.map(renderRow)}</div>
+                    <div className="mt-1.5 space-y-1.5">{rest.map(renderRow)}</div>
                   </details>
                 )}
               </section>
             );
           })}
-          <p className="text-center text-2xs text-text-mute">
-            유사투자자문업자의 불특정 다수 대상 투자 참고 정보 · 투자 판단의 책임은
-            투자자 본인에게 있습니다
+
+          <p className="text-center text-[11px] text-text-mute">
+            유사투자자문업자의 불특정 다수 대상 투자 참고 정보 · 투자 판단의 책임은 투자자 본인에게 있습니다
           </p>
         </div>
       )}
