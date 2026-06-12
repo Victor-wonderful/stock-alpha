@@ -8,8 +8,9 @@ import {
   TRADE_STYLE_LABELS,
 } from "@stock-alpha/db";
 
-// 셋업 필터는 구현·발행 중인 전략만(게이트 통과 6종, 2026-06-11 600일 검증).
-// 미통과(종가베팅·과대낙폭·멀티팩터)·미구현(테마/신규주)은 비노출 — 유령 필터 금지.
+// 셋업 필터는 구현·발행 중인 전략만(게이트 통과 셋업, 유령 필터 금지).
+// pead: 2026-06-12 분기 이력 4라운드(946건) 검증 PASS(+0.072R) — 추가.
+// 미통과(종가베팅·과대낙폭·멀티팩터)·미구현(테마/신규주)은 비노출.
 const ACTIVE_SETUPS = [
   "high_52w",
   "vol_squeeze",
@@ -17,6 +18,7 @@ const ACTIVE_SETUPS = [
   "leader_trend",
   "pullback",
   "flow_accumulation",
+  "pead",
 ] as const;
 const ACTIVE_SETUP_LABELS = Object.fromEntries(
   ACTIVE_SETUPS.map((s) => [s, TRADE_SETUP_LABELS[s]]),

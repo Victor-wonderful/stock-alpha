@@ -14,6 +14,20 @@ import { SampleBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
+// ── 셋업 키 → 한국어 표기 (검증 현황 카드)
+const SETUP_NAMES: Record<string, string> = {
+  leader_trend: "주도주 추세",
+  oversold_bounce: "과대낙폭 반등",
+  breakout: "돌파",
+  close_betting: "종가베팅",
+  flow_accumulation: "수급 동반 매집",
+  pullback: "눌림목",
+  high_52w: "52주 신고가",
+  vol_squeeze: "변동성 수축 돌파",
+  pead: "실적 모멘텀(PEAD)",
+  factor_composite: "멀티팩터 종합",
+};
+
 // ── 마켓 스트립 카드
 function MarketCard({
   label,
@@ -306,8 +320,8 @@ export default async function DashboardPage() {
               </div>
             </section>
 
-            {/* 최신 분석 리포트 */}
-            <section className="rounded-[20px] border border-border bg-surface">
+            {/* 최신 분석 리포트 — flex-1: 우측 레일과 하단 라인 정렬 */}
+            <section className="flex-1 rounded-[20px] border border-border bg-surface">
               <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
                 <h2 className="flex items-center gap-2 text-sm font-bold text-text">
                   <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
@@ -323,7 +337,7 @@ export default async function DashboardPage() {
                     발행된 리포트가 없습니다
                   </div>
                 ) : (
-                  reports.data.slice(0, 4).map((r) => (
+                  reports.data.slice(0, 6).map((r) => (
                     <Link
                       key={r.id}
                       href={`/reports/${r.id}`}
@@ -456,7 +470,7 @@ export default async function DashboardPage() {
                 href="/focus"
                 className="mt-2.5 block text-xs text-accent hover:underline"
               >
-                전체 기록 → /focus
+                전체 기록 →
               </Link>
             </section>
 
@@ -478,7 +492,9 @@ export default async function DashboardPage() {
                       className="flex items-center justify-between rounded-[10px] bg-surface-2 px-3 py-2"
                     >
                       <div>
-                        <span className="text-xs font-semibold text-text">{bt.setup}</span>
+                        <span className="text-xs font-semibold text-text">
+                          {SETUP_NAMES[bt.setup] ?? bt.setup}
+                        </span>
                         {bt.style && (
                           <span className="ml-1.5 text-[10px] text-text-mute">{bt.style}</span>
                         )}
