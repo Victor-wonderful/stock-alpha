@@ -1072,6 +1072,7 @@ export interface MarketQuote {
   unit: string;
   up: boolean;
   spark: number[];
+  sample?: boolean;  // 이 항목만 예시값(실데이터 소스 미연결)
 }
 
 function miniSpark(seed: number, up: boolean, len = 16): number[] {
@@ -1088,18 +1089,31 @@ function miniSpark(seed: number, up: boolean, len = 16): number[] {
 const SAMPLE_MARKET_QUOTES: MarketQuote[] = [
   { id: "KOSPI", label: "코스피", value: 2798.43, change: 12.31, changePct: 0.0044, unit: "", up: true, spark: miniSpark(1, true) },
   { id: "KOSDAQ", label: "코스닥", value: 842.07, change: -3.12, changePct: -0.0037, unit: "", up: false, spark: miniSpark(2, false) },
-  { id: "USDKRW", label: "원달러", value: 1348.5, change: -2.3, changePct: -0.0017, unit: "원", up: false, spark: miniSpark(3, false) },
-  { id: "VIX", label: "VIX", value: 13.82, change: -0.41, changePct: -0.0288, unit: "", up: false, spark: miniSpark(4, false) },
+  { id: "SP500", label: "S&P 500", value: 6142.07, change: 28.4, changePct: 0.0046, unit: "", up: true, spark: miniSpark(5, true) },
+  { id: "NASDAQCOM", label: "나스닥", value: 19836.55, change: -84.2, changePct: -0.0042, unit: "", up: false, spark: miniSpark(6, false) },
+  { id: "VIXCLS", label: "VIX", value: 13.82, change: -0.41, changePct: -0.0288, unit: "", up: false, spark: miniSpark(4, false) },
+  { id: "DEXKOUS", label: "원달러", value: 1348.5, change: -2.3, changePct: -0.0017, unit: "원", up: false, spark: miniSpark(3, false) },
+  { id: "DGS10", label: "미 국채 10Y", value: 4.12, change: 0.03, changePct: 0.0073, unit: "%", up: true, spark: miniSpark(7, true) },
 ];
 
 export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
+  // 표시 순서 고정: 국내 지수 → 미 지수 → 변동성 → 환율 → 금리
+  const META: { id: string; label: string; unit: string }[] = [
+    { id: "KOSPI", label: "코스피", unit: "" },
+    { id: "KOSDAQ", label: "코스닥", unit: "" },
+    { id: "SP500", label: "S&P 500", unit: "" },
+    { id: "NASDAQCOM", label: "나스닥", unit: "" },
+    { id: "VIXCLS", label: "VIX", unit: "" },
+    { id: "DEXKOUS", label: "원달러", unit: "원" },
+    { id: "DGS10", label: "미 국채 10Y", unit: "%" },
+  ];
   try {
     const supabase = await createClient();
-    const ids = ["DGS10", "DEXKOUS", "VIXCLS"];
+    const macroIds = ["SP500", "NASDAQCOM", "VIXCLS", "DEXKOUS", "DGS10"];
     const { data: mc } = await supabase
       .from("macro")
       .select("series_id,date,value")
-      .in("series_id", ids)
+      .in("series_id", macroIds)
       .order("date", { ascending: true });
     if (!mc || mc.length === 0) throw new Error("no macro");
 
@@ -1110,24 +1124,25 @@ export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
       bySeries.set(row.series_id, arr);
     }
     const quotes: MarketQuote[] = [];
-    for (const [sid, vals] of bySeries.entries()) {
-      if (vals.length === 0) continue;
+    for (const meta of META) {
+      const vals = bySeries.get(meta.id);
+      if (!vals || vals.length === 0) {
+        // 코스피·코스닥 지수는 아직 인제스트 소스 없음(KRX 지수 — 백로그) → 예시값으로 채우되 표시
+        const s = SAMPLE_MARKET_QUOTES.find((q) => q.id === meta.id);
+        if (s) quotes.push({ ...s, sample: true });
+        continue;
+      }
       const value = vals[vals.length - 1];
       const prev = vals.length > 1 ? vals[vals.length - 2] : value;
       const change = value - prev;
       const changePct = prev !== 0 ? change / prev : null;
-      const meta: Record<string, { label: string; unit: string }> = {
-        DEXKOUS: { label: "원달러", unit: "원" },
-        VIXCLS: { label: "VIX", unit: "" },
-        DGS10: { label: "미 국채 10Y", unit: "%" },
-      };
       quotes.push({
-        id: sid,
-        label: meta[sid]?.label ?? sid,
+        id: meta.id,
+        label: meta.label,
         value,
         change,
         changePct,
-        unit: meta[sid]?.unit ?? "",
+        unit: meta.unit,
         up: change >= 0,
         spark: vals.slice(-16),
       });

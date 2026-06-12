@@ -21,12 +21,14 @@ function MarketCard({
   unit,
   changePct,
   spark,
+  sample,
 }: {
   label: string;
   value: number;
   unit: string;
   changePct: number | null;
   spark: number[];
+  sample?: boolean;
 }) {
   const up = (changePct ?? 0) >= 0;
   const changeColor = up ? "text-good" : "text-bad";
@@ -44,7 +46,10 @@ function MarketCard({
 
   return (
     <div className="flex flex-col gap-1.5 rounded-[12px] bg-surface px-4 py-3 border border-border">
-      <span className="text-[11px] text-text-mute">{label}</span>
+      <span className="text-[11px] text-text-mute">
+        {label}
+        {sample && <span className="ml-1 rounded-[4px] bg-surface-2 px-1 py-px text-[9px] text-text-mute">예시</span>}
+      </span>
       <div className="flex items-end justify-between gap-2">
         <div>
           <span className="tnum text-base font-bold text-text">
@@ -184,9 +189,9 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* ── 마켓 스트립 4카드 ── */}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {quotes.data.slice(0, 4).map((q) => (
+        {/* ── 마켓 스트립 — 코스피·코스닥·S&P500·나스닥·VIX·원달러·미 국채 10Y ── */}
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
+          {quotes.data.map((q) => (
             <MarketCard
               key={q.id}
               label={q.label}
@@ -194,6 +199,7 @@ export default async function DashboardPage() {
               unit={q.unit}
               changePct={q.changePct}
               spark={q.spark}
+              sample={q.sample}
             />
           ))}
         </div>
