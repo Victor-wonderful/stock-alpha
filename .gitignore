@@ -49,3 +49,6 @@ data/raw/
 data/cache/
 *.parquet
 *.duckdb
+
+# 배치/인제스트 로그
+logs/
