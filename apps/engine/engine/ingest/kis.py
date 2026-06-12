@@ -164,10 +164,266 @@ def ingest_kr_indices(days: int = 30) -> int:
 
 
 def to_flow_amount(v: Any) -> float | None:
-    """KIS 금액 문자열 → float(억원 단위 변환은 호출부). (순수, 향후 수급용)"""
+    """KIS 숫자 문자열 → float. (순수)"""
     if v in (None, ""):
         return None
     try:
         return float(str(v).replace(",", ""))
     except (TypeError, ValueError):
         return None
+
+
+def _kis_get(path: str, tr_id: str, params: dict) -> dict:
+    """공통 GET — 토큰/헤더 부착. rt_cd != 0 이면 예외."""
+    import httpx
+
+    token, domain = get_token()
+    s = get_settings()
+    r = httpx.get(
+        f"{domain}{path}",
+        params=params,
+        headers={
+            "authorization": f"Bearer {token}",
+            "appkey": s.kis_app_key,
+            "appsecret": s.kis_app_secret,
+            "tr_id": tr_id,
+            "custtype": "P",
+        },
+        timeout=15,
+    )
+    body = r.json()
+    if body.get("rt_cd") != "0":
+        raise RuntimeError(f"KIS {tr_id}: {body.get('msg1')}")
+    return body
+
+
+def _yyyymmdd_to_iso(d: str) -> str:
+    return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+
+
+# ── 수급 (투자자별 매매동향 + 프로그램) ──
+# 네이버(외인·기관 주수)와 동일하게 '주수' 기준으로 저장 — 단위 일관성.
+
+def normalize_investor(output: list[dict]) -> list[dict]:
+    """투자자별(FHKST01010900) output → [{date, retail_net, foreign_net, inst_net}] (순수)."""
+    rows: list[dict] = []
+    for o in output:
+        d = str(o.get("stck_bsop_date") or "").strip()
+        if len(d) != 8:
+            continue
+        rows.append({
+            "date": _yyyymmdd_to_iso(d),
+            "retail_net": to_flow_amount(o.get("prsn_ntby_qty")),
+            "foreign_net": to_flow_amount(o.get("frgn_ntby_qty")),
+            "inst_net": to_flow_amount(o.get("orgn_ntby_qty")),
+        })
+    return rows
+
+
+def normalize_program(output: list[dict]) -> list[dict]:
+    """프로그램 일별(FHPPG04650200) output → [{date, program_net}] (순수, 주수)."""
+    rows: list[dict] = []
+    for o in output:
+        d = str(o.get("stck_bsop_date") or "").strip()
+        if len(d) != 8:
+            continue
+        rows.append({
+            "date": _yyyymmdd_to_iso(d),
+            "program_net": to_flow_amount(o.get("whol_smtn_ntby_qty")),
+        })
+    return rows
+
+
+def fetch_investor_daily(symbol: str) -> list[dict]:
+    """종목 투자자별 순매수 — 최근 ~30거래일."""
+    body = _kis_get(
+        "/uapi/domestic-stock/v1/quotations/inquire-investor",
+        "FHKST01010900",
+        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": symbol},
+    )
+    return normalize_investor(body.get("output") or [])
+
+
+def fetch_program_daily(symbol: str, days: int = 30) -> list[dict]:
+    """프로그램 일별 순매수 — DATE_1 이 '끝 앵커'로 동작(그 날짜부터 과거 30행).
+
+    실측(2026-06-12): DATE_1=과거로 주면 그 시점부터 역방향 페이징 — 최신을
+    받으려면 DATE_1=오늘. days 인자는 시그니처 호환용(반환은 항상 ~30행).
+    """
+    _ = days
+    today = datetime.now().strftime("%Y%m%d")
+    body = _kis_get(
+        "/uapi/domestic-stock/v1/quotations/program-trade-by-stock-daily",
+        "FHPPG04650200",
+        {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": symbol,
+            "FID_INPUT_DATE_1": today,
+            "FID_INPUT_DATE_2": today,
+        },
+    )
+    return normalize_program(body.get("output") or [])
+
+
+def merge_flow_rows(
+    instrument_id: int,
+    investor: list[dict],
+    program: list[dict],
+    days: int,
+) -> list[dict]:
+    """투자자별+프로그램을 날짜로 병합 → flows 행 (순수)."""
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    prog_by_date = {r["date"]: r.get("program_net") for r in program}
+    rows: list[dict] = []
+    for r in investor:
+        if r["date"] < cutoff:
+            continue
+        rec: dict[str, Any] = {"instrument_id": instrument_id, "date": r["date"]}
+        for k in ("retail_net", "foreign_net", "inst_net"):
+            if r.get(k) is not None:
+                rec[k] = r[k]
+        p = prog_by_date.get(r["date"])
+        if p is not None:
+            rec["program_net"] = p
+        if len(rec) > 2:
+            rows.append(rec)
+    return rows
+
+
+def ingest_flows(days: int = 10, include_program: bool = True, workers: int = 6) -> int:
+    """전 활성 종목 수급(개인·외인·기관·프로그램) → flows.
+
+    KIS 유량 제한(실전 초당 20건) 고려 — 종목당 1~2호출, 워커 보수적.
+    실패 종목은 건너뜀(다음 배치에서 재시도) — 네이버 폴백은 외인·기관만이라
+    여기서는 사용하지 않는다(컬럼 불일치 방지).
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from engine.db import upsert
+    from engine.ingest.runner import load_kr_instrument_map
+
+    imap = load_kr_instrument_map()
+    targets = [(sym, iid) for (sym, _exch), iid in imap.items()]
+
+    def _one(t: tuple) -> tuple:
+        sym, iid = t
+        try:
+            inv = fetch_investor_daily(sym)
+            prog = fetch_program_daily(sym, days=days + 20) if include_program else []
+            return sym, merge_flow_rows(iid, inv, prog, days), None
+        except Exception as e:  # noqa: BLE001
+            return sym, [], str(e)
+
+    total = done = failed = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(_one, t) for t in targets]
+        for fut in as_completed(futures):
+            sym, rows, err = fut.result()
+            if err:
+                failed += 1
+                log.warning("kis.flows.fail", symbol=sym, error=err[:120])
+            elif rows:
+                total += upsert("flows", rows, on_conflict="instrument_id,date")
+            done += 1
+            if done % 200 == 0:
+                log.info("kis.flows.progress", done=done, of=len(targets), rows=total, failed=failed)
+    log.info("kis.flows.done", rows=total, targets=len(targets), failed=failed)
+    return total
+
+
+# ── 분봉 (당일) ──
+
+def normalize_minute_bars(output2: list[dict], instrument_id: int) -> list[dict]:
+    """당일분봉(FHKST03010200) output2 → ohlcv(1m) 행 (순수). ts = KST."""
+    rows: list[dict] = []
+    for o in output2:
+        d = str(o.get("stck_bsop_date") or "").strip()
+        h = str(o.get("stck_cntg_hour") or "").strip()
+        if len(d) != 8 or len(h) != 6:
+            continue
+        op, hi, lo, cl = (to_flow_amount(o.get(k)) for k in ("stck_oprc", "stck_hgpr", "stck_lwpr", "stck_prpr"))
+        if None in (op, hi, lo, cl):
+            continue
+        rows.append({
+            "instrument_id": instrument_id,
+            "ts": f"{_yyyymmdd_to_iso(d)}T{h[:2]}:{h[2:4]}:{h[4:6]}+09:00",
+            "interval": "1m",
+            "open": op, "high": hi, "low": lo, "close": cl,
+            "volume": to_flow_amount(o.get("cntg_vol")) or 0,
+        })
+    return rows
+
+
+def fetch_minute_bars(symbol: str, end_hour: str = "153000", loops: int = 14) -> list[dict]:
+    """당일 1분봉 전체 — 호출당 30봉이라 시간 역방향 페이지네이션."""
+    seen: dict[str, dict] = {}
+    hour = end_hour
+    for _ in range(loops):
+        body = _kis_get(
+            "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
+            "FHKST03010200",
+            {
+                "FID_ETC_CLS_CODE": "",
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": symbol,
+                "FID_INPUT_HOUR_1": hour,
+                "FID_PW_DATA_INCU_YN": "Y",
+            },
+        )
+        out = body.get("output2") or []
+        if not out:
+            break
+        for o in out:
+            h = str(o.get("stck_cntg_hour") or "")
+            if h:
+                seen[h] = o
+        earliest = min(str(o.get("stck_cntg_hour")) for o in out)
+        if earliest <= "090100":
+            break
+        prev = datetime.strptime(earliest, "%H%M%S") - timedelta(minutes=1)
+        hour = prev.strftime("%H%M%S")
+    return sorted(seen.values(), key=lambda o: str(o.get("stck_cntg_hour")))
+
+
+def ingest_minute_bars(symbols: list[str], end_hour: str = "153000") -> int:
+    """지정 종목 당일 1분봉 → ohlcv(interval=1m). 핫스토리지 — 장기보관은 일봉."""
+    from engine.db import upsert
+    from engine.ingest.runner import load_kr_instrument_map
+
+    imap = load_kr_instrument_map()
+    by_symbol = {sym: iid for (sym, _exch), iid in imap.items()}
+    total = 0
+    for sym in symbols:
+        iid = by_symbol.get(sym)
+        if not iid:
+            log.warning("kis.minute.unknown_symbol", symbol=sym)
+            continue
+        try:
+            rows = normalize_minute_bars(fetch_minute_bars(sym, end_hour=end_hour), iid)
+            if rows:
+                total += upsert("ohlcv", rows, on_conflict="instrument_id,ts,interval")
+        except Exception as e:  # noqa: BLE001
+            log.warning("kis.minute.fail", symbol=sym, error=str(e)[:120])
+    log.info("kis.minute.done", rows=total, symbols=len(symbols))
+    return total
+
+
+# ── 현재가 (실시간 폴링용 — WS 이전 단계) ──
+
+def fetch_quote(symbol: str) -> dict:
+    """현재가/등락률/거래량 스냅샷 (FHKST01010100)."""
+    body = _kis_get(
+        "/uapi/domestic-stock/v1/quotations/inquire-price",
+        "FHKST01010100",
+        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": symbol},
+    )
+    o = body.get("output") or {}
+    return {
+        "symbol": symbol,
+        "price": to_flow_amount(o.get("stck_prpr")),
+        "change": to_flow_amount(o.get("prdy_vrss")),
+        "change_pct": to_flow_amount(o.get("prdy_ctrt")),
+        "volume": to_flow_amount(o.get("acml_vol")),
+        "high": to_flow_amount(o.get("stck_hgpr")),
+        "low": to_flow_amount(o.get("stck_lwpr")),
+    }

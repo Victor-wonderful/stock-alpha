@@ -1115,20 +1115,20 @@ const SAMPLE_MARKET_QUOTES: MarketQuote[] = [
 
 export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
   // 표시 순서 고정: 국내 지수 → 미 지수 → 변동성 → 환율 → 금리
-  const META: { id: string; label: string; unit: string }[] = [
+  const META: { id: string; label: string; unit: string; fallbackId?: string }[] = [
     { id: "KOSPI", label: "코스피", unit: "" },
     { id: "KOSDAQ", label: "코스닥", unit: "" },
     { id: "SP500", label: "S&P 500", unit: "" },
     { id: "NASDAQCOM", label: "나스닥", unit: "" },
     { id: "VIXCLS", label: "VIX", unit: "" },
-    { id: "DEXKOUS", label: "원달러", unit: "원" },
+    { id: "USDKRW", label: "원달러", unit: "원", fallbackId: "DEXKOUS" },
     { id: "DGS10", label: "미 국채 10Y", unit: "%" },
   ];
   try {
     const supabase = await createClient();
-    // KOSPI/KOSDAQ 는 네이버 지수 인제스트(엔진 naver.ingest_kr_indices, 당일 종가),
+    // KOSPI/KOSDAQ=KIS(당일 종가) · USDKRW=네이버 환율 고시(당일, FRED DEXKOUS 폴백) ·
     // 나머지는 FRED(1~2일 지연 — 카드에 기준일 표시).
-    const macroIds = ["KOSPI", "KOSDAQ", "SP500", "NASDAQCOM", "VIXCLS", "DEXKOUS", "DGS10"];
+    const macroIds = ["KOSPI", "KOSDAQ", "SP500", "NASDAQCOM", "VIXCLS", "USDKRW", "DEXKOUS", "DGS10"];
     const { data: mc } = await supabase
       .from("macro")
       .select("series_id,date,value")
@@ -1146,10 +1146,17 @@ export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
     }
     const quotes: MarketQuote[] = [];
     for (const meta of META) {
-      const vals = bySeries.get(meta.id);
+      // 1차 시리즈 없으면 폴백 시리즈(예: USDKRW→DEXKOUS) → 그래도 없으면 예시값 표시
+      const useId = bySeries.has(meta.id)
+        ? meta.id
+        : meta.fallbackId && bySeries.has(meta.fallbackId)
+          ? meta.fallbackId
+          : meta.id;
+      const vals = bySeries.get(useId);
       if (!vals || vals.length === 0) {
-        // 코스피·코스닥 지수는 아직 인제스트 소스 없음(KRX 지수 — 백로그) → 예시값으로 채우되 표시
-        const s = SAMPLE_MARKET_QUOTES.find((q) => q.id === meta.id);
+        const s = SAMPLE_MARKET_QUOTES.find(
+          (q) => q.id === meta.id || q.id === meta.fallbackId,
+        );
         if (s) quotes.push({ ...s, sample: true });
         continue;
       }
@@ -1166,7 +1173,7 @@ export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
         unit: meta.unit,
         up: change >= 0,
         spark: vals.slice(-16),
-        asOf: lastDate.get(meta.id),
+        asOf: lastDate.get(useId),
       });
     }
     if (quotes.length === 0) throw new Error("empty");

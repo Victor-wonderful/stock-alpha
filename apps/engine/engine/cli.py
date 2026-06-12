@@ -32,12 +32,18 @@ def ingest(
     refresh: bool = typer.Option(
         False, help="fundamentals — 기존 행도 재인제스트(disclosed_at 등 컬럼 백필)"
     ),
+    source: str = typer.Option(
+        "kis", help="flows 소스 — kis(개인·프로그램 포함) | naver(외인·기관만)"
+    ),
 ) -> None:
     """데이터 인제스트 (M2). 현재 KRX prices/flows/fundamentals 구현."""
     from engine.ingest import runner
 
     if market == "kr" and target == "prices":
         n = runner.ingest_krx_prices(days=days, workers=workers)
+    elif market == "kr" and target == "flows" and source == "kis":
+        from engine.ingest import kis
+        n = kis.ingest_flows(days=days, workers=min(workers, 8))
     elif market == "kr" and target == "flows":
         n = runner.ingest_krx_flows(days=days, workers=workers)
     elif market == "kr" and target == "fundamentals":
@@ -51,6 +57,18 @@ def ingest(
         log.info("ingest", target=target, market=market, status="not_implemented")
         return
     typer.echo(f"ingested rows: {n}")
+
+
+@app.command("ingest-minutes")
+def ingest_minutes(
+    symbols: str = typer.Option(..., help="쉼표구분 종목코드 (예: 005930,000660)"),
+    end_hour: str = typer.Option("153000", help="조회 종료 시각(HHMMSS)"),
+) -> None:
+    """당일 1분봉 인제스트 (KIS) — ohlcv(interval=1m). 데이/스캘핑 셋업의 전제 데이터."""
+    from engine.ingest import kis
+
+    syms = [s.strip() for s in symbols.split(",") if s.strip()]
+    typer.echo(f"minute bars rows: {kis.ingest_minute_bars(syms, end_hour=end_hour)}")
 
 
 @app.command("seed-universe")
@@ -174,7 +192,11 @@ def morning(
     from engine.market import regime
     from engine.reports import morning as mb
 
-    typer.echo(f"[1/3] macro: {fred.ingest_macro(days=10)} rows · kr indices: {kis.ingest_kr_indices(days=10)} rows")
+    from engine.ingest import naver as nv
+    typer.echo(
+        f"[1/3] macro: {fred.ingest_macro(days=10)} rows · "
+        f"kr indices: {kis.ingest_kr_indices(days=10)} rows · fx: {nv.ingest_fx()} rows"
+    )
     r = regime.run()
     typer.echo(f"[2/3] regime: {r['regime']} (score {r['score']})")
     out = mb.publish_morning(use_llm=llm)
@@ -201,7 +223,11 @@ def daily(
     if not skip_ingest:
         n = ir.ingest_krx_prices(days=ingest_days)
         from engine.ingest import kis
-        typer.echo(f"[1/5] ingest prices: {n} rows · kr indices: {kis.ingest_kr_indices(days=10)} rows")
+        from engine.ingest import naver as nv
+        typer.echo(
+            f"[1/5] ingest prices: {n} rows · kr indices: {kis.ingest_kr_indices(days=10)} rows · "
+            f"fx: {nv.ingest_fx()} rows · flows: {kis.ingest_flows(days=7)} rows"
+        )
     else:
         typer.echo("[1/5] ingest skipped")
 

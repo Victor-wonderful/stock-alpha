@@ -175,6 +175,68 @@ def ingest_kr_indices(pages: int = 2) -> int:
     return total
 
 
+# ── 환율 (원/달러) ──
+# FRED DEXKOUS 는 최대 1주 지연 → 네이버 환율 고시(매매기준율)를 USDKRW 시리즈로 적재.
+
+_FX_BASE = "https://finance.naver.com/marketindex/exchangeDailyQuote.naver"
+
+
+def parse_fx_table(html: str) -> pd.DataFrame:
+    """환율 일별시세 HTML → [date, value] DataFrame (순수). 매매기준율 사용."""
+    tables = pd.read_html(io.StringIO(html))
+    target: pd.DataFrame | None = None
+    for t in tables:
+        cols = [str(c) for c in t.columns]
+        if any("매매기준율" in c for c in cols) and any("날짜" in c for c in cols):
+            target = t
+            break
+    if target is None:
+        return pd.DataFrame(columns=["date", "value"])
+    date_col = next(c for c in target.columns if "날짜" in str(c))
+    rate_col = next(c for c in target.columns if "매매기준율" in str(c))
+    out: list[dict] = []
+    for _, row in target.iterrows():
+        raw_date = str(row.get(date_col, "")).strip()
+        rate = _to_float(row.get(rate_col))
+        if not raw_date or "." not in raw_date or rate is None:
+            continue
+        out.append({"date": raw_date.replace(".", "-"), "value": rate})
+    return pd.DataFrame(out)
+
+
+def fetch_fx(pages: int = 2, code: str = "FX_USDKRW") -> pd.DataFrame:
+    import httpx
+
+    frames: list[pd.DataFrame] = []
+    headers = {**_HEADERS, "Referer": "https://finance.naver.com/marketindex/"}
+    for p in range(1, pages + 1):
+        try:
+            r = httpx.get(_FX_BASE, params={"marketindexCd": code, "page": str(p)}, headers=headers, timeout=20)
+            r.raise_for_status()
+            html = r.content.decode("euc-kr", errors="replace")
+            frames.append(parse_fx_table(html))
+        except Exception as e:  # noqa: BLE001
+            log.warning("naver.fx.page_fail", page=p, error=str(e))
+    if not frames:
+        return pd.DataFrame(columns=["date", "value"])
+    return pd.concat(frames, ignore_index=True).drop_duplicates(subset=["date"])
+
+
+def ingest_fx(pages: int = 2) -> int:
+    """원/달러 매매기준율 → macro(series_id=USDKRW). 모닝·일일 배치 호출."""
+    from engine.db import upsert
+
+    df = fetch_fx(pages=pages)
+    rows = [
+        {"series_id": "USDKRW", "date": str(r["date"]), "value": float(r["value"]), "source": "NAVER"}
+        for _, r in df.iterrows()
+        if r.get("value") is not None and not pd.isna(r["value"])
+    ]
+    total = upsert("macro", rows, on_conflict="series_id,date") if rows else 0
+    log.info("naver.fx.done", rows=total)
+    return total
+
+
 # ── 네트워크 fetch ──
 
 def fetch_frgn(symbol: str, pages: int = 3) -> pd.DataFrame:
