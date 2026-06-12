@@ -7,6 +7,7 @@ import {
   getReports,
   getBacktests,
   getPickHistory,
+  getMorningBrief,
 } from "@/lib/data";
 import { fmtPrice, fmtPct } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -133,14 +134,25 @@ function RatingBadge({ rating }: { rating: string | null }) {
 }
 
 export default async function DashboardPage() {
-  const [kpi, quotes, recs, reports, backtests, history] = await Promise.all([
+  const [kpi, quotes, recs, reports, backtests, history, brief] = await Promise.all([
     getDashboardKpi(),
     getMarketQuotes(),
     getRecommendations(),
     getReports(10),
     getBacktests(),
     getPickHistory(20),
+    getMorningBrief(),
   ]);
+
+  // 시장 레짐 — 모닝 브리프(market 리포트) 실데이터. 없으면 필 비표시.
+  const regime = brief.data?.regime ?? null;
+  const regimePill = regime
+    ? regime.regime === "risk_off"
+      ? { text: "시장 레짐 · 방어 구간", cls: "bg-bad-soft text-bad" }
+      : regime.regime === "risk_on"
+        ? { text: "시장 레짐 · 공격 구간", cls: "bg-good-soft text-good" }
+        : { text: "시장 레짐 · 중립", cls: "bg-warn-soft text-warn" }
+    : null;
 
   const picks = recs.isSample
     ? []
@@ -190,10 +202,12 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {/* 레짐 필 */}
-            <span className="rounded-[999px] bg-bad-soft px-3 py-1.5 text-xs font-semibold text-bad">
-              시장 레짐 · 방어 구간
-            </span>
+            {/* 레짐 필 — 모닝 브리프 실데이터 */}
+            {regimePill && (
+              <span className={`rounded-[999px] px-3 py-1.5 text-xs font-semibold ${regimePill.cls}`}>
+                {regimePill.text}
+              </span>
+            )}
             <Link
               href="/focus"
               className="rounded-[999px] bg-accent px-4 py-1.5 text-xs font-semibold text-[#0B0C10] hover:bg-accent-2 transition-colors"
