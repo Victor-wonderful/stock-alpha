@@ -4,38 +4,53 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ───────── 디자인 토큰 (UI V2 — 라이트, 토스 톤) ─────────
+/* ───────── 디자인 토큰 (UI V3 — 다크+옐로) ─────────
    단일 출처: design/stock-alpha-ui.pen 의 변수와 동기화 */
 :root {
   --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  --bg: #f2f4f6;            /* 최하단 배경 */
-  --surface: #ffffff;       /* 카드/패널 */
-  --surface-2: #f9fafb;     /* 패널 위 요소 */
-  --surface-3: #f2f4f6;     /* hover/강조 */
-  --border: #e5e8eb;        /* 기본 보더 */
-  --border-strong: #d2d7dc; /* 강조 보더 */
+  /* 배경 계층 */
+  --bg: #0B0C10;            /* 최하단 배경 */
+  --surface: #16181D;       /* 카드/패널 */
+  --surface-2: #1E2026;     /* 패널 위 요소 (구 surface-sub) */
+  --surface-3: #262931;     /* hover/강조 */
+  --border: #2A2D35;        /* 기본 보더 */
+  --border-strong: #353840; /* 강조 보더 */
+  --border-soft: #1F2229;   /* 소프트 보더 */
 
-  --text: #191f28;          /* 본문 */
-  --text-dim: #4e5968;      /* 보조 */
-  --text-mute: #8b95a1;     /* 약함 */
+  /* 액센트 (옐로우-그린) */
+  --accent: #DDF247;
+  --accent-2: #C8E034;
+  --accent-soft: #DDF24722; /* 알파 22 */
+  --accent-dim: #DDF24722;  /* bg-accent-dim 호환 유지 */
+  --text-on-accent: #0B0C10;
 
-  --accent: #3182f6;        /* 브랜드 블루 */
-  --accent-dim: #ebf3fe;    /* 브랜드 소프트(틴트 배경) */
+  /* 텍스트 */
+  --text: #FFFFFF;           /* primary */
+  --text-dim: #9CA0A8;       /* secondary */
+  --text-mute: #5C6068;      /* tertiary */
 
-  /* 한국 시장 관례: 상승/매수 = 빨강, 하락/매도 = 파랑 */
-  --bull: #f04452;
-  --bull-soft: #fdedee;
-  --bear: #3485fa;
-  --bear-soft: #eaf2fe;
+  /* 상태 색상 — 상승=그린/하락=레드 (디자인 V3 결정) */
+  --good: #4ADE80;
+  --good-soft: #4ADE8020;
+  --bad: #F87171;
+  --bad-soft: #F8717120;
+  --warn: #FBBF24;
+  --warn-soft: #FBBF2415;
 
-  --warn: #fa9538;          /* 주의/중립 판정 */
-  --warn-soft: #fef3e7;
-  --good: #12b886;          /* 통과/건전성 */
-  --good-soft: #e6f8f1;
+  /* 기존 bull/bear 변수 — good/bad 로 리매핑 (하위 호환) */
+  --bull: #4ADE80;
+  --bull-soft: #4ADE8020;
+  --bear: #F87171;
+  --bear-soft: #F8717120;
 
-  color-scheme: light;
+  /* radius 토큰 */
+  --radius-card: 20px;
+  --radius-inner: 12px;
+  --radius-pill: 999px;
+
+  color-scheme: dark;
 }
 
 * {
@@ -51,6 +66,7 @@ body {
   color: var(--text);
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums; /* 숫자 고정폭 전역 */
 }
 
 /* 숫자는 고정폭(tabular) — 금융 데이터 정렬 핵심 */
@@ -64,9 +80,9 @@ body {
 }
 
 /* 스크롤바 */
-::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 6px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
 /* 포커스 링 */

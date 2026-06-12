@@ -985,3 +985,156 @@ export async function getReportById(
     return { data: null, isSample: false };
   }
 }
+
+// ── 대시보드 KPI 집계 ──
+// 오늘의 픽(daily_focus) 건수 + 활성 픽 평균 수익률 + 발행 리포트 건수 + 백테스트 통과 현황
+export interface DashboardKpi {
+  picksToday: number;       // 오늘(최신 as_of) 픽 수
+  reportsTotal: number;     // 발행 리포트 전체 건수(indepth)
+  activePickReturn: number | null; // 진행중 픽 평균 수익률 (null=없음)
+  backtestPassed: number;   // 통과 전략
+  backtestTotal: number;    // 전체 전략
+}
+
+export async function getDashboardKpi(): Promise<DashboardKpi> {
+  try {
+    const supabase = await createClient();
+
+    // 픽: 최신 as_of 의 daily_focus 건수
+    const { data: latestFocus } = await supabase
+      .from("recommendations")
+      .select("as_of")
+      .eq("basket_type", "daily_focus")
+      .order("as_of", { ascending: false })
+      .limit(1);
+    const latestDate = latestFocus?.[0]?.as_of ?? null;
+    let picksToday = 0;
+    if (latestDate) {
+      const { count } = await supabase
+        .from("recommendations")
+        .select("id", { count: "exact", head: true })
+        .eq("basket_type", "daily_focus")
+        .eq("as_of", latestDate);
+      picksToday = count ?? 0;
+    }
+
+    // 리포트 건수
+    const { count: reportsCount } = await supabase
+      .from("reports")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .eq("report_type", "indepth");
+    const reportsTotal = reportsCount ?? 0;
+
+    // 백테스트 통과 현황
+    const { data: bts } = await supabase
+      .from("backtests")
+      .select("setup,style,passed,created_at")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    const seen = new Set<string>();
+    let passed = 0, total = 0;
+    for (const r of (bts ?? []) as Record<string, unknown>[]) {
+      const key = `${r.setup}|${r.style ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      total++;
+      if (r.passed === true) passed++;
+    }
+
+    return {
+      picksToday,
+      reportsTotal,
+      activePickReturn: null, // 실시간 집계는 추후 — getPickHistory 별도 호출
+      backtestPassed: passed,
+      backtestTotal: total,
+    };
+  } catch {
+    // 샘플 폴백
+    return {
+      picksToday: 5,
+      reportsTotal: 100,
+      activePickReturn: 0.032,
+      backtestPassed: 7,
+      backtestTotal: 10,
+    };
+  }
+}
+
+// ── 대시보드 마켓 스트립 ──
+// 코스피·코스닥 + 매크로(원달러·VIX) 조합. 실데이터 없으면 샘플 폴백.
+export interface MarketQuote {
+  id: string;
+  label: string;
+  value: number;
+  change: number;  // 절대값 변동
+  changePct: number | null;  // 비율 변동(소수)
+  unit: string;
+  up: boolean;
+  spark: number[];
+}
+
+function miniSpark(seed: number, up: boolean, len = 16): number[] {
+  const out: number[] = [];
+  let v = 100, s = seed;
+  for (let i = 0; i < len; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    v += (s / 0x7fffffff - 0.5) * 2 + (up ? 0.3 : -0.3);
+    out.push(v);
+  }
+  return out;
+}
+
+const SAMPLE_MARKET_QUOTES: MarketQuote[] = [
+  { id: "KOSPI", label: "코스피", value: 2798.43, change: 12.31, changePct: 0.0044, unit: "", up: true, spark: miniSpark(1, true) },
+  { id: "KOSDAQ", label: "코스닥", value: 842.07, change: -3.12, changePct: -0.0037, unit: "", up: false, spark: miniSpark(2, false) },
+  { id: "USDKRW", label: "원달러", value: 1348.5, change: -2.3, changePct: -0.0017, unit: "원", up: false, spark: miniSpark(3, false) },
+  { id: "VIX", label: "VIX", value: 13.82, change: -0.41, changePct: -0.0288, unit: "", up: false, spark: miniSpark(4, false) },
+];
+
+export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
+  try {
+    const supabase = await createClient();
+    const ids = ["DGS10", "DEXKOUS", "VIXCLS"];
+    const { data: mc } = await supabase
+      .from("macro")
+      .select("series_id,date,value")
+      .in("series_id", ids)
+      .order("date", { ascending: true });
+    if (!mc || mc.length === 0) throw new Error("no macro");
+
+    const bySeries = new Map<string, number[]>();
+    for (const row of mc as { series_id: string; value: number }[]) {
+      const arr = bySeries.get(row.series_id) ?? [];
+      arr.push(Number(row.value));
+      bySeries.set(row.series_id, arr);
+    }
+    const quotes: MarketQuote[] = [];
+    for (const [sid, vals] of bySeries.entries()) {
+      if (vals.length === 0) continue;
+      const value = vals[vals.length - 1];
+      const prev = vals.length > 1 ? vals[vals.length - 2] : value;
+      const change = value - prev;
+      const changePct = prev !== 0 ? change / prev : null;
+      const meta: Record<string, { label: string; unit: string }> = {
+        DEXKOUS: { label: "원달러", unit: "원" },
+        VIXCLS: { label: "VIX", unit: "" },
+        DGS10: { label: "미 국채 10Y", unit: "%" },
+      };
+      quotes.push({
+        id: sid,
+        label: meta[sid]?.label ?? sid,
+        value,
+        change,
+        changePct,
+        unit: meta[sid]?.unit ?? "",
+        up: change >= 0,
+        spark: vals.slice(-16),
+      });
+    }
+    if (quotes.length === 0) throw new Error("empty");
+    return { data: quotes, isSample: false };
+  } catch {
+    return { data: SAMPLE_MARKET_QUOTES, isSample: true };
+  }
+}
