@@ -37,6 +37,7 @@ function MarketCard({
   changePct,
   spark,
   sample,
+  asOf,
 }: {
   label: string;
   value: number;
@@ -44,6 +45,7 @@ function MarketCard({
   changePct: number | null;
   spark: number[];
   sample?: boolean;
+  asOf?: string;
 }) {
   const up = (changePct ?? 0) >= 0;
   const changeColor = up ? "text-good" : "text-bad";
@@ -61,9 +63,12 @@ function MarketCard({
 
   return (
     <div className="flex flex-col gap-1.5 rounded-[12px] bg-surface px-4 py-3 border border-border">
-      <span className="text-[11px] text-text-mute">
-        {label}
-        {sample && <span className="ml-1 rounded-[4px] bg-surface-2 px-1 py-px text-[9px] text-text-mute">예시</span>}
+      <span className="flex items-center justify-between text-[11px] text-text-mute">
+        <span>
+          {label}
+          {sample && <span className="ml-1 rounded-[4px] bg-surface-2 px-1 py-px text-[9px] text-text-mute">예시</span>}
+        </span>
+        {asOf && <span className="tnum text-[9px]">{asOf.slice(5).replace("-", "/")} 기준</span>}
       </span>
       <div className="flex items-end justify-between gap-2">
         <div>
@@ -228,6 +233,7 @@ export default async function DashboardPage() {
               changePct={q.changePct}
               spark={q.spark}
               sample={q.sample}
+              asOf={q.asOf}
             />
           ))}
         </div>

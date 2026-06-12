@@ -1089,6 +1089,7 @@ export interface MarketQuote {
   up: boolean;
   spark: number[];
   sample?: boolean;  // 이 항목만 예시값(실데이터 소스 미연결)
+  asOf?: string;     // 기준일(YYYY-MM-DD) — FRED 1~2일 지연이라 표시 필수
 }
 
 function miniSpark(seed: number, up: boolean, len = 16): number[] {
@@ -1134,10 +1135,12 @@ export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
     if (!mc || mc.length === 0) throw new Error("no macro");
 
     const bySeries = new Map<string, number[]>();
-    for (const row of mc as { series_id: string; value: number }[]) {
+    const lastDate = new Map<string, string>();
+    for (const row of mc as { series_id: string; date: string; value: number }[]) {
       const arr = bySeries.get(row.series_id) ?? [];
       arr.push(Number(row.value));
       bySeries.set(row.series_id, arr);
+      lastDate.set(row.series_id, row.date); // date 오름차순 조회라 마지막 값이 최신
     }
     const quotes: MarketQuote[] = [];
     for (const meta of META) {
@@ -1161,6 +1164,7 @@ export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
         unit: meta.unit,
         up: change >= 0,
         spark: vals.slice(-16),
+        asOf: lastDate.get(meta.id),
       });
     }
     if (quotes.length === 0) throw new Error("empty");
