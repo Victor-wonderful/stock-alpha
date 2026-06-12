@@ -70,8 +70,9 @@ export default async function ReportDetailPage({
   const lastNow = latest.data?.close ?? null;
   const riskPct = await getUserRiskPct();
 
-  // 픽 여부 확인 (오늘의 픽 배지)
-  const { data: history } = await getPickHistory(60);
+  // 픽 여부 확인 (오늘의 픽 배지) — 이 리포트의 as_of 까지 커버되게 충분히 조회
+  // (60이면 12일치뿐 — 과거 리포트에서 배지가 조용히 누락되던 패턴, 2026-06-12 점검)
+  const { data: history } = await getPickHistory(500);
   const isPick = history.some(
     (h) => h.symbol === p.instrument.symbol && h.as_of === report.as_of,
   );

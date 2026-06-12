@@ -38,10 +38,19 @@ export default async function ReportsPage({
   const ratingFilter = sp.rating ?? null;
   const activeMarket = sp.market ?? null; // KOSPI | KOSDAQ
 
-  const [{ data: reports }, { data: history }] = await Promise.all([
-    getReports(200, { includeUnfit: includeUnfit || ratingFilter === "거래 부적합" }),
-    getPickHistory(120),
+  const FETCH_LIMIT = 400; // 일 발행 상한 100 × 며칠치 — 한도 도달 시 마지막(부분) 그룹은 버림
+  const [{ data: fetched }, { data: history }] = await Promise.all([
+    getReports(FETCH_LIMIT, { includeUnfit: includeUnfit || ratingFilter === "거래 부적합" }),
+    getPickHistory(300),
   ]);
+
+  // 조회 한도에 걸렸으면 가장 오래된 날짜 그룹이 중간에 잘렸을 수 있다 —
+  // 부분 그룹을 건수가 맞는 양 표시하느니 그 날짜 전체를 숨긴다(정직성).
+  let reports = fetched;
+  if (fetched.length === FETCH_LIMIT) {
+    const oldestDay = fetched[fetched.length - 1]?.as_of;
+    reports = fetched.filter((r) => r.as_of !== oldestDay);
+  }
 
   const pickKeys = new Set(history.map((h) => `${h.as_of}:${h.symbol}`));
   const latestDay = reports[0]?.as_of ?? null;

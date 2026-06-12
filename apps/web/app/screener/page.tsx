@@ -123,7 +123,8 @@ export default async function ScreenerPage({
   const activeMarket = sp.market ?? null;
   const search = sp.q ?? "";
 
-  const { data: allSignals, isSample } = await getSignals({}, 200);
+  // 셋업 칩 건수·하이라이트 집계가 전체 기준이어야 함 — 오늘만 271건이라 200 한도는 잘림(2026-06-12 점검)
+  const { data: allSignals, isSample, total } = await getSignals({}, 1000);
 
   // 셋업별 건수 집계 (필터 전 전체 기준)
   const setupCounts = new Map<string, number>();
@@ -167,7 +168,7 @@ export default async function ScreenerPage({
   return (
     <AppShell
       title="추천 종목"
-      subtitle={`오늘 발행된 전체 시그널 ${allSignals.length}건 — 백테스트 게이트 통과 셋업만 발행 · 매일 16:30 갱신`}
+      subtitle={`발행 중인 전체 시그널 ${total ?? allSignals.length}건 — 백테스트 게이트 통과 셋업만 발행 · 매일 16:30 갱신`}
       badge={
         <span className="flex items-center gap-1.5 rounded-[999px] bg-good-soft px-3 py-1 text-[11px] font-bold text-good">
           검증 통과 셋업만 — 미통과 발행 금지

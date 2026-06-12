@@ -122,7 +122,7 @@ function HowItWorks({ analyzed }: { analyzed: number }) {
 export default async function FocusContent() {
   const [recs, allReports, history, brief, riskPct] = await Promise.all([
     getRecommendations(),
-    getReports(150, { includeUnfit: true }),
+    getReports(200, { includeUnfit: true }), // 최신일 분포 집계 — 일 발행 상한(100)+α 커버
     getPickHistory(),
     getMorningBrief(),
     getUserRiskPct(),
