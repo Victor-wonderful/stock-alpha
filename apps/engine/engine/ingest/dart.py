@@ -128,6 +128,54 @@ def normalize_shares(api_json: dict) -> float | None:
     return None
 
 
+# ── 일일 쿼터 가드 ──
+# DART 한도는 키당 일 2만 건(KST 자정 리셋). 추정 분할 운영의 사고를 막기 위해
+# 로컬 카운터로 호출을 세고, 한도 임박 시 DartQuotaError 로 중단시킨다.
+
+import json as _json
+import threading as _threading
+from datetime import datetime as _dt
+from datetime import timedelta as _td
+from pathlib import Path as _Path
+
+DART_DAILY_LIMIT = 19_500  # 공식 20,000 에서 안전 마진
+_QUOTA_PATH = _Path(__file__).resolve().parents[2] / ".dart_quota.json"
+_quota_lock = _threading.Lock()
+
+
+class DartQuotaError(RuntimeError):
+    """일일 호출 한도 도달 — 내일(KST 자정 후) 재개."""
+
+
+def _kst_today() -> str:
+    return (_dt.utcnow() + _td(hours=9)).strftime("%Y-%m-%d")
+
+
+def quota_used(date: str | None = None) -> int:
+    try:
+        data = _json.loads(_QUOTA_PATH.read_text("utf-8"))
+        return int(data.get(date or _kst_today(), 0))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _count_call(n: int = 1) -> None:
+    """호출 n건 기록. 한도 도달 시 DartQuotaError."""
+    with _quota_lock:
+        today = _kst_today()
+        try:
+            data = _json.loads(_QUOTA_PATH.read_text("utf-8"))
+        except Exception:  # noqa: BLE001
+            data = {}
+        used = int(data.get(today, 0))
+        if used + n > DART_DAILY_LIMIT:
+            raise DartQuotaError(
+                f"DART 일일 한도 도달 ({used}/{DART_DAILY_LIMIT}) — KST 자정 후 재개"
+            )
+        # 오늘 키만 유지(파일 비대 방지)
+        _QUOTA_PATH.write_text(_json.dumps({today: used + n}), "utf-8")
+
+
 # ── 네트워크 fetch ──
 
 def fetch_shares(corp_code: str, bsns_year: str, reprt_code: str = "11011") -> float | None:
@@ -141,6 +189,7 @@ def fetch_shares(corp_code: str, bsns_year: str, reprt_code: str = "11011") -> f
         "bsns_year": bsns_year,
         "reprt_code": reprt_code,
     }
+    _count_call()
     resp = httpx.get(_STOCK_API, params=params, timeout=20)
     resp.raise_for_status()
     j = resp.json()
@@ -161,6 +210,7 @@ def fetch_financials(corp_code: str, bsns_year: str, reprt_code: str, fs_div: st
         "reprt_code": reprt_code,
         "fs_div": fs_div,
     }
+    _count_call()
     resp = httpx.get(_API, params=params, timeout=20)
     resp.raise_for_status()
     return resp.json()

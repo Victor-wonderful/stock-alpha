@@ -154,3 +154,38 @@ def test_r_mdd_sample_size_invariant():
     large = evaluate_gate(_trades(pattern * 100), GateThresholds(min_trades=1))
     assert small.mdd is not None and large.mdd is not None
     assert large.mdd < 0.10  # 우위 전략의 R-MDD 는 낮게 유지
+
+
+# ── 게이트 히스테리시스 (0020) ──
+
+def test_hysteresis_first_run_takes_raw():
+    from engine.backtest.runner import apply_hysteresis
+    assert apply_hysteresis(True, None) is True
+    assert apply_hysteresis(False, None) is False
+
+
+def test_hysteresis_holds_single_flip():
+    from engine.backtest.runner import apply_hysteresis
+    # 직전: 안정화 PASS · 원측정 PASS → 이번 FAIL 1회는 보류(PASS 유지)
+    assert apply_hysteresis(False, {"passed": True, "passed_raw": True}) is True
+    # 반대 방향도 동일
+    assert apply_hysteresis(True, {"passed": False, "passed_raw": False}) is False
+
+
+def test_hysteresis_flips_on_second_consecutive():
+    from engine.backtest.runner import apply_hysteresis
+    # 직전: 안정화 PASS 였지만 원측정 FAIL → 이번도 FAIL = 2연속 → 전환
+    assert apply_hysteresis(False, {"passed": True, "passed_raw": False}) is False
+    assert apply_hysteresis(True, {"passed": False, "passed_raw": True}) is True
+
+
+def test_hysteresis_agreement_passthrough():
+    from engine.backtest.runner import apply_hysteresis
+    assert apply_hysteresis(True, {"passed": True, "passed_raw": False}) is True
+    assert apply_hysteresis(False, {"passed": False, "passed_raw": True}) is False
+
+
+def test_hysteresis_legacy_rows_without_raw():
+    from engine.backtest.runner import apply_hysteresis
+    # passed_raw 없는 과거 행 — 원측정=안정화로 간주
+    assert apply_hysteresis(False, {"passed": True, "passed_raw": None}) is True

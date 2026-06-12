@@ -47,6 +47,8 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
     flows_map = load_flows_map()
     earnings_map = load_earnings_map()
 
+    prev = _load_prev_verdicts()
+
     passed: dict[str, bool] = {}
     bt_rows: list[dict] = []
     for setup in playbooks.ALL_DETECTORS:
@@ -63,7 +65,8 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
         # 값이 흔들려 경계선 셋업이 PASS/FAIL 을 오간다. 시간순 = 실제 시퀀스.
         trades.sort(key=lambda t: t.entry_ts)
         gr = evaluate_gate(trades, thr)
-        passed[setup] = gr.passed
+        effective = apply_hysteresis(gr.passed, prev.get(setup))
+        passed[setup] = effective
         bt_rows.append({
             "strategy_key": f"playbook:{setup}",
             "setup": setup,
@@ -73,14 +76,48 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
             "win_rate": gr.win_rate,
             "avg_rr": gr.avg_rr,
             "expectancy_r": gr.expectancy_r,
-            "passed": gr.passed,           # 게이트 판정 저장 — 웹/리포트는 read만
+            "passed": effective,           # 안정화 판정 — 웹/리포트/시그널 소비
+            "passed_raw": gr.passed,       # 이번 런의 원측정값 (진단용)
             "period": "daily-history",
         })
-        log.info("backtest.setup", setup=setup, passed=gr.passed,
+        if effective != gr.passed:
+            log.info("backtest.gate.held", setup=setup, raw=gr.passed, held=effective)
+        log.info("backtest.setup", setup=setup, passed=effective, raw=gr.passed,
                  n=gr.n_trades, reasons=gr.reasons)
 
     upsert("backtests", bt_rows)
     return passed
+
+
+def _load_prev_verdicts() -> dict[str, dict]:
+    """셋업별 직전 런 판정 {setup: {passed(안정화), passed_raw(원측정)}}."""
+    latest: dict[str, dict] = {}
+    rows = sorted(
+        select_all("backtests", "setup,passed,passed_raw,created_at"),
+        key=lambda b: b.get("created_at") or "",
+    )
+    for bt in rows:
+        if bt.get("setup"):
+            latest[bt["setup"]] = bt
+    return latest
+
+
+def apply_hysteresis(raw: bool, prev: dict | None) -> bool:
+    """게이트 히스테리시스 (순수) — 경계선 셋업의 일일 PASS/FAIL 플립 억제.
+
+    상태 변경은 '2회 연속 같은 원측정'일 때만:
+      · 이번 측정 == 직전 안정화 판정 → 유지 (변화 없음)
+      · 다르면, 직전 런의 원측정도 같은 방향이었을 때만 상태 전환
+      · 첫 측정(이전 기록 없음)은 그대로 채택
+    """
+    if prev is None:
+        return raw
+    prev_eff = bool(prev.get("passed"))
+    prev_raw = prev.get("passed_raw")
+    prev_raw = prev_eff if prev_raw is None else bool(prev_raw)
+    if raw == prev_eff:
+        return raw
+    return raw if prev_raw == raw else prev_eff
 
 
 def passed_setups(thresholds: GateThresholds | None = None) -> list[str]:

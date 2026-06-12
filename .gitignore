@@ -55,3 +55,5 @@ logs/
 
 # KIS 토큰 캐시 (24h, 민감)
 apps/engine/.kis_token.json
+apps/engine/.dart_quota.json
+backups/

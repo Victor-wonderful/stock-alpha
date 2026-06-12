@@ -63,3 +63,17 @@ def test_normalize_financials_no_relevant_accounts():
     api = {"list": [{"sj_div": "BS", "account_nm": "기타포괄손익", "thstrm_amount": "100"}]}
     # assets/revenue/op_income/net_income 없음 → 행 생성 안 함
     assert dart.normalize_financials(api, 1, "2024", "11011", "CFS") == []
+
+
+# ── 일일 쿼터 가드 ──
+
+def test_dart_quota_guard(tmp_path, monkeypatch):
+    import pytest
+    monkeypatch.setattr(dart, "_QUOTA_PATH", tmp_path / "q.json")
+    monkeypatch.setattr(dart, "DART_DAILY_LIMIT", 3)
+    dart._count_call()
+    dart._count_call(2)
+    assert dart.quota_used() == 3
+    with pytest.raises(dart.DartQuotaError):
+        dart._count_call()
+    assert dart.quota_used() == 3  # 초과분은 기록되지 않음

@@ -158,16 +158,29 @@ def ingest_krx_financials(
                 if shares:
                     rows[0]["shares"] = shares
             return symbol, rows, None
+        except dart.DartQuotaError as e:
+            return symbol, [], e  # 한도 도달 — 메인 루프가 전체 중단
         except Exception as e:  # noqa: BLE001
             return symbol, [], str(e)
 
     total = 0
     done = 0
     failed = 0
+    quota_hit = False
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = [ex.submit(_fetch, t) for t in targets]
         for fut in as_completed(futures):
+            if fut.cancelled():
+                continue
             symbol, rows, err = fut.result()
+            if isinstance(err, dart.DartQuotaError):
+                # 한도 도달 — 미시작 작업 취소 후 종료. 재개는 resume 키(have)가 보장.
+                if not quota_hit:
+                    quota_hit = True
+                    log.warning("financials.quota_exceeded", used=dart.quota_used(), done=done)
+                    for f in futures:
+                        f.cancel()
+                continue
             if err:
                 failed += 1
                 log.warning("financials.fail", symbol=symbol, error=err)
@@ -175,6 +188,12 @@ def ingest_krx_financials(
                 total += upsert("financials", rows, on_conflict="instrument_id,period,fs_type")
             done += 1
             if done % 200 == 0:
-                log.info("financials.progress", done=done, of=len(targets), rows=total, failed=failed)
-    log.info("ingest_krx_financials.done", rows=total, targets=len(targets), failed=failed)
+                log.info(
+                    "financials.progress", done=done, of=len(targets), rows=total,
+                    failed=failed, dart_quota=dart.quota_used(),
+                )
+    log.info(
+        "ingest_krx_financials.done", rows=total, targets=len(targets),
+        failed=failed, quota_hit=quota_hit, dart_quota=dart.quota_used(),
+    )
     return total

@@ -20,13 +20,18 @@ def load_instrument_map(exchange: str | None = None) -> dict[tuple[str, str], in
     return {(r["symbol"], r["exchange"]): r["id"] for r in rows}
 
 
-def load_kr_instrument_map() -> dict[tuple[str, str], int]:
-    """한국 시장(KOSPI/KOSDAQ/레거시 KRX) 전체 매핑."""
-    rows = select_all("instruments", "id,symbol,exchange")
+def load_kr_instrument_map(active_only: bool = True) -> dict[tuple[str, str], int]:
+    """한국 시장(KOSPI/KOSDAQ/레거시 KRX) 매핑.
+
+    기본은 활성 실주식만 — ETF/ETN/스팩(비활성 ~1,300종목)에 인제스트 호출을
+    낭비하지 않는다(2026-06-12 점검: 수급 배치가 3,859 전체를 돌고 있었음).
+    전체가 필요하면 active_only=False.
+    """
+    rows = select_all("instruments", "id,symbol,exchange,active")
     return {
         (r["symbol"], r["exchange"]): r["id"]
         for r in rows
-        if r["exchange"] in KR_EXCHANGES
+        if r["exchange"] in KR_EXCHANGES and (not active_only or r.get("active"))
     }
 
 
