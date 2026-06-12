@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
 import { DiagnosisForm } from "@/components/DiagnosisForm";
-import { Panel, Stat } from "@/components/ui";
+import { Panel } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { getPortfolioDiagnosis, type HoldingInput } from "@/lib/data";
 import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
@@ -192,58 +192,85 @@ export default async function DiagnosisPage({
       }
     >
       <div className="space-y-4">
-        <Panel title="종목 입력 — 보유 중이든, 매수 검토 중이든">
-          <DiagnosisForm />
-        </Panel>
+        {/* ── 1행: 종목 입력(좌 560) + 진단 결과(우) — 시안 b5YzG ── */}
+        <div className="grid items-stretch gap-4 lg:grid-cols-[560px_minmax(0,1fr)]">
+          <section className="rounded-[20px] border border-border bg-surface px-6 py-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-text">종목 입력</h2>
+              <span className="text-[11px] text-text-mute">종목명 또는 코드 · 비중 합계 100%</span>
+            </div>
+            <DiagnosisForm />
+          </section>
+
+          <section className="flex flex-col rounded-[20px] border border-border bg-surface px-6 py-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-text">포트폴리오 진단 결과</h2>
+              {diag && <span className="text-[11px] text-text-mute">최근 종가 기준</span>}
+            </div>
+            {!diag ? (
+              <div className="flex flex-1 items-center justify-center py-10 text-center text-sm text-text-mute">
+                좌측에 종목을 입력하고 진단하기를 누르면
+                <br />
+                포트폴리오 리스크와 종목별 판정이 표시됩니다
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col justify-between gap-4">
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                  {[
+                    {
+                      label: "가중 합성알파",
+                      value: diag.weighted_alpha != null ? `${diag.weighted_alpha >= 0 ? "+" : ""}${diag.weighted_alpha.toFixed(2)}σ` : "—",
+                      sub: (diag.weighted_alpha ?? 0) >= 0.3 ? "시스템 선호 구간" : "선호 신호 약함",
+                      color: (diag.weighted_alpha ?? 0) >= 0 ? "text-good" : "text-bad",
+                    },
+                    {
+                      label: "가중 베타",
+                      value: fmtNum(diag.weighted_beta, 2),
+                      sub: (diag.weighted_beta ?? 1) > 1.1 ? "시장보다 변동 큼" : "시장 수준 변동",
+                      color: (diag.weighted_beta ?? 1) > 1.1 ? "text-warn" : "text-text",
+                    },
+                    {
+                      label: "예상 변동성 (연)",
+                      value: fmtPct(diag.weighted_vol),
+                      sub: "가중 평균",
+                      color: "text-text",
+                    },
+                    {
+                      label: "섹터 집중도",
+                      value: diag.top_sector ? `${(diag.top_sector.weight * 100).toFixed(0)}%` : "—",
+                      sub: diag.top_sector?.sector ?? "—",
+                      color: (diag.top_sector?.weight ?? 0) >= 0.4 ? "text-bad" : "text-text",
+                    },
+                  ].map(({ label, value, sub, color }) => (
+                    <div key={label} className="flex flex-col gap-1 rounded-[12px] bg-surface-2 px-3.5 py-3">
+                      <span className="text-[11px] text-text-mute">{label}</span>
+                      <span className={`tnum text-lg font-extrabold leading-none ${color}`}>{value}</span>
+                      <span className="text-[10px] text-text-mute">{sub}</span>
+                    </div>
+                  ))}
+                </div>
+                {(diag.warnings.length > 0 || diag.notFound.length > 0) && (
+                  <div className="space-y-2">
+                    {diag.warnings.map((w, i) => (
+                      <p key={i} className="flex items-center gap-2 rounded-[12px] border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-xs font-semibold text-warn">
+                        <span>⚠</span>
+                        {w}
+                      </p>
+                    ))}
+                    {diag.notFound.length > 0 && (
+                      <p className="rounded-[12px] border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-xs text-warn">
+                        찾지 못했거나 이름이 겹칩니다: {diag.notFound.join(", ")} — 정확한 종목명 또는 6자리 코드로 입력해 주세요.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
 
         {diag && (
           <>
-            {diag.notFound.length > 0 && (
-              <p className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
-                찾지 못했거나 이름이 여러 종목과 겹칩니다: {diag.notFound.join(", ")} —
-                정확한 종목명 또는 6자리 코드로 입력해 주세요.
-              </p>
-            )}
-
-            {/* 포트폴리오 요약 */}
-            <Panel title="포트폴리오 요약">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Stat
-                  label="가중 합성알파"
-                  value={fmtNum(diag.weighted_alpha, 2)}
-                  tone={(diag.weighted_alpha ?? 0) >= 0 ? "bull" : "bear"}
-                  sub="0보다 크면 시스템 선호"
-                />
-                <Stat
-                  label="가중 베타"
-                  value={fmtNum(diag.weighted_beta, 2)}
-                  sub="1보다 크면 시장보다 출렁임"
-                />
-                <Stat
-                  label="가중 연 변동성"
-                  value={fmtPct(diag.weighted_vol)}
-                />
-                <Stat
-                  label="최대 섹터 비중"
-                  value={
-                    diag.top_sector
-                      ? `${(diag.top_sector.weight * 100).toFixed(0)}%`
-                      : "—"
-                  }
-                  sub={diag.top_sector?.sector ?? undefined}
-                />
-              </div>
-              {diag.warnings.length > 0 && (
-                <ul className="mt-3 space-y-1">
-                  {diag.warnings.map((w, i) => (
-                    <li key={i} className="flex gap-2 text-xs text-warn">
-                      <span>⚠</span>
-                      {w}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Panel>
 
             {/* 종합 등급 + 섹터 배분 */}
             <div className="grid gap-4 lg:grid-cols-2">
