@@ -57,3 +57,7 @@ logs/
 apps/engine/.kis_token.json
 apps/engine/.dart_quota.json
 backups/
+.vercel
+
+# TS 증분 빌드 캐시 (아티팩트)
+*.tsbuildinfo
