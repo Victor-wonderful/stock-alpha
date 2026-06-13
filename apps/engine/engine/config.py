@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     kis_app_secret: str = Field(default="", alias="KIS_APP_SECRET")
     kis_env: str = Field(default="paper", alias="KIS_ENV")
 
+    # ── 백테스트 거래비용 (변당 비율, 캘리브레이션용 — 기본은 한국 현물) ──
+    backtest_commission_pct: float = Field(default=0.00015, alias="BACKTEST_COMMISSION_PCT")
+    backtest_tax_pct: float = Field(default=0.0018, alias="BACKTEST_TAX_PCT")
+    backtest_slippage_pct: float = Field(default=0.0010, alias="BACKTEST_SLIPPAGE_PCT")
+
 
 @lru_cache
 def get_settings() -> Settings:

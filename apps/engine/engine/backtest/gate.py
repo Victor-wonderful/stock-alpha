@@ -34,7 +34,10 @@ from engine.backtest.metrics import (
 @dataclass
 class GateThresholds:
     min_trades: int = 20            # 표본 수 (과적합·우연 방지)
-    min_expectancy_r: float = 0.05  # 트레이드당 기대값(R) — 비용 감안 실질 우위
+    # 트레이드당 기대값(R) 하한. 2026-06-13 이후 expectancy_r 은 거래비용 차감 net
+    # (engine/backtest/costs.py) → 이 값은 '비용 대용'이 아니라 net 위에 얹는
+    # 순수 과적합/안전 마진. 비용을 명시 차감하므로 net 기준 양의 마진이면 실거래 우위.
+    min_expectancy_r: float = 0.05
     max_mdd: float = 0.40           # 일별 리스크예산 곡선(daily_r_curve) 최대 낙폭
     risk_frac: float = 0.01         # 하루 리스크 예산 비율
     winsor_r: float = 10.0          # R 멀티플 클립(±) — 이상치의 기대값 왜곡 차단

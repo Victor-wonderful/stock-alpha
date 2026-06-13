@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from engine.backtest.costs import default_cost_model
 from engine.backtest.event_backtest import backtest_playbook
 from engine.backtest.gate import GateThresholds, evaluate_gate
 from engine.backtest.metrics import Trade, sharpe
@@ -49,6 +50,10 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
 
     prev = _load_prev_verdicts()
 
+    costs = default_cost_model()
+    log.info("backtest.costs", commission_pct=costs.commission_pct,
+             tax_pct=costs.tax_pct, slippage_pct=costs.slippage_pct)
+
     passed: dict[str, bool] = {}
     bt_rows: list[dict] = []
     for setup in playbooks.ALL_DETECTORS:
@@ -59,23 +64,33 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
                     df, setup,
                     flows=flows_map.get(iid),
                     earnings=earnings_map.get(iid),
+                    costs=costs,
                 )
             )
         # 시간순 정렬 — MDD 는 순서 민감. DB 행 순서(임의)로 이어붙이면 런마다
         # 값이 흔들려 경계선 셋업이 PASS/FAIL 을 오간다. 시간순 = 실제 시퀀스.
         trades.sort(key=lambda t: t.entry_ts)
         gr = evaluate_gate(trades, thr)
+        # 비용 영향 진단 — 동일 트레이드의 gross(비용 전) 기대값.
+        gross_exp = (
+            round(sum(t.r_gross for t in trades) / len(trades), 4) if trades else None
+        )
+        cost_drag = (
+            round(gross_exp - gr.expectancy_r, 4)
+            if gross_exp is not None and gr.expectancy_r is not None else None
+        )
         effective = apply_hysteresis(gr.passed, prev.get(setup))
         passed[setup] = effective
         bt_rows.append({
             "strategy_key": f"playbook:{setup}",
             "setup": setup,
-            "params": {"thresholds": thr.__dict__},
+            "params": {"thresholds": thr.__dict__, "costs": costs.__dict__,
+                       "gross_expectancy_r": gross_exp},
             "sharpe": sharpe([t.ret_pct for t in trades]),
             "mdd": gr.mdd,                 # R 곡선(리스크 1%) 기준
             "win_rate": gr.win_rate,
             "avg_rr": gr.avg_rr,
-            "expectancy_r": gr.expectancy_r,
+            "expectancy_r": gr.expectancy_r,  # 비용 차감 net
             "passed": effective,           # 안정화 판정 — 웹/리포트/시그널 소비
             "passed_raw": gr.passed,       # 이번 런의 원측정값 (진단용)
             "period": "daily-history",
@@ -83,7 +98,8 @@ def run(thresholds: GateThresholds | None = None) -> dict[str, bool]:
         if effective != gr.passed:
             log.info("backtest.gate.held", setup=setup, raw=gr.passed, held=effective)
         log.info("backtest.setup", setup=setup, passed=effective, raw=gr.passed,
-                 n=gr.n_trades, reasons=gr.reasons)
+                 n=gr.n_trades, gross_exp=gross_exp, net_exp=gr.expectancy_r,
+                 cost_drag=cost_drag, mdd=gr.mdd, reasons=gr.reasons)
 
     upsert("backtests", bt_rows)
     return passed

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from engine.backtest.costs import CostModel
 from engine.backtest.metrics import Trade
 from engine.signals import playbooks
 from engine.signals.levels import compute_levels, min_risk_floor
@@ -28,6 +29,7 @@ def backtest_playbook(
     min_lookback: int = 60,
     flows: pd.DataFrame | None = None,
     earnings: pd.DataFrame | None = None,
+    costs: CostModel | None = None,
 ) -> list[Trade]:
     """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
 
@@ -35,7 +37,11 @@ def backtest_playbook(
     슬라이스해 전달(point-in-time). df 에 ts 컬럼이 없으면 전체를 그대로 전달.
     earnings: PEAD 용 [date, surprise] 오름차순 — detect_pead 가 봉의 ts 로
     직접 point-in-time 슬라이스하므로 전체를 그대로 전달.
+    costs: 거래비용 모델(수수료·거래세·슬리피지). None 이면 한국 현물 기본값 적용.
+    R·수익률은 비용 차감 후(net)로 산출 — gross 가 필요하면 costs=ZERO_COST.
     """
+    if costs is None:
+        costs = CostModel()
     detector = playbooks.ALL_DETECTORS.get(setup)
     if detector is None or len(df) < min_lookback + 2:
         return []
@@ -97,13 +103,16 @@ def backtest_playbook(
         if exit_price is None:             # 타임아웃 → 종가 청산
             exit_price = float(df["close"].iloc[exit_idx])
 
-        pnl = exit_price - entry
+        # 순손익(비용 차감) — 수수료·거래세·슬리피지 반영. 리스크는 계획값(entry-stop)
+        # 유지 → '계획 리스크 대비 실현 순R'.
+        pnl = costs.net_pnl(entry, exit_price)
         r_multiple = pnl / risk
+        r_gross = (exit_price - entry) / risk      # 비용 미반영 — 진단용
         ret_pct = (pnl / entry) * (lv.position_size_pct / 100.0)
         entry_ts = str(df["ts"].iloc[i]) if "ts" in df.columns else ""
         trades.append(Trade(
             r_multiple=r_multiple, ret_pct=ret_pct, bars_held=exit_idx - i,
-            entry_ts=entry_ts,
+            entry_ts=entry_ts, r_gross=r_gross,
         ))
         i = exit_idx + 1                   # 청산 다음 봉부터 재탐색(중첩 방지)
 
