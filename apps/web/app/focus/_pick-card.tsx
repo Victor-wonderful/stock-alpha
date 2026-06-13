@@ -49,7 +49,8 @@ export function PickCard({
       : null;
 
   // 진입 상태: 실데이터 없으면 랜덤 시뮬레이션 대신 "대기" 기본
-  const entryStatus: "진입권" | "대기" = "대기";
+  // (단언으로 union 유지 — const 리터럴 narrowing 회피, 아래 "진입권" 분기 보존)
+  const entryStatus = "대기" as "진입권" | "대기";
 
   return (
     <div

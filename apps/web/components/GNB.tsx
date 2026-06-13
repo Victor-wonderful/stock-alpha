@@ -42,7 +42,7 @@ export function GNB() {
         {/* 네비게이션 */}
         <nav className="flex items-center gap-1" aria-label="주 메뉴">
           {NAV_ITEMS.map((item) => {
-            const active = item.exact
+            const active = ("exact" in item && item.exact)
               ? path === item.href
               : path === item.href || path.startsWith(item.href + "/");
             return (

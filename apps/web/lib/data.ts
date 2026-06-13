@@ -1218,8 +1218,11 @@ export async function getSignalSectorCounts(): Promise<Loaded<SignalSectorCount[
       .lte("created_at", `${latestDate}T23:59:59`);
     if (error || !data || data.length === 0) throw error ?? new Error("empty");
     const counts = new Map<string, number>();
-    for (const row of data as { instruments: { sector: string | null } }[]) {
-      const s = row.instruments?.sector ?? "기타";
+    // Supabase to-one 임베드는 타입상 배열로 추론되나 런타임은 객체 — 양쪽 안전 처리
+    type Inst = { sector: string | null };
+    for (const row of data as unknown as { instruments: Inst | Inst[] | null }[]) {
+      const inst = Array.isArray(row.instruments) ? row.instruments[0] : row.instruments;
+      const s = inst?.sector ?? "기타";
       counts.set(s, (counts.get(s) ?? 0) + 1);
     }
     const result = [...counts.entries()]
