@@ -7,14 +7,17 @@ import pandas as pd
 from engine.factors.factors import RAW_FACTORS
 from engine.factors.normalize import sector_neutral_zscore, zscore
 
-# 기본 팩터 가중치 (합 = 1). 매크로 레짐에 따라 M4 후속에서 동적 조정.
+# 기본 팩터 가중치 (합 = 1).
+# 2026-06-14 IC 감사(scripts/diag_factor_ic, point-in-time 39주) 기반 재가중:
+#   value·quality 가 유일하게 롱사이드 초과수익 양수(상위10% t≈1.7) → 핵심.
+#   momentum 약양수(t≈1.1) 보조. lowvol 은 rank IC 는 높으나 강세장에서 롱사이드
+#   초과수익 음수(t=-0.6) → 제거. size 는 미검증 → 제거. growth 는 유망(IC>0 91%)
+#   하나 표본 부족(n=11, 2025FY 공시 이후만) → 공시일 백필로 표본 확보 후 재편입.
+#   검증된 최적 합성 VQM(value.4/quality.4/momentum.2): 상위10% 초과 t 1.43→1.68.
 DEFAULT_WEIGHTS: dict[str, float] = {
-    "value": 0.25,
-    "quality": 0.20,
+    "value": 0.40,
+    "quality": 0.40,
     "momentum": 0.20,
-    "growth": 0.15,
-    "lowvol": 0.10,
-    "size": 0.10,
 }
 
 
