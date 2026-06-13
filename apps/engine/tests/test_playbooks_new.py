@@ -40,7 +40,7 @@ def test_pullback_triggers_on_dip_bounce():
     closes = _pullback_closes()
     cand = detect_pullback(_df(closes))
     assert cand is not None, "조정 후 반등에서 트리거돼야 함"
-    assert cand.setup == "pullback" and cand.style == "swing"
+    assert cand.setup == "pullback" and cand.style == "position"
     assert cand.support is not None  # MA20 지지
 
 

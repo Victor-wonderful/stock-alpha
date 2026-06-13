@@ -95,7 +95,7 @@ def test_generate_signals_assembles_rows():
     r = next(r for r in rows if r["setup"] == "leader_trend")
     assert r["instrument_id"] == 5
     assert r["signal_type"] == "buy"
-    assert r["style"] == "swing"
+    assert r["style"] == "position"  # 2026-06-13 비용 반영 재설계: 추세셋업 position 전환
     assert r["session"] == "regular"
     assert r["stop_loss"] < r["entry_price"] < r["tp1"]
     assert r["source_version"] == "signal-v1"

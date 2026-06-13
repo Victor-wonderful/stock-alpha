@@ -24,7 +24,7 @@ class CostModel:
 
     commission_pct: float = 0.00015  # 위탁수수료 (변당, 0.015%)
     tax_pct: float = 0.0018          # 증권거래세 (매도에만, 0.18%)
-    slippage_pct: float = 0.0010     # 슬리피지 (변당, 0.10%)
+    slippage_pct: float = 0.0005     # 슬리피지 (변당, 0.05% — 유동 유니버스 10억+ 기준)
 
     def net_pnl(self, entry: float, exit_price: float) -> float:
         """주당 순손익 — 슬리피지·수수료·거래세 차감(롱: 매수→매도).

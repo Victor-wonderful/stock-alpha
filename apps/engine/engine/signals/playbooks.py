@@ -52,7 +52,7 @@ def detect_leader_trend(
         strength = min(1.0, strength + 0.2)
         bits.append(f"상대강도 상위({rs_rank:.0%})")
     return Candidate(
-        setup="leader_trend", side="buy", style="swing", session="regular",
+        setup="leader_trend", side="buy", style="position", session="regular",
         entry_ref=c, atr=atr, support=m20, strength=strength, rationale=bits,
         payload={"ma20": m20, "ma60": m60},
     )
@@ -98,7 +98,7 @@ def detect_breakout(df: pd.DataFrame, lookback: int = 20, vol_mult: float = 1.5)
     strength = 0.6 + (0.2 if (avg_vol > 0 and v > avg_vol * 2) else 0.0)
     bits = [f"{lookback}일 신고가 돌파", f"거래량 {v/avg_vol:.1f}x" if avg_vol else "거래량 증가"]
     return Candidate(
-        setup="breakout", side="buy", style="swing", session="regular",
+        setup="breakout", side="buy", style="position", session="regular",
         entry_ref=c, atr=atr, support=prior_high,  # 돌파 레벨이 지지로 전환
         strength=min(1.0, strength), rationale=bits,
         payload={"breakout_level": prior_high, "vol_ratio": (v / avg_vol) if avg_vol else None},
@@ -159,7 +159,7 @@ def detect_pullback(df: pd.DataFrame) -> Candidate | None:
     vol_up = _last(df["volume"]) > float(df["volume"].iloc[-21:-1].mean())
     strength = 0.6 + (0.1 if vol_up else 0.0)
     return Candidate(
-        setup="pullback", side="buy", style="swing", session="regular",
+        setup="pullback", side="buy", style="position", session="regular",
         entry_ref=c, atr=atr, support=m20, resistance=hi10,
         strength=min(1.0, strength),
         rationale=["상승 추세 유지(MA20>MA60)", f"고점 대비 {pull:.1%} 조정",
@@ -224,7 +224,7 @@ def detect_vol_squeeze(
     atr = _last(ind.atr(df))
     strength = 0.65 + (0.1 if rank <= 0.1 else 0.0)
     return Candidate(
-        setup="vol_squeeze", side="buy", style="swing", session="regular",
+        setup="vol_squeeze", side="buy", style="position", session="regular",
         entry_ref=c, atr=atr, support=prior20,
         strength=min(1.0, strength),
         rationale=[f"변동성 하위 {rank:.0%} 수축", "20일 고가 돌파", "거래량 확인"],
@@ -256,7 +256,7 @@ def detect_flow_accumulation(
     atr = _last(ind.atr(df))
     strength = 0.6 + (0.1 if pos_days >= window - 1 else 0.0)
     return Candidate(
-        setup="flow_accumulation", side="buy", style="swing", session="regular",
+        setup="flow_accumulation", side="buy", style="position", session="regular",
         entry_ref=c, atr=atr, support=m20,
         strength=min(1.0, strength),
         rationale=[f"외국인 {window}일 순매수 {f_sum:+,.0f}주",

@@ -30,6 +30,7 @@ def backtest_playbook(
     flows: pd.DataFrame | None = None,
     earnings: pd.DataFrame | None = None,
     costs: CostModel | None = None,
+    style_override: TradeStyle | None = None,
 ) -> list[Trade]:
     """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
 
@@ -72,8 +73,9 @@ def backtest_playbook(
             i += 1
             continue
 
+        eff_style = style_override or cand.style
         lv = compute_levels(
-            style=cand.style, side="buy", entry_price=cand.entry_ref,
+            style=eff_style, side="buy", entry_price=cand.entry_ref,
             atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
             support=cand.support, resistance=cand.resistance,
         )
@@ -86,7 +88,7 @@ def backtest_playbook(
             i += 1
             continue
 
-        timeout = _TIMEOUT_BARS.get(cand.style, 10)
+        timeout = _TIMEOUT_BARS.get(eff_style, 10)
         exit_price = None
         exit_idx = min(i + timeout, n - 1)
         for j in range(i + 1, exit_idx + 1):
