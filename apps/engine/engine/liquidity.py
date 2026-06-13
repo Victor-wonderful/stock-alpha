@@ -32,3 +32,22 @@ def filter_liquid_frames(
         for iid, df in frames.items()
         if (df_avg_turnover_krw(df) or 0.0) >= floor_krw
     }
+
+
+def rank_instruments_by_turnover(rows: list[dict], n: int) -> list[int]:
+    """ohlcv 행들[{instrument_id,close,volume}] → 평균 거래대금 상위 n instrument_id (순수).
+
+    분봉 축적 대상(상위 유동 종목) 선정용. 데이/스캘핑은 활발히 거래되는 종목만 의미.
+    """
+    agg: dict[int, list[float]] = {}
+    for r in rows:
+        iid = r.get("instrument_id")
+        if iid is None:
+            continue
+        agg.setdefault(int(iid), []).append(
+            float(r.get("close") or 0.0) * float(r.get("volume") or 0.0)
+        )
+    ranked = sorted(
+        agg.items(), key=lambda kv: sum(kv[1]) / len(kv[1]), reverse=True
+    )
+    return [iid for iid, _ in ranked[:n]]

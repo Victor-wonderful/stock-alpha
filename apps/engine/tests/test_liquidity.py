@@ -7,6 +7,7 @@ from engine.liquidity import (
     SIGNAL_TURNOVER_FLOOR_KRW,
     df_avg_turnover_krw,
     filter_liquid_frames,
+    rank_instruments_by_turnover,
 )
 
 
@@ -31,3 +32,23 @@ def test_filter_liquid_frames():
     }
     out = filter_liquid_frames(frames, SIGNAL_TURNOVER_FLOOR_KRW)
     assert set(out) == {1, 3}
+
+
+def test_rank_by_turnover_orders_by_avg_amount():
+    rows = [
+        {"instrument_id": 1, "close": 100.0, "volume": 10},   # 1,000
+        {"instrument_id": 1, "close": 100.0, "volume": 30},   # 3,000 → 평균 2,000
+        {"instrument_id": 2, "close": 50.0, "volume": 200},   # 10,000
+        {"instrument_id": 3, "close": 10.0, "volume": 10},    # 100
+    ]
+    assert rank_instruments_by_turnover(rows, n=2) == [2, 1]
+    assert rank_instruments_by_turnover(rows, n=10) == [2, 1, 3]
+
+
+def test_rank_handles_nones_and_empty():
+    assert rank_instruments_by_turnover([], n=5) == []
+    rows = [
+        {"instrument_id": None, "close": 1, "volume": 1},
+        {"instrument_id": 7, "close": None, "volume": None},
+    ]
+    assert rank_instruments_by_turnover(rows, n=5) == [7]

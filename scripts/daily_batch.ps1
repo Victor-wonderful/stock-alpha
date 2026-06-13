@@ -11,3 +11,8 @@ $log = Join-Path $logDir ("daily-" + (Get-Date -Format "yyyyMMdd") + ".log")
 Set-Location (Join-Path $root "apps\engine")
 & .\.venv\Scripts\python.exe -m engine.cli daily *>> $log
 "exit=$LASTEXITCODE at $(Get-Date -Format o)" >> $log
+
+# 분봉 축적 — KIS 는 당일치만 주므로 매일 상위 유동 200종목을 쌓아 이력 확보.
+# 데이/스캘핑 백테스트(2단계)의 전제 데이터. 장 마감(15:30 KST) 후 실행.
+& .\.venv\Scripts\python.exe -m engine.cli ingest-minutes --top 200 *>> $log
+"minutes exit=$LASTEXITCODE at $(Get-Date -Format o)" >> $log

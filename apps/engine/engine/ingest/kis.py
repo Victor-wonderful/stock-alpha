@@ -408,6 +408,48 @@ def ingest_minute_bars(symbols: list[str], end_hour: str = "153000") -> int:
     return total
 
 
+def top_liquid_symbols(n: int = 200, lookback_days: int = 7) -> list[str]:
+    """최근 거래대금 상위 n개 활성 종목 코드 — 분봉 축적 대상 선정.
+
+    KIS 분봉은 당일치만 제공 → 매일 상위 유동 종목만 수집해 이력을 축적한다.
+    종목당 ~14 API콜이라 전 종목(1188)은 과도 → 데이/스캘핑이 의미있는 활발한 종목만.
+    """
+    from datetime import date
+
+    from engine.db import get_client, select_all
+    from engine.liquidity import rank_instruments_by_turnover
+
+    client = get_client()
+    latest = (
+        client.table("ohlcv").select("ts").eq("interval", "1d")
+        .order("ts", desc=True).limit(1).execute().data
+    )
+    if not latest:
+        return []
+    cutoff = (
+        date.fromisoformat(str(latest[0]["ts"])[:10]) - timedelta(days=lookback_days)
+    ).isoformat()
+    rows: list[dict] = []
+    start = 0
+    while True:
+        res = (
+            client.table("ohlcv").select("instrument_id,close,volume")
+            .eq("interval", "1d").gte("ts", cutoff)
+            .range(start, start + 999).execute()
+        )
+        d = res.data or []
+        rows.extend(d)
+        if len(d) < 1000:
+            break
+        start += 1000
+    top_iids = rank_instruments_by_turnover(rows, n)
+    imap = {
+        it["id"]: it["symbol"]
+        for it in select_all("instruments", "id,symbol", eq={"active": True})
+    }
+    return [imap[i] for i in top_iids if i in imap]
+
+
 # ── 현재가 (실시간 폴링용 — WS 이전 단계) ──
 
 def fetch_quote(symbol: str) -> dict:

@@ -61,13 +61,24 @@ def ingest(
 
 @app.command("ingest-minutes")
 def ingest_minutes(
-    symbols: str = typer.Option(..., help="쉼표구분 종목코드 (예: 005930,000660)"),
+    symbols: str = typer.Option("", help="쉼표구분 종목코드 (예: 005930,000660). --top 쓰면 생략."),
+    top: int = typer.Option(0, help="상위 유동 N종목 자동 선정(거래대금). >0 이면 symbols 무시."),
     end_hour: str = typer.Option("153000", help="조회 종료 시각(HHMMSS)"),
 ) -> None:
-    """당일 1분봉 인제스트 (KIS) — ohlcv(interval=1m). 데이/스캘핑 셋업의 전제 데이터."""
+    """당일 1분봉 인제스트 (KIS) — ohlcv(interval=1m). 데이/스캘핑 셋업의 전제 데이터.
+
+    KIS 는 당일치만 주므로 매일 실행해 이력을 축적한다(일일 배치 연결). --top 200 권장.
+    """
     from engine.ingest import kis
 
-    syms = [s.strip() for s in symbols.split(",") if s.strip()]
+    if top > 0:
+        syms = kis.top_liquid_symbols(top)
+        typer.echo(f"top liquid symbols: {len(syms)}")
+    else:
+        syms = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not syms:
+        typer.echo("대상 종목 없음 — --symbols 또는 --top 지정")
+        raise typer.Exit(1)
     typer.echo(f"minute bars rows: {kis.ingest_minute_bars(syms, end_hour=end_hour)}")
 
 
