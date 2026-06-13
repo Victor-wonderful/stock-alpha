@@ -26,6 +26,7 @@ def generate_signals(
     earnings: "pd.DataFrame | None" = None,
     now: datetime | None = None,
     market_close: datetime | None = None,
+    styles_by_setup: dict[str, list[str]] | None = None,
 ) -> list[dict]:
     """일봉 OHLCV → 트리거된 플레이북별 시그널 행 리스트.
 
@@ -34,6 +35,9 @@ def generate_signals(
     flows: [date, foreign_net, inst_net] 오름차순 — 수급 셋업용(없으면 미발동)
     earnings: [date, surprise, turnaround] 오름차순 — PEAD 용(없으면 미발동)
     setups: 활성화할 플레이북 키. None=전체.
+    styles_by_setup: 셋업별 발행할 스타일 목록(게이트 통과 조합). 주어지면 한 트리거가
+        통과 스타일마다 1행 발행(같은 셋업 swing·position 동시 가능). None 이면 단일
+        cand.style 발행(하위호환·단위테스트).
     """
     enabled = setups or list(playbooks.ALL_DETECTORS.keys())
     rows: list[dict] = []
@@ -54,44 +58,48 @@ def generate_signals(
         if cand is None:
             continue
 
-        lv = compute_levels(
-            style=cand.style, side=cand.side, entry_price=cand.entry_ref,
-            atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
-            support=cand.support, resistance=cand.resistance,
-            now=now, market_close=market_close,
+        # 발행할 스타일 — 게이트 통과 조합(styles_by_setup) 우선, 없으면 단일 cand.style.
+        emit_styles = (
+            styles_by_setup.get(cand.setup, []) if styles_by_setup is not None
+            else [cand.style]
         )
-        # 노이즈 수준 손절폭 배제 — 백테스트(event_backtest)와 동일 기준.
-        # 검증된 모집단과 발행 모집단을 일치시킨다.
-        if abs(lv.entry_price - lv.stop_loss) < min_risk_floor(lv.entry_price, cand.atr):
-            continue
+        for style in emit_styles:
+            lv = compute_levels(
+                style=style, side=cand.side, entry_price=cand.entry_ref,
+                atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
+                support=cand.support, resistance=cand.resistance,
+                now=now, market_close=market_close,
+            )
+            # 노이즈 수준 손절폭 배제 — 백테스트(event_backtest)와 동일 기준.
+            if abs(lv.entry_price - lv.stop_loss) < min_risk_floor(lv.entry_price, cand.atr):
+                continue
 
-        cfg = get_style_config(cand.style)
-        rows.append({
-            "instrument_id": instrument_id,
-            "signal_type": cand.side,            # 'buy' | 'sell'
-            "style": cand.style,
-            "setup": cand.setup,
-            "session": cand.session,
-            "strength": round(cand.strength, 4),
-            "timeframe": cfg.timeframe,
-            "entry_price": lv.entry_price,
-            "stop_loss": round(lv.stop_loss, 4),
-            "tp1": round(lv.tp1, 4),
-            "tp2": round(lv.tp2, 4),
-            "tp3": round(lv.tp3, 4),
-            "risk_reward": round(lv.risk_reward, 4),
-            # position_size_pct 는 저장하지 않는다 — 사용자 risk_per_trade_pct 에
-            # 의존하므로 읽기 시점에 entry/stop + 사용자 리스크로 계산(웹 lib/position).
-            "holding_horizon": lv.holding_horizon,
-            "rule_payload": cand.payload,
-            "factor_payload": {"rs_rank": rs_rank} if rs_rank is not None else None,
-            "level_payload": {
-                "atr": round(cand.atr, 4),
-                "support": cand.support,
-                "resistance": cand.resistance,
-            },
-            "llm_rationale": " · ".join(cand.rationale) or None,
-            "source_version": SOURCE_VERSION,
-            "valid_until": lv.valid_until.isoformat() if lv.valid_until else None,
-        })
+            cfg = get_style_config(style)
+            rows.append({
+                "instrument_id": instrument_id,
+                "signal_type": cand.side,            # 'buy' | 'sell'
+                "style": style,
+                "setup": cand.setup,
+                "session": cand.session,
+                "strength": round(cand.strength, 4),
+                "timeframe": cfg.timeframe,
+                "entry_price": lv.entry_price,
+                "stop_loss": round(lv.stop_loss, 4),
+                "tp1": round(lv.tp1, 4),
+                "tp2": round(lv.tp2, 4),
+                "tp3": round(lv.tp3, 4),
+                "risk_reward": round(lv.risk_reward, 4),
+                # position_size_pct 는 저장하지 않는다 — 읽기 시점 계산(웹 lib/position).
+                "holding_horizon": lv.holding_horizon,
+                "rule_payload": cand.payload,
+                "factor_payload": {"rs_rank": rs_rank} if rs_rank is not None else None,
+                "level_payload": {
+                    "atr": round(cand.atr, 4),
+                    "support": cand.support,
+                    "resistance": cand.resistance,
+                },
+                "llm_rationale": " · ".join(cand.rationale) or None,
+                "source_version": SOURCE_VERSION,
+                "valid_until": lv.valid_until.isoformat() if lv.valid_until else None,
+            })
     return rows

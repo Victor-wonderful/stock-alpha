@@ -102,6 +102,21 @@ def test_generate_signals_assembles_rows():
     assert r["llm_rationale"]
 
 
+def test_generate_signals_matrix_emits_per_passing_style():
+    """styles_by_setup 주어지면 한 트리거가 통과 스타일마다 1행 발행 (매트릭스)."""
+    df = _uptrend()
+    rows = generate_signals(
+        df, instrument_id=5, risk_per_trade_pct=1.0, rs_rank=0.9,
+        styles_by_setup={"leader_trend": ["swing", "position"]},
+    )
+    lt = [r for r in rows if r["setup"] == "leader_trend"]
+    styles = {r["style"] for r in lt}
+    assert styles == {"swing", "position"}, f"두 스타일 모두 발행돼야: {styles}"
+    # 각 행의 holding_horizon 이 스타일에 맞게 다르게 산출됨
+    by_style = {r["style"]: r for r in lt}
+    assert by_style["swing"]["holding_horizon"] != by_style["position"]["holding_horizon"]
+
+
 def test_generate_signals_close_betting_valid_until_is_close():
     now = datetime(2026, 6, 5, 10, 0, tzinfo=timezone.utc)
     close = datetime(2026, 6, 5, 6, 30, tzinfo=timezone.utc)  # 한국 장마감(UTC)

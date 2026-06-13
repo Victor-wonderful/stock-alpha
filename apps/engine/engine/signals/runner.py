@@ -87,11 +87,13 @@ def run(
 
     enforce_gate=True 면 백테스트 품질 게이트를 통과한 셋업만 발행(M6 연동).
     """
+    styles_by_setup: dict[str, list[str]] | None = None
     if enforce_gate:
-        from engine.backtest.runner import passed_setups
-        allowed = set(passed_setups())
+        from engine.backtest.runner import passed_combos_from_db
+        styles_by_setup = passed_combos_from_db()   # {setup: [통과 스타일]}
+        allowed = set(styles_by_setup)
         setups = [s for s in (setups or list(allowed)) if s in allowed]
-        log.info("signals.gate", allowed=sorted(allowed), effective=setups)
+        log.info("signals.gate", combos=styles_by_setup, effective=setups)
         if not setups:
             log.warning("signals.gate.none_passed")
             return 0
@@ -121,6 +123,7 @@ def run(
                 rs_rank=ranks.get(iid), setups=setups,
                 flows=flows_map.get(iid),
                 earnings=earnings_map.get(iid),
+                styles_by_setup=styles_by_setup,
             )
         )
 

@@ -328,3 +328,29 @@ ALL_DETECTORS = {
     "flow_accumulation": detect_flow_accumulation,
     "pead": detect_pead,
 }
+
+# 셋업별 '논리적으로 허용되는 스타일'(정체성). 게이트는 이 중 검증 가능한 스타일만 평가하고,
+# 통과한 (셋업×스타일) 조합만 발행한다. 같은 셋업이 여러 스타일로 동시 발행될 수 있다.
+# - close_betting 은 종가/초단기 정체성이라 day 만 허용 → 일봉으로 검증 불가 → '분봉 검증 대기'.
+# - high_52w·pead 는 장기 드리프트라 position 만.
+# - mean-reversion(oversold_bounce)은 단/중기라 swing 만.
+ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
+    "leader_trend": ("swing", "position"),
+    "oversold_bounce": ("swing",),
+    "breakout": ("swing", "position"),
+    "close_betting": ("day",),
+    "pullback": ("swing", "position"),
+    "high_52w": ("position",),
+    "vol_squeeze": ("swing", "position"),
+    "flow_accumulation": ("swing", "position"),
+    "pead": ("position",),
+}
+
+# 일봉 OHLCV 로 의미 있게 백테스트 가능한 스타일. day/scalping 은 분봉 필요(2단계).
+DAILY_TESTABLE_STYLES: tuple[TradeStyle, ...] = ("swing", "position")
+
+
+def testable_styles(setup: str) -> tuple[TradeStyle, ...]:
+    """해당 셋업에서 '지금(일봉) 게이트로 평가 가능한' 스타일 목록."""
+    allowed = ALLOWED_STYLES.get(setup, ())
+    return tuple(s for s in allowed if s in DAILY_TESTABLE_STYLES)

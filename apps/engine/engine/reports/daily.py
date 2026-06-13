@@ -36,15 +36,19 @@ PICKS_MIN_SCORE = 50.0
 
 
 def passed_setups_from_db() -> set[str]:
-    """backtests 최신 행 기준 게이트 통과 셋업 집합 (재백테스트 없이 read)."""
-    latest: dict[str, dict] = {}
+    """backtests 최신 행 기준 게이트 통과 셋업 집합 (재백테스트 없이 read).
+
+    매트릭스(셋업×스타일) 이후: 어떤 스타일로든 통과하면 그 셋업 포함(셋업 단위 소비처용).
+    """
+    latest: dict[tuple[str, str], dict] = {}
     for bt in sorted(
-        select_all("backtests", "setup,win_rate,avg_rr,mdd,expectancy_r,passed,created_at"),
+        select_all("backtests",
+                   "setup,style,win_rate,avg_rr,mdd,expectancy_r,passed,created_at"),
         key=lambda b: b.get("created_at") or "",
     ):
         if bt.get("setup"):
-            latest[bt["setup"]] = bt
-    return {s for s, bt in latest.items() if backtest_passed(bt)}
+            latest[(bt["setup"], bt.get("style") or "")] = bt
+    return {setup for (setup, _s), bt in latest.items() if backtest_passed(bt)}
 
 
 def track_a_symbols(passed: set[str]) -> list[str]:
