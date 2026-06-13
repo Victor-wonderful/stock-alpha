@@ -26,6 +26,19 @@ def _load_ohlcv(instrument_id: int, limit: int = 120) -> pd.DataFrame:
     return df[["open", "high", "low", "close", "volume"]].astype(float)
 
 
+def _load_active_frames(bars: int = 120) -> dict[int, pd.DataFrame]:
+    """활성 종목 일봉 {iid: df} — 직접 PG 벌크 우선, 실패 시 REST 폴백(원격 지연 회피)."""
+    from engine import db_direct
+    if db_direct.available():
+        try:
+            return db_direct.load_all_ohlcv_1d(bars=bars)
+        except Exception as e:  # noqa: BLE001
+            log.warning("signals.direct_pg_failed_fallback_rest", error=str(e)[:140])
+    inst = select_all("instruments", "id", eq={"active": True})
+    frames = {it["id"]: _load_ohlcv(it["id"], limit=bars) for it in inst}
+    return {k: v for k, v in frames.items() if not v.empty}
+
+
 def load_flows_map() -> dict[int, pd.DataFrame]:
     """flows 전체를 한 번에 로드 → {instrument_id: [date,foreign_net,inst_net] 오름차순}.
 
@@ -98,9 +111,7 @@ def run(
             log.warning("signals.gate.none_passed")
             return 0
 
-    inst = select_all("instruments", "id", eq={"active": True})
-    frames = {it["id"]: _load_ohlcv(it["id"]) for it in inst}
-    frames = {k: v for k, v in frames.items() if not v.empty}
+    frames = _load_active_frames(bars=120)
     # 유동성 필터 — 백테스트로 검증된 모집단(거래대금 10억+)에만 시그널 발행.
     # 비유동 구간은 기대값 음수(scripts/diag_playbook_breakdown) → 발행 금지.
     from engine.liquidity import filter_liquid_frames

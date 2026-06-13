@@ -32,6 +32,22 @@ def _load_ohlcv(instrument_id: int, limit: int = 500) -> pd.DataFrame:
     return out
 
 
+def _load_active_frames(bars: int = 500) -> dict[int, pd.DataFrame]:
+    """활성 종목 일봉 {iid: df} — 직접 PG 벌크(단일쿼리) 우선, 실패 시 REST 폴백.
+
+    원격 DB 지연 회피: 종목별 REST(수천 왕복) 대신 한 번의 스트리밍 쿼리.
+    """
+    from engine import db_direct
+    if db_direct.available():
+        try:
+            return db_direct.load_all_ohlcv_1d(bars=bars)
+        except Exception as e:  # noqa: BLE001
+            log.warning("backtest.direct_pg_failed_fallback_rest", error=str(e)[:140])
+    inst = select_all("instruments", "id", eq={"active": True})
+    frames = {it["id"]: _load_ohlcv(it["id"], limit=bars) for it in inst}
+    return {k: v for k, v in frames.items() if not v.empty}
+
+
 def run(thresholds: GateThresholds | None = None) -> dict[tuple[str, str], bool]:
     """전 종목·(셋업×스타일) 매트릭스 백테스트 → 조합별 게이트 결과. {(setup,style): passed}.
 
@@ -41,9 +57,7 @@ def run(thresholds: GateThresholds | None = None) -> dict[tuple[str, str], bool]
     분봉 필요(2단계)라 여기서 평가 대상이 아니다.
     """
     thr = thresholds or GateThresholds()
-    inst = select_all("instruments", "id", eq={"active": True})
-    frames = {it["id"]: _load_ohlcv(it["id"]) for it in inst}
-    frames = {k: v for k, v in frames.items() if not v.empty}
+    frames = _load_active_frames(bars=500)
     # 유동성 필터 — 시그널 발행 유니버스와 동일 모집단으로 백테스트(engine/liquidity).
     from engine.liquidity import filter_liquid_frames
     n_all = len(frames)

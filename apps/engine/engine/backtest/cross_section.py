@@ -161,19 +161,47 @@ def _load_close_series(iid: int, limit: int = 420) -> pd.Series | None:
     return s[~s.index.duplicated(keep="last")]
 
 
+_MIN_BARS = MOM_SKIP + MOM_LOOKBACK + VOL_WINDOW + 20
+
+
+def _load_close_panel() -> pd.DataFrame:
+    """활성 종목 종가 와이드 프레임 — 직접 PG 벌크 우선, 실패 시 REST 폴백."""
+    from engine import db_direct
+
+    if db_direct.available():
+        try:
+            frames = db_direct.load_all_ohlcv_1d(bars=420)
+            series = []
+            for iid, df in frames.items():
+                if len(df) < _MIN_BARS:
+                    continue
+                s = pd.Series(
+                    df["close"].to_numpy(dtype=float),
+                    index=df["ts"].astype(str).str.slice(0, 10), name=iid,
+                )
+                series.append(s[~s.index.duplicated(keep="last")])
+            if series:
+                return pd.concat(series, axis=1).sort_index()
+        except Exception as e:  # noqa: BLE001
+            log.warning("xsec.direct_pg_failed_fallback_rest", error=str(e)[:140])
+
+    from engine.db import select_all
+    inst = select_all("instruments", "id", eq={"active": True})
+    series = []
+    for it in inst:
+        s = _load_close_series(it["id"])
+        if s is not None:
+            series.append(s)
+    return pd.concat(series, axis=1).sort_index()
+
+
 def run(thr: XsecThresholds | None = None) -> XsecResult:
     """유동 유니버스 종가 로드 → 횡단면 검증 → backtests 적재."""
     from engine.db import select_all, upsert
     from engine.liquidity import REPORT_TURNOVER_FLOOR_KRW  # noqa: F401 (문서 근거)
     from engine.liquidity import df_avg_turnover_krw
 
-    inst = select_all("instruments", "id", eq={"active": True})
-    series: list[pd.Series] = []
-    for it in inst:
-        s = _load_close_series(it["id"])
-        if s is not None:
-            series.append(s)
-    closes = pd.concat(series, axis=1).sort_index()
+    closes = _load_close_panel()
     # 유동성 필터는 시그널 유니버스와 동일 기준을 쓰고 싶지만 거래대금 계산엔
     # volume 이 필요 → 종가만 로드하므로 factor_scores 발행 모집단(시그널과 동일
     # 풀)이 이미 유동성 필터를 거친다는 점에 의존. 검증은 전 종목 단면으로 수행
