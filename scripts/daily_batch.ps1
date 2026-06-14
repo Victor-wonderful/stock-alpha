@@ -16,3 +16,7 @@ Set-Location (Join-Path $root "apps\engine")
 # 데이/스캘핑 백테스트(2단계)의 전제 데이터. 장 마감(15:30 KST) 후 실행.
 & .\.venv\Scripts\python.exe -m engine.cli ingest-minutes --top 200 *>> $log
 "minutes exit=$LASTEXITCODE at $(Get-Date -Format o)" >> $log
+
+# 공시 이벤트 축적 — DART 공시목록 분류 적재(이벤트 드리븐 알파 피드).
+& .\.venv\Scripts\python.exe -m engine.cli ingest-disclosures --days 3 *>> $log
+"disclosures exit=$LASTEXITCODE at $(Get-Date -Format o)" >> $log

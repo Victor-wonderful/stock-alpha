@@ -82,6 +82,19 @@ def ingest_minutes(
     typer.echo(f"minute bars rows: {kis.ingest_minute_bars(syms, end_hour=end_hour)}")
 
 
+@app.command("ingest-disclosures")
+def ingest_disclosures(
+    days: int = typer.Option(7, help="최근 N일 공시목록 수집"),
+) -> None:
+    """DART 공시목록 → 이벤트 분류 후 disclosures 적재 (정기/미분류 제외).
+
+    매일 돌려 이벤트 피드 축적(일일 배치 연결). 이벤트 스터디·발행의 전제 데이터.
+    """
+    from engine.ingest import dart
+
+    typer.echo(f"disclosure events: {dart.ingest_disclosures(days=days)}")
+
+
 @app.command("seed-universe")
 def seed_universe(
     markets: str = typer.Option("KOSPI,KOSDAQ", help="쉼표구분 시장: KOSPI,KOSDAQ"),

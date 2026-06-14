@@ -19,6 +19,7 @@ log = get_logger(__name__)
 
 _API = "https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json"
 _STOCK_API = "https://opendart.fss.or.kr/api/stockTotqySttus.json"
+_LIST_API = "https://opendart.fss.or.kr/api/list.json"
 
 # 계정명(공백 제거) → 스키마 컬럼. (sj_div 로 IS/BS/CF 구분)
 _ACCOUNT_MAP = {
@@ -214,6 +215,97 @@ def fetch_financials(corp_code: str, bsns_year: str, reprt_code: str, fs_div: st
     resp = httpx.get(_API, params=params, timeout=20)
     resp.raise_for_status()
     return resp.json()
+
+
+# ── 공시목록 (이벤트 피드) ──
+
+def _yyyymmdd_dash(s: str | None) -> str | None:
+    s = str(s or "")
+    return f"{s[:4]}-{s[4:6]}-{s[6:8]}" if len(s) == 8 and s.isdigit() else None
+
+
+def normalize_disclosure(item: dict, instrument_id: int) -> dict | None:
+    """공시목록 item + instrument_id → disclosures 행 (순수). 정기/미분류는 None."""
+    from engine.ingest.disclosure_class import classify_disclosure
+
+    report_nm = item.get("report_nm")
+    etype, direction = classify_disclosure(report_nm)
+    if etype == "other":
+        return None
+    rcept_no = str(item.get("rcept_no") or "").strip()
+    rcept_dt = _yyyymmdd_dash(item.get("rcept_dt"))
+    if not rcept_no or not rcept_dt:
+        return None
+    return {
+        "instrument_id": instrument_id,
+        "rcept_no": rcept_no,
+        "corp_code": item.get("corp_code"),
+        "report_nm": report_nm,
+        "event_type": etype,
+        "direction": direction,
+        "rcept_dt": rcept_dt,
+        "raw": {"corp_name": item.get("corp_name"), "stock_code": item.get("stock_code"),
+                "flr_nm": item.get("flr_nm")},
+    }
+
+
+def fetch_disclosure_list(bgn_de: str, end_de: str, page_no: int = 1,
+                          page_count: int = 100) -> dict:
+    """공시목록 1페이지 (list.json). bgn_de/end_de = YYYYMMDD."""
+    key = get_settings().dart_api_key
+    if not key:
+        raise RuntimeError("DART_API_KEY 미설정.")
+    params = {
+        "crtfc_key": key, "bgn_de": bgn_de, "end_de": end_de,
+        "page_no": page_no, "page_count": page_count,
+    }
+    _count_call()
+    resp = httpx.get(_LIST_API, params=params, timeout=20)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ingest_disclosures(days: int = 7, max_pages: int = 200) -> int:
+    """최근 days 일 공시목록 → 이벤트 분류 후 disclosures 적재 (정기/미분류 제외).
+
+    KIS 분봉처럼 매일 돌려 이벤트 피드를 쌓는다. 상장사(stock_code 보유)만 대상.
+    """
+    from datetime import datetime, timedelta
+
+    from engine.db import upsert
+    from engine.ingest.runner import load_kr_instrument_map
+
+    imap = load_kr_instrument_map()
+    by_symbol = {sym: iid for (sym, _exch), iid in imap.items()}
+    today = datetime.utcnow() + timedelta(hours=9)
+    bgn = (today - timedelta(days=days)).strftime("%Y%m%d")
+    end = today.strftime("%Y%m%d")
+
+    rows: list[dict] = []
+    page = 1
+    while page <= max_pages:
+        body = fetch_disclosure_list(bgn, end, page_no=page)
+        status = body.get("status")
+        if status == "013":            # 조회 데이터 없음
+            break
+        if status not in ("000", None):
+            log.warning("dart.list.status", status=status, msg=body.get("message"))
+            break
+        for it in body.get("list") or []:
+            sym = str(it.get("stock_code") or "").strip()
+            iid = by_symbol.get(sym)
+            if not iid:                # 비상장/미매핑 제외
+                continue
+            row = normalize_disclosure(it, iid)
+            if row:
+                rows.append(row)
+        if page >= int(body.get("total_page") or 1):
+            break
+        page += 1
+
+    n = upsert("disclosures", rows, on_conflict="rcept_no") if rows else 0
+    log.info("dart.disclosures.done", rows=n, pages=page, days=days)
+    return n
 
 
 def _corp_cache_path() -> "os.PathLike[str] | str":
