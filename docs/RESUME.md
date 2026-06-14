@@ -1,8 +1,33 @@
 # 재개 메모 (RESUME) — 다음에 여기서부터
 
-> 마지막 체크포인트: PEAD 분기 이력 인제스트(5련 중 4번째 진행) + UI V3 다크 시안 10화면 완성(2026-06-12 오후) · 브랜치 `master`
-> 작성 기준일: 2026-06-12 (갱신)
+> 마지막 체크포인트: **배포 + 알파 신뢰성 대수술 (2026-06-13~14)** · 브랜치 `master`(GitHub: Victor-wonderful/stock-alpha)
+> 작성 기준일: 2026-06-14 (갱신)
 > ⭐ 제품 피벗(2026-06): AI 리서치 애널리스트 + 유사투자자문 구독(신고 보유). 자동매매/일임 폐기. 메모리 `stock-alpha-product-strategy` 참조.
+
+## 🚀 2026-06-13~14 — 운영 배포 + 거래비용/멀티스타일/팩터/공시 대수술
+
+**배포 (라이브)**: 웹=Vercel(GitHub 자동배포, https://stock-alpha-victor-alpha.vercel.app) · DB=호스티드 Supabase(ref hbewzmbtetupxvqlfjld, ap-northeast-2, 데이터 전량 이관) · 엔진=PC. 상세·함정 메모리 `stock-alpha-deployment`.
+
+**① 거래비용 반영(P0 최대위협 해소)**: `engine/backtest/costs.py`(수수료0.015%/변·거래세0.18%매도·슬리피지0.05%/변) → net R. 비용 drag ~0.07~0.1R 로 swing 셋업 전멸 발견.
+
+**② 멀티스타일 매트릭스 게이트**: 게이트를 (셋업×스타일)로(`playbooks.ALLOWED_STYLES`·`testable_styles`). 비용 흡수되는 조합만 발행. **현재 PASS 6(전부 position)**: high_52w·breakout·vol_squeeze·flow_accumulation·leader_trend·pullback. close_betting(초단기 정체성)·oversold·pead·factor_composite=FAIL. day/scalp 는 분봉 필요라 '검증 대기'. 시그널 177건 position 재발행(호스티드 반영).
+
+**③ 분봉 파이프라인(데이/스캘핑 기반)**: (i) `ingest-minutes --top 200` 매일 축적(일일배치 연결, **월요일부터 시작**) (ii) `engine/backtest/intraday_backtest.py`(당일청산·비용반영) — 탐지기(iii)는 데이터 축적 후.
+
+**④ 퀀트 모델 재검증(IC 감사)**: `scripts/diag_factor_ic.py`(point-in-time 39주). **value·quality 가 진짜 엣지**(롱사이드 t≈1.7), lowvol(강세장 롱사이드 음수)·size 제거, growth 유망하나 n=11. `compose.DEFAULT_WEIGHTS` → VQM(value.4/quality.4/momentum.2). factor_scores VQM 재계산(호스티드 06-14). 기존 횡단면 게이트 FAIL 이유=가격팩터만 검증해 엣지인 재무팩터 누락.
+
+**⑤ 원격 DB 지연 근본해결**: `engine/db_direct.py` — SUPABASE_DB_URL(세션풀러 aws-1) psycopg 서버사이드커서 단일 스트리밍. 호스티드 2561종목 로딩 **34초**(기존 종목별 REST=몇시간). backtest·signals·cross_section 벌크 우선·REST 폴백.
+
+**⑥ 기업공시 이벤트 엔진 A1**: DART `list.json` → 분류(`disclosure_class.py` 30+규칙)·적재(disclosures 0021). `ingest-disclosures` 일일배치 연결. 최근7일 392건 분류 적재.
+
+### ⏭️ 다음 재개 우선순위 (여기서부터)
+1. **공시 A2** — 이벤트 타입별 CAR(시장/섹터 대비) 이벤트스터디 + 비용반영 게이트 → 드리프트 있는 타입만 발행. 정정공시([기재정정]) dedupe. → A3 발행·리포트 연동.
+2. **팩터 게이트 포팅** — `cross_section.py` 를 풀합성(value+quality+momentum) point-in-time 검증으로(현재 가격팩터만). 그래도 t<2 면 '하위데실 회피 필터'로 활용. (감사 로직은 diag_factor_ic 에 있음)
+3. **2024FY disclosed_at 백필**(보류) — growth 검증 표본 확보 + PEAD 6라운드 재판정.
+4. **데이/스캘핑 탐지기**(iii) — 분봉 수주 축적 후.
+5. 매트릭스 백테스트 CPU 최적화(셋업당 1회 탐지 후 스타일별 레벨), M8 결제, 인증·워치리스트/알림 백엔드.
+
+> ⚠️ 운영: 엔진=모스크바 PC, DB=서울 → 대량읽기는 반드시 db_direct 경유. 매트릭스 백테스트 CPU ~20분(야간배치 적정). DART 일한도 2만건 주의.
 
 ## 🔄 2026-06-12 — 자동 배치 검증 · PEAD 데이터 수집 · UI V3 다크 시안
 
