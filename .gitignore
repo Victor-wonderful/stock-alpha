@@ -53,6 +53,9 @@ data/cache/
 # 배치/인제스트 로그
 logs/
 
+# 워커 런타임 상태 (worker_state.json 등)
+var/
+
 # KIS 토큰 캐시 (24h, 민감)
 apps/engine/.kis_token.json
 apps/engine/.dart_quota.json

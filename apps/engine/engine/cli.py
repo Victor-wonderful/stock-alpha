@@ -280,6 +280,98 @@ def daily(
     )
 
 
+@app.command()
+def worker(
+    tick: int = typer.Option(30, help="스케줄 폴링 간격(초)"),
+    once: bool = typer.Option(False, help="한 틱만 평가하고 종료(테스트용)"),
+    dry_run: bool = typer.Option(False, help="실행하지 않고 판단만 로그(테스트용)"),
+) -> None:
+    """상주 워커 — 내부 스케줄러로 모닝(08:30)·데일리(16:30) 배치를 KST 기준 실행.
+
+    배치처럼 끝나고 죽는 대신 계속 떠 있는다. 각 작업은 별도 프로세스로 띄워
+    한 작업의 크래시가 워커를 죽이지 않게 한다. 상태파일(var/worker_state.json)로
+    '오늘 이미 실행' 여부를 추적해 PC가 꺼졌다 켜져도(catch-up) 중복 없이 한 번만 돈다.
+    평일(월~금)만 실행 — 기존 작업스케줄러와 동일 동작.
+    """
+    import json
+    import subprocess
+    import sys
+    import time
+    from datetime import datetime, timedelta, timezone
+    from pathlib import Path
+
+    kst = timezone(timedelta(hours=9))  # 한국은 DST 없음 → 고정 +9 (PC 시간대 무관)
+    here = Path(__file__).resolve()
+    engine_dir = here.parents[1]  # apps/engine — 서브프로세스 cwd
+    repo_root = here.parents[3]  # D:\Stock-Alpha — logs·var
+    log_dir = repo_root / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    state_path = repo_root / "var" / "worker_state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    py = sys.executable
+
+    # (이름, KST시, KST분, 로그파일 베이스, [CLI 인자열 ...])
+    jobs = [
+        {"name": "morning", "hh": 8, "mm": 30, "logbase": "morning",
+         "cmds": [["morning"]]},
+        {"name": "daily", "hh": 16, "mm": 30, "logbase": "daily",
+         "cmds": [["daily"],
+                  ["ingest-minutes", "--top", "200"],
+                  ["ingest-disclosures", "--days", "3"]]},
+    ]
+
+    def load_state() -> dict:
+        try:
+            return json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def save_state(s: dict) -> None:
+        state_path.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def run_job(job: dict, now: datetime) -> None:
+        logfile = log_dir / f"{job['logbase']}-{now.strftime('%Y%m%d')}.log"
+        for cmd in job["cmds"]:
+            log.info("worker.dispatch", job=job["name"], cmd=" ".join(cmd))
+            with logfile.open("ab") as f:
+                f.write(f"\n=== {job['name']} :: {' '.join(cmd)} @ {now.isoformat()} ===\n".encode())
+                f.flush()
+                rc = subprocess.run(  # noqa: S603 — 내부 고정 명령
+                    [py, "-m", "engine.cli", *cmd], cwd=str(engine_dir),
+                    stdout=f, stderr=subprocess.STDOUT,
+                ).returncode
+                f.write(f"exit={rc} at {datetime.now(kst).isoformat()}\n".encode())
+            log.info("worker.done", job=job["name"], cmd=" ".join(cmd), exit=rc)
+
+    log.info("worker.start", tz="KST", tick=tick, once=once, dry_run=dry_run,
+             state=str(state_path), engine_dir=str(engine_dir))
+    last_heartbeat = 0.0
+    while True:
+        now = datetime.now(kst)
+        today = now.strftime("%Y-%m-%d")
+        state = load_state()
+        is_weekday = now.weekday() < 5
+        for job in jobs:
+            after_time = (now.hour, now.minute) >= (job["hh"], job["mm"])
+            due = is_weekday and after_time and state.get(job["name"]) != today
+            if not due:
+                continue
+            if dry_run:
+                log.info("worker.would_run", job=job["name"], now=now.isoformat())
+                continue
+            run_job(job, now)
+            state[job["name"]] = today
+            save_state(state)
+        # 하트비트 — 10분마다 살아있음 로그
+        mono = time.monotonic()
+        if mono - last_heartbeat >= 600:
+            log.info("worker.alive", kst=now.isoformat(), state=load_state())
+            last_heartbeat = mono
+        if once:
+            return
+        time.sleep(tick)
+
+
 @app.command("levels-demo")
 def levels_demo(
     style: str = typer.Option("swing", help=f"스타일: {', '.join(STYLES)}"),
