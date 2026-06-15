@@ -294,11 +294,22 @@ def worker(
     평일(월~금)만 실행 — 기존 작업스케줄러와 동일 동작.
     """
     import json
+    import socket
     import subprocess
     import sys
     import time
     from datetime import datetime, timedelta, timezone
     from pathlib import Path
+
+    # 싱글톤 가드 — 동일 PC에서 워커는 단 하나만. 래퍼/작업스케줄러가 중복 기동해도
+    # 두 번째 인스턴스는 즉시 종료해 데일리 이중 실행을 원천 차단한다.
+    _guard = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        _guard.bind(("127.0.0.1", 47654))
+        _guard.listen(1)
+    except OSError:
+        log.warning("worker.already_running", note="다른 워커 인스턴스 감지 — 이 인스턴스 종료")
+        raise typer.Exit(0)
 
     kst = timezone(timedelta(hours=9))  # 한국은 DST 없음 → 고정 +9 (PC 시간대 무관)
     here = Path(__file__).resolve()
