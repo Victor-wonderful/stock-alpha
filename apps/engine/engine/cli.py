@@ -322,7 +322,8 @@ def worker(
 
     def load_state() -> dict:
         try:
-            return json.loads(state_path.read_text(encoding="utf-8"))
+            # utf-8-sig: PowerShell 등이 붙인 BOM이 있어도 안전하게 파싱
+            return json.loads(state_path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             return {}
 
