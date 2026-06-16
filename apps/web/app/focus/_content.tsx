@@ -26,6 +26,14 @@ function nextTradingDayLabel(asOf: string): string {
   return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${days[d.getUTCDay()]})`;
 }
 
+// 분석 기준일(종가일) 라벨 — "6월 16일(화)"
+function tradingDayLabel(asOf: string): string {
+  const [y, m, dd] = asOf.split("-").map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, dd)).getUTCDay();
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${m}월 ${dd}일(${days[wd]})`;
+}
+
 // 레짐 게이지 (3구간 바 + 마커)
 function RegimeGauge({ score }: { score: number }) {
   // score: -1 ~ 1 → 0 ~ 100% 포지션
@@ -133,6 +141,7 @@ export default async function FocusContent() {
     : recs.data.filter((r) => r.basket_type === "daily_focus");
   const asOf = picks[0]?.as_of ?? null;
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
+  const basisDay = asOf ? tradingDayLabel(asOf) : null;
 
   // 판정 현황
   const latestDay = allReports.data[0]?.as_of ?? null;
@@ -171,17 +180,23 @@ export default async function FocusContent() {
         {/* ── 페이지 헤더 ── */}
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-text">오늘의 포커스</h1>
+              {basisDay && (
+                <span className="rounded-[999px] bg-surface-3 px-2.5 py-1 text-[10px] font-semibold text-text-dim">
+                  {basisDay} 종가 분석
+                </span>
+              )}
               {planDay && (
                 <span className="rounded-[999px] bg-accent px-3 py-1 text-[11px] font-bold text-[#0B0C10]">
-                  {planDay} 장 시작 전 플랜
+                  → {planDay} 장 시작 전 플랜
                 </span>
               )}
               {recs.isSample && <SampleBadge />}
             </div>
             <p className="mt-1 text-xs text-text-mute">
-              시스템 기준을 통과한 관심 후보 — 사람이 고르지 않습니다
+              시스템 기준을 통과한 관심 후보 — 사람이 고르지 않습니다 · 직전 거래일
+              종가로 분석해 다음 거래일 장전 플랜으로 제시합니다
             </p>
           </div>
           <div className="flex items-center gap-2">

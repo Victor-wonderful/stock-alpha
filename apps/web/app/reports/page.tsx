@@ -28,6 +28,17 @@ function fmtDateHeader(asOf: string): { date: string; weekday: string } {
   return { date: `${m}월 ${d}일`, weekday: days[wd] };
 }
 
+// 종가 기준일 → 다음 거래일(플랜 적용일) 라벨
+function nextTradingDayLabel(asOf: string): string {
+  const [y, m, dd] = asOf.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, dd));
+  do {
+    d.setUTCDate(d.getUTCDate() + 1);
+  } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${days[d.getUTCDay()]})`;
+}
+
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -92,7 +103,7 @@ export default async function ReportsPage({
   return (
     <AppShell
       title="종목 분석"
-      subtitle="AI 애널리스트 — 수치는 전부 DB 근거(source_refs) · LLM은 서술만"
+      subtitle="AI 애널리스트 — 종가 기준 분석, 다음 거래일 장전 플랜 · 수치는 전부 DB 근거(source_refs)"
     >
       {/* 판정 탭 필 + 거래소 칩 */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -229,7 +240,10 @@ export default async function ReportsPage({
                 {/* 날짜 그룹 헤더 */}
                 <div className="mb-2.5 flex items-center gap-2.5">
                   <h2 className="text-[13px] font-extrabold text-text">{date}</h2>
-                  <span className="text-[11px] font-medium text-text-mute">({weekday})</span>
+                  <span className="text-[11px] font-medium text-text-mute">({weekday}) 종가</span>
+                  <span className="text-[10px] font-medium text-text-mute">
+                    → {nextTradingDayLabel(asOf)} 장전 플랜
+                  </span>
                   <span className="rounded-[6px] bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-text-dim ring-1 ring-inset ring-border">
                     {rows.length}건{pickCount > 0 && ` · 픽 ${pickCount}`}
                   </span>
