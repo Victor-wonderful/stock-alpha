@@ -25,7 +25,34 @@ def get_client() -> Any:
             "Supabase 자격증명 없음. NEXT_PUBLIC_SUPABASE_URL / "
             "SUPABASE_SERVICE_ROLE_KEY 를 .env.local 에 설정하세요."
         )
-    return create_client(s.supabase_url, s.supabase_service_role_key)
+    client = create_client(s.supabase_url, s.supabase_service_role_key)
+    _force_http1(client)
+    return client
+
+
+def _force_http1(client: Any) -> None:
+    """PostgREST 세션을 HTTP/1.1 로 교체 — HTTP/2 스트림 상한 회피.
+
+    daily 배치는 한 프로세스에서 수만 건을 요청하는데, supabase-py 기본
+    HTTP/2 연결은 단일 커넥션 스트림 상한(~2^? )에서 서버가 GOAWAY 를 보내
+    `RemoteProtocolError: ConnectionTerminated` 로 죽는다(2026-06-15 daily 크래시).
+    HTTP/1.1 은 그 상한이 없고 keep-alive 풀이 자연스럽게 회전한다.
+    내부 구조 의존이라 실패해도 조용히 통과(기본 동작 유지).
+    """
+    import httpx
+
+    try:
+        pg = client.postgrest
+        old = pg.session
+        pg.session = httpx.Client(
+            base_url=old.base_url,
+            headers=old.headers,
+            timeout=old.timeout,
+            http2=False,
+            follow_redirects=True,
+        )
+    except Exception as exc:  # noqa: BLE001 — 내부구조 변동 시 기본 클라이언트 유지
+        log.warning("db.force_http1.skip", error=str(exc))
 
 
 def select_all(

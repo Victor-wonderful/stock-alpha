@@ -164,8 +164,8 @@ def backtest() -> None:
     from engine.backtest import runner as br
 
     result = br.run()
-    for setup, ok in result.items():
-        typer.echo(f"{'PASS' if ok else 'FAIL'}  {setup}")
+    for (setup, style), ok in sorted(result.items()):
+        typer.echo(f"{'PASS' if ok else 'FAIL'}  {setup}:{style}")
 
 
 @app.command("backtest-factor")
@@ -261,9 +261,15 @@ def daily(
     r0 = rg.run()
     typer.echo(f"      regime: {r0['regime']} (score {r0['score']})")
 
+    # br.run() 은 (셋업×스타일) 매트릭스 → {(setup, style): passed}. 튜플 키를
+    # setup 문자열로 풀어야 한다(시그널 발행 필터는 셋업 단위, 스타일 게이팅은 내부 처리).
     gate = br.run()
-    passed = [s for s, ok in gate.items() if ok]
-    typer.echo(f"[3/5] backtest gate passed: {', '.join(passed) or '(없음)'}")
+    passed_pairs = [(setup, style) for (setup, style), ok in gate.items() if ok]
+    passed = sorted({setup for setup, _ in passed_pairs})
+    typer.echo(
+        "[3/5] backtest gate passed: "
+        f"{', '.join(f'{s}:{st}' for s, st in passed_pairs) or '(없음)'}"
+    )
 
     # factor_composite 는 횡단면 백테스트(backtest-factor) 판정을 따른다 —
     # 미통과면 발행 제외 (2026-06-10 검증: IC 유효하나 상위10% 초과수익 무유의)
@@ -341,7 +347,13 @@ def worker(
     def save_state(s: dict) -> None:
         state_path.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def run_job(job: dict, now: datetime) -> None:
+    MAX_RETRIES = 3  # 실패 시 같은 날 재시도 상한 — LLM 비용/폭주 가드레일
+
+    def run_job(job: dict, now: datetime) -> bool:
+        """작업 실행. 모든 하위 명령이 exit=0 이면 True. 하나라도 실패하면 즉시 False.
+
+        실패한 명령 이후 명령은 돌리지 않는다(예: daily 본체 실패 시 분봉/공시 생략).
+        """
         logfile = log_dir / f"{job['logbase']}-{now.strftime('%Y%m%d')}.log"
         for cmd in job["cmds"]:
             log.info("worker.dispatch", job=job["name"], cmd=" ".join(cmd))
@@ -354,6 +366,9 @@ def worker(
                 ).returncode
                 f.write(f"exit={rc} at {datetime.now(kst).isoformat()}\n".encode())
             log.info("worker.done", job=job["name"], cmd=" ".join(cmd), exit=rc)
+            if rc != 0:
+                return False
+        return True
 
     log.info("worker.start", tz="KST", tick=tick, once=once, dry_run=dry_run,
              state=str(state_path), engine_dir=str(engine_dir))
@@ -364,15 +379,32 @@ def worker(
         state = load_state()
         is_weekday = now.weekday() < 5
         for job in jobs:
+            name = job["name"]
             after_time = (now.hour, now.minute) >= (job["hh"], job["mm"])
-            due = is_weekday and after_time and state.get(job["name"]) != today
+            # 오늘 성공 완료했으면 skip. 실패해서 today 가 안 찍힌 경우만 재시도.
+            done_today = state.get(name) == today
+            fail = state.get(f"{name}_fail") or {}
+            attempts = fail.get("n", 0) if fail.get("date") == today else 0
+            due = (
+                is_weekday and after_time and not done_today
+                and attempts < MAX_RETRIES
+            )
             if not due:
                 continue
             if dry_run:
-                log.info("worker.would_run", job=job["name"], now=now.isoformat())
+                log.info("worker.would_run", job=name, now=now.isoformat(),
+                         attempt=attempts + 1)
                 continue
-            run_job(job, now)
-            state[job["name"]] = today
+            ok = run_job(job, now)
+            if ok:
+                state[name] = today
+                state.pop(f"{name}_fail", None)
+            else:
+                state[f"{name}_fail"] = {"date": today, "n": attempts + 1}
+                log.warning("worker.job_failed", job=name,
+                            attempt=attempts + 1, max=MAX_RETRIES,
+                            note="state 미기록 — 다음 틱 재시도" if attempts + 1 < MAX_RETRIES
+                            else "재시도 상한 도달 — 오늘은 포기")
             save_state(state)
         # 하트비트 — 10분마다 살아있음 로그
         mono = time.monotonic()
