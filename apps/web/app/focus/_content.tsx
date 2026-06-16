@@ -144,7 +144,13 @@ export default async function FocusContent() {
     부적합: todayReports.filter((r) => r.rating === "거래 부적합").length,
     total: todayReports.length,
   };
-  const reportBySymbol = new Map(allReports.data.map((r) => [r.symbol, r]));
+  // 심볼별 최신 리포트만 — allReports 는 as_of 내림차순이므로 첫 등장(최신)을 보존한다.
+  // (Map(array.map(...)) 은 last-write-wins → 같은 심볼의 과거 리포트가 최신을 덮어써
+  //  픽 카드에 옛 판정·점수가 표시되던 버그를 차단.)
+  const reportBySymbol = new Map<string | null, (typeof allReports.data)[number]>();
+  for (const r of allReports.data) {
+    if (!reportBySymbol.has(r.symbol)) reportBySymbol.set(r.symbol, r);
+  }
 
   // 픽 기록 상태
   const activePicks = history.data.filter((h) => h.status === "진행중");

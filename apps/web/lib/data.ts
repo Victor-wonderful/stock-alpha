@@ -347,6 +347,7 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
       .from("recommendations")
       .select("basket_type,style,weight,conviction,thesis,entry_price,target_price,stop_loss,as_of,instruments(symbol,name)")
       .order("as_of", { ascending: false })
+      .order("conviction", { ascending: false })
       .limit(100);
     if (error || !data || data.length === 0) throw error ?? new Error("empty");
     // 바스켓별 최신 as_of 스냅샷만 — 지난 날짜 픽이 섞여 중복 표시되지 않게.
