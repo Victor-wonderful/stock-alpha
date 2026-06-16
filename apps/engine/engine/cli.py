@@ -244,6 +244,7 @@ def daily(
     """
     from engine.backtest import runner as br
     from engine.factors import runner as fr
+    from engine.fundamental import runner as fdr
     from engine.ingest import runner as ir
     from engine.reports import daily as rd
     from engine.signals import runner as sr
@@ -259,7 +260,7 @@ def daily(
     else:
         typer.echo("[1/5] ingest skipped")
 
-    typer.echo(f"[2/5] factors: {fr.run()} rows")
+    typer.echo(f"[2/5] factors: {fr.run()} rows · valuations: {fdr.run(as_of=as_of)} rows")
 
     from engine.market import regime as rg
     r0 = rg.run()

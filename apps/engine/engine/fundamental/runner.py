@@ -57,8 +57,12 @@ def build_valuation_row(
     *,
     wacc: float = 0.09,
     growth: float = 0.05,
+    as_of: date | None = None,
 ) -> dict | None:
-    """단일 종목 valuations 행 산출 (순수 조립)."""
+    """단일 종목 valuations 행 산출 (순수 조립).
+
+    as_of: 적재 일자. 미지정 시 date.today(). daily 배치의 as_of 와 정렬용.
+    """
     shares = fin.get("shares")
     r = ratios.compute_ratios(fin, price=price, shares=shares)
 
@@ -75,7 +79,7 @@ def build_valuation_row(
 
     row = {
         "instrument_id": instrument_id,
-        "date": date.today().isoformat(),
+        "date": (as_of or date.today()).isoformat(),
         "per": r["per"],
         "pbr": r["pbr"],
         "ev_ebitda": r["ev_ebitda"],
@@ -88,20 +92,40 @@ def build_valuation_row(
     return row
 
 
-def run(instrument_ids: list[int] | None = None) -> int:
-    """대상 종목들의 밸류에이션을 산출·적재."""
+def run(instrument_ids: list[int] | None = None, *, as_of: str | None = None) -> int:
+    """대상 종목들의 밸류에이션을 산출·적재.
+
+    instrument_ids=None(전체)일 때는 직접 PG 벌크 읽기로 financials/close 를 각 1쿼리에
+    가져와 종목별 왕복(수천 회)을 제거한다(가용 시). 특정 종목 지정 시는 기존 N+1 경로.
+    as_of: 적재 일자(YYYY-MM-DD). 미지정 시 date.today().
+    """
+    as_of_date = date.fromisoformat(as_of) if as_of else None
+
     if instrument_ids is None:
+        from engine import db_direct
+        if db_direct.available():
+            fins = db_direct.load_latest_financials_fy()
+            closes = db_direct.load_latest_close_1d()
+            rows = [
+                row
+                for iid, fin in fins.items()
+                if (row := build_valuation_row(
+                    iid, fin, closes.get(iid), as_of=as_of_date)) is not None
+            ]
+            n = upsert("valuations", rows, on_conflict="instrument_id,date")
+            log.info("valuation.run.done", rows=n, path="bulk")
+            return n
         instrument_ids = [r["id"] for r in select_all("instruments", "id", eq={"active": True})]
 
-    rows: list[dict] = []
+    rows = []
     for iid in instrument_ids:
         fin = _latest_financials(iid)
         if not fin:
             continue
         price = _latest_close(iid)
-        row = build_valuation_row(iid, fin, price)
+        row = build_valuation_row(iid, fin, price, as_of=as_of_date)
         if row:
             rows.append(row)
     n = upsert("valuations", rows, on_conflict="instrument_id,date")
-    log.info("valuation.run.done", rows=n)
+    log.info("valuation.run.done", rows=n, path="rest")
     return n
