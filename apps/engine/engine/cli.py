@@ -233,6 +233,10 @@ def daily(
     ingest_days: int = typer.Option(7, help="시세 인제스트 기간(일)"),
     llm: bool = typer.Option(True, help="Claude 서술 생성"),
     cap: int = typer.Option(100, help="일 발행 상한"),
+    as_of: str = typer.Option(
+        None, "--as-of",
+        help="발행 일자(거래일, YYYY-MM-DD). 미지정 시 오늘. 자정 넘긴 재실행 시 대상일 명시용.",
+    ),
 ) -> None:
     """일일 EOD 배치 (발행 규정 v1) — 인제스트→팩터→백테스트 게이트→시그널→리포트→오늘의 포커스.
 
@@ -279,7 +283,7 @@ def daily(
     n = sr.run(setups=setups)
     typer.echo(f"[4/5] signals: {n} rows ({', '.join(setups) or '(없음)'})")
 
-    r = rd.run_daily(use_llm=llm, cap=cap)
+    r = rd.run_daily(use_llm=llm, cap=cap, as_of=as_of)
     typer.echo(
         f"[5/5] reports — A:{r['track_a']} B:{r['track_b']} "
         f"published:{r['published']} skipped:{r['skipped']} picks:{r['picks']}"
@@ -356,6 +360,10 @@ def worker(
         """
         logfile = log_dir / f"{job['logbase']}-{now.strftime('%Y%m%d')}.log"
         for cmd in job["cmds"]:
+            # daily 발행은 디스패치 시점의 거래일로 라벨을 고정한다. 배치가 자정을
+            # 넘겨 끝나도 date.today() 가 다음날로 넘어가 오라벨되는 일을 막는다.
+            if cmd and cmd[0] == "daily":
+                cmd = [*cmd, "--as-of", now.strftime("%Y-%m-%d")]
             log.info("worker.dispatch", job=job["name"], cmd=" ".join(cmd))
             with logfile.open("ab") as f:
                 f.write(f"\n=== {job['name']} :: {' '.join(cmd)} @ {now.isoformat()} ===\n".encode())

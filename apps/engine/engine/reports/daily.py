@@ -229,9 +229,14 @@ def select_and_store_picks(as_of: str) -> int:
 
 
 def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
-              coverage_top: int = COVERAGE_TOP) -> dict:
-    """일일 발행 실행 — 트랙 A/B 리포트 + 오늘의 포커스. 결과 요약 반환."""
-    today = date.today().isoformat()
+              coverage_top: int = COVERAGE_TOP, as_of: str | None = None) -> dict:
+    """일일 발행 실행 — 트랙 A/B 리포트 + 오늘의 포커스. 결과 요약 반환.
+
+    as_of: 발행 일자(거래일, YYYY-MM-DD) 명시. 미지정 시 date.today().
+    자정을 넘겨 재실행할 때 대상 거래일로 정확히 라벨링하기 위함.
+    """
+    today = as_of or date.today().isoformat()
+    today_date = date.fromisoformat(today)
     # [관리] 어제까지의 열린 픽을 오늘 종가로 먼저 확정(목표/손절/만료)
     pick_status = manage_picks(today)
     passed = passed_setups_from_db()
@@ -251,6 +256,7 @@ def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
         r = publish_indepth(
             sym, use_llm=use_llm,
             skip_unchanged_days=COVERAGE_SKIP_DAYS if is_coverage else 0,
+            as_of=today_date,
         )
         if r is None:
             continue
