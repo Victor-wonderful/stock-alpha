@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from engine.reports.context import EOD_STYLES, build_plan
 from engine.reports.daily import (
     PICK_EXPIRE_DAYS,
@@ -73,6 +75,35 @@ def test_picks_capped():
     assert picks[0]["instrument_id"] == 9  # 최고 점수 우선
 
 
+def test_picks_gate_filters_failing_combo():
+    # 픽 플랜은 (breakout, swing). 게이트가 breakout 을 position 으로만 통과시키면
+    # 엣지 미검증 swing 플랜은 발행되지 않는다(빈 날 허용).
+    reports = [_report(1, "매수", 70.0)]
+    assert select_picks(reports, passed_combos={"breakout": ["position"]}) == []
+    # 같은 (setup,style) 이 통과면 발행되고, 실제 셋업 라벨이 실린다.
+    picks = select_picks(reports, passed_combos={"breakout": ["swing"]})
+    assert [p["instrument_id"] for p in picks] == [1]
+    assert picks[0]["setup"] == "breakout"
+
+
+def test_picks_style_chosen_by_expectancy():
+    # 한 종목이 swing·position 둘 다 통과 → 강도가 아닌 검증 기대값 높은 쪽 선택.
+    r = _report(1, "매수", 70.0)
+    r["payload"]["plan"] = [
+        {"style": "swing", "setup": "breakout", "strength": 0.9,   # 강도는 더 높지만
+         "entry_price": 100.0, "tp1": 120.0, "stop_loss": 95.0},
+        {"style": "position", "setup": "breakout", "strength": 0.6,  # 기대값이 더 높음
+         "entry_price": 100.0, "tp1": 130.0, "stop_loss": 90.0},
+    ]
+    passed = {"breakout": ["swing", "position"]}
+    exp = {("breakout", "swing"): 0.01, ("breakout", "position"): 0.12}
+    picks = select_picks([r], passed_combos=passed, expectancy_by_combo=exp)
+    assert picks[0]["style"] == "position"   # 강도(swing 0.9) 무시, 기대값 우선
+    # 기대값 미주입 시엔 강도 폴백(swing 0.9) — 하위호환.
+    picks_fallback = select_picks([r], passed_combos=passed)
+    assert picks_fallback[0]["style"] == "swing"
+
+
 # ── 커버리지 트랙 변동분 스킵 ────────────────────────────────────────
 
 def test_skip_unchanged():
@@ -109,6 +140,55 @@ def test_pick_status_expiry_and_return():
     assert out["status"] == "expired"
     assert out["close_return_pct"] == 0.05
     assert out["exit_price"] == 105.0
+
+
+# ── 분할익절(스케일아웃) 수명주기 (0022) ──
+_SCALE = {"as_of": "2026-06-10", "entry_price": 100.0, "target_price": 110.0,
+          "tp2_price": 120.0, "stop_loss": 95.0, "tp1_hit": False}
+
+
+def test_scaleout_tp1_hit_is_non_closing():
+    today = date(2026, 6, 11)
+    # tp1(110) 도달, tp2 미만 → 종결 아님: tp1_hit 표시 + 본전스톱 전환.
+    out = resolve_pick_status(_SCALE, 112.0, today)
+    assert out == {"tp1_hit": True, "tp1_hit_at": "2026-06-11"}
+    assert "status" not in out
+
+
+def test_scaleout_stop_before_tp1():
+    out = resolve_pick_status(_SCALE, 94.0, date(2026, 6, 11))
+    assert out["status"] == "stopped"
+    assert out["close_return_pct"] == pytest.approx(-0.06)
+
+
+def test_scaleout_breakeven_after_tp1_is_partial():
+    # 이미 1차 익절한 픽이 본전(entry=100)으로 회귀 → 'partial', 블렌디드 0.5*0.10.
+    pick = {**_SCALE, "tp1_hit": True}
+    out = resolve_pick_status(pick, 99.0, date(2026, 6, 12))
+    assert out["status"] == "partial"
+    assert out["close_return_pct"] == pytest.approx(0.05)
+
+
+def test_scaleout_tp2_after_tp1_is_full_target():
+    pick = {**_SCALE, "tp1_hit": True}
+    out = resolve_pick_status(pick, 121.0, date(2026, 6, 12))
+    assert out["status"] == "target"
+    # 0.5*(110/100-1) + 0.5*(120/100-1) = 0.5*0.10 + 0.5*0.20 = 0.15
+    assert out["close_return_pct"] == pytest.approx(0.15)
+
+
+def test_scaleout_same_day_through_tp2():
+    # tp1 미기록 상태서 종가가 tp2 초과 → 양 트랜치 실현 + tp1_hit 기록.
+    out = resolve_pick_status(_SCALE, 125.0, date(2026, 6, 11))
+    assert out["status"] == "target" and out["tp1_hit"] is True
+    assert out["close_return_pct"] == pytest.approx(0.15)
+
+
+def test_scaleout_legacy_pick_without_tp2_unchanged():
+    # tp2 없는 옛 픽은 기존 단일 청산 — tp1 도달 시 바로 'target'(비분할).
+    out = resolve_pick_status(_PICK, 121.0, date(2026, 6, 11))
+    assert out["status"] == "target"
+    assert out["close_return_pct"] == pytest.approx(0.21)
 
 
 # ── EOD 스타일 필터 ─────────────────────────────────────────────────

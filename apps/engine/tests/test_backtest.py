@@ -86,6 +86,61 @@ def test_backtest_unknown_setup():
     assert backtest_playbook(_breakout_history(), "nonexistent") == []
 
 
+# ── 스케일아웃 청산 (처방2-2) ──
+def _bars(rows):
+    """rows: [(low, high, close)] → 합성 OHLC. 0번이 진입봉."""
+    return pd.DataFrame({
+        "low": [r[0] for r in rows],
+        "high": [r[1] for r in rows],
+        "close": [r[2] for r in rows],
+    })
+
+
+def test_exit_scaleout_runner_beats_single_on_extended_trend():
+    from engine.backtest.costs import ZERO_COST
+    from engine.backtest.event_backtest import _exit_scaleout, _exit_single
+    # tp1(110) 후 tp2(120)까지 추세 연장 → 런이 더 먹는다.
+    df = _bars([(100, 100, 100), (105, 111, 110), (112, 121, 120)])
+    base = _exit_single(df, 0, len(df), 100, 95, 110, 10, ZERO_COST)
+    scale = _exit_scaleout(df, 0, len(df), 100, 95, 110, 120, 10, ZERO_COST)
+    assert base[0] == pytest.approx(10.0)     # 전량 tp1
+    assert scale[0] == pytest.approx(15.0)    # 0.5*10(tp1) + 0.5*20(tp2)
+    assert scale[0] > base[0]
+
+
+def test_exit_scaleout_breakeven_caps_reversal():
+    from engine.backtest.costs import ZERO_COST
+    from engine.backtest.event_backtest import _exit_scaleout, _exit_single
+    # tp1 후 되돌림 → 잔량 본전(entry) 청산. 분할이 단일보다 적게 먹는 트레이드오프.
+    df = _bars([(100, 100, 100), (105, 111, 110), (99, 101, 100)])
+    base = _exit_single(df, 0, len(df), 100, 95, 110, 10, ZERO_COST)
+    scale = _exit_scaleout(df, 0, len(df), 100, 95, 110, 120, 10, ZERO_COST)
+    assert base[0] == pytest.approx(10.0)
+    assert scale[0] == pytest.approx(5.0)     # 0.5*10 + 0.5*0(본전)
+
+
+def test_exit_scaleout_stop_before_tp1_matches_single():
+    from engine.backtest.costs import ZERO_COST
+    from engine.backtest.event_backtest import _exit_scaleout, _exit_single
+    # tp1 전 손절 → 전량 손절(단일과 동일).
+    df = _bars([(100, 100, 100), (94, 98, 95)])
+    base = _exit_single(df, 0, len(df), 100, 95, 110, 10, ZERO_COST)
+    scale = _exit_scaleout(df, 0, len(df), 100, 95, 110, 120, 10, ZERO_COST)
+    assert base[0] == pytest.approx(-5.0)
+    assert scale[0] == pytest.approx(-5.0)
+
+
+def test_backtest_scaleout_flag_default_off():
+    # scaleout=False(기본)는 기존 동작 — 회귀 방지.
+    hist = _breakout_history()
+    base = backtest_playbook(hist, "breakout", min_lookback=20)
+    scale = backtest_playbook(hist, "breakout", min_lookback=20, scaleout=True)
+    assert isinstance(base, list) and isinstance(scale, list)
+    # 둘 다 트레이드를 내되, 청산 규칙이 달라 R 분포가 동일하지 않다.
+    if base and scale:
+        assert [t.r_multiple for t in base] != [t.r_multiple for t in scale]
+
+
 # ── 품질 게이트 ──
 def test_gate_fails_on_small_sample():
     gr = evaluate_gate(_trades([2, -1, 2]))

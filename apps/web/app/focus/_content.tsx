@@ -163,6 +163,24 @@ export default async function FocusContent() {
 
   // 픽 기록 상태
   const activePicks = history.data.filter((h) => h.status === "진행중");
+
+  // 트랙레코드 집계 — 엔진이 확정(0017)한 종료 픽만. 정직한 기대값 노출(신뢰).
+  // 저승률·고R:R 추세전략은 손절이 잦아도 기대값이 양(+)이면 장기 수익이 난다는 걸
+  // 숫자로 보여 "손절이 많다"는 인상을 기대값으로 재맥락화한다.
+  const closedPicks = history.data.filter((h) => h.closed);
+  const tr = {
+    closed: closedPicks.length,
+    target: closedPicks.filter((h) => h.status === "목표 도달").length,
+    stopped: closedPicks.filter((h) => h.status === "손절").length,
+    expired: closedPicks.filter((h) => h.status === "만료").length,
+    partial: closedPicks.filter((h) => h.status === "1차 익절").length,
+    wins: closedPicks.filter((h) => (h.return_pct ?? 0) > 0).length,
+  };
+  const winRate = tr.closed > 0 ? tr.wins / tr.closed : null;
+  const expectancy =
+    tr.closed > 0
+      ? closedPicks.reduce((s, h) => s + (h.return_pct ?? 0), 0) / tr.closed
+      : null;
   const briefData = brief.data;
   const regime = briefData?.regime ?? null;
   const regimeScore = regime?.score ?? 0;
@@ -378,6 +396,51 @@ export default async function FocusContent() {
                   </Link>
                 </div>
               </div>
+
+              {/* 트랙레코드 집계 — 종료 픽 기준 기대값·승률(정직한 성과) */}
+              {tr.closed > 0 && (
+                <div className="mb-3 rounded-[12px] bg-surface-2 p-3">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-[10px] text-text-mute">종료</p>
+                      <p className="tnum mt-0.5 text-base font-extrabold text-text">
+                        {tr.closed}건
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-text-mute">승률</p>
+                      <p className="tnum mt-0.5 text-base font-extrabold text-text">
+                        {winRate != null ? `${(winRate * 100).toFixed(0)}%` : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-text-mute">평균 손익</p>
+                      <p
+                        className={`tnum mt-0.5 text-base font-extrabold ${
+                          (expectancy ?? 0) > 0
+                            ? "text-good"
+                            : (expectancy ?? 0) < 0
+                              ? "text-bad"
+                              : "text-text"
+                        }`}
+                      >
+                        {expectancy != null
+                          ? `${expectancy >= 0 ? "+" : ""}${(expectancy * 100).toFixed(1)}%`
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-relaxed text-text-mute">
+                    목표 {tr.target} · 1차익절 {tr.partial} · 손절 {tr.stopped} ·
+                    만료 {tr.expired} · 추세 전략은 손절이 잦아도{" "}
+                    <span className="font-semibold text-text-dim">
+                      평균 손익(기대값)이 양(+)
+                    </span>
+                    이면 장기 수익 — 승률보다 기대값으로 판단합니다
+                  </p>
+                </div>
+              )}
+
               {history.data.length === 0 ? (
                 <p className="text-sm text-text-mute">
                   아직 기록이 없습니다. 첫 픽부터 결과를 전부 공개합니다.
@@ -401,7 +464,7 @@ export default async function FocusContent() {
                         {h.status !== "진행중" && (
                           <Badge
                             variant={
-                              h.status === "목표 도달"
+                              h.status === "목표 도달" || h.status === "1차 익절"
                                 ? "bull"
                                 : h.status === "손절"
                                   ? "bear"

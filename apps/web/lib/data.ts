@@ -626,7 +626,7 @@ export interface PickRecord {
   stop_loss: number | null;
   last_close: number | null;
   return_pct: number | null; // 진입가 대비 (확정 픽은 청산가 기준)
-  status: "진행중" | "목표 도달" | "손절" | "만료" | "—";
+  status: "진행중" | "목표 도달" | "손절" | "만료" | "1차 익절" | "—";
   closed: boolean; // 엔진이 확정 기록한 픽인지(0017) — 표시 구분용
 }
 
@@ -634,6 +634,7 @@ const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
   target: "목표 도달",
   stopped: "손절",
   expired: "만료",
+  partial: "1차 익절", // 분할익절 후 본전 청산(0022) — 부분 수익 실현
 };
 
 export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> {
@@ -642,7 +643,7 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
     const { data, error } = await supabase
       .from("recommendations")
       .select(
-        "as_of,entry_price,target_price,stop_loss,instrument_id,status,closed_at,exit_price,close_return_pct,instruments(symbol,name)",
+        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,instrument_id,status,closed_at,exit_price,close_return_pct,instruments(symbol,name)",
       )
       .eq("basket_type", "daily_focus")
       .order("as_of", { ascending: false })
@@ -676,15 +677,21 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
           };
         }
 
-        // 열린 픽 — 읽기 시점 최신 종가로 추정 표시
+        // 열린 픽 — 읽기 시점 최신 종가로 추정 표시.
+        // 분할익절(0022): 이미 1차 익절(tp1_hit)한 진행 픽은 본전(entry)스톱·tp2 목표
+        // 기준으로 추정 — 잔량이 본전 밑이면 1차 익절(부분 수익 확정) 상태.
+        const tp2 = r.tp2_price as number | null;
+        const tp1Hit = Boolean(r.tp1_hit);
         const price = await getLatestPrice(r.instrument_id as number);
         const last = price.data?.close ?? null;
         const ret =
           entry != null && entry > 0 && last != null ? last / entry - 1 : null;
+        const effStop = tp1Hit && entry != null ? entry : stop;
+        const effTarget = tp1Hit && tp2 != null ? tp2 : target;
         let status: PickRecord["status"] = "—";
         if (last != null && entry != null) {
-          if (stop != null && last <= stop) status = "손절";
-          else if (target != null && last >= target) status = "목표 도달";
+          if (effStop != null && last <= effStop) status = tp1Hit ? "1차 익절" : "손절";
+          else if (effTarget != null && last >= effTarget) status = "목표 도달";
           else status = "진행중";
         }
         return { ...base, last_close: last, return_pct: ret, status, closed: false };
