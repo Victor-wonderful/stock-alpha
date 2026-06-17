@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Bell, Search, Sparkles, User } from "lucide-react";
+import { Activity, Bell, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // IA 원칙(2026-06-10 + V3): 첫 화면이 답이고, 도구는 뒤로, 검증은 자랑으로.
-// 메뉴 순서 = 사용자 질문 순서 (대시보드 → 오늘의 픽 → 추천·스크리너 → 진단 → 분석 → 맥락 → 신뢰)
+// 좌측=페이지 네비, 우측=아이콘 유틸(검색·알림·프로필) — 중복 라벨 제거(2026-06-17):
+// '알림'은 우측 벨로, '오늘의 픽' CTA(=오늘의 포커스 중복)는 폐지.
 const NAV_ITEMS = [
   { href: "/", label: "대시보드", exact: true },
   { href: "/focus", label: "오늘의 포커스" },
@@ -15,7 +16,6 @@ const NAV_ITEMS = [
   { href: "/reports", label: "종목 분석" },
   { href: "/market", label: "시장분석" },
   { href: "/watchlist", label: "워치리스트" },
-  { href: "/alerts", label: "알림" },
 ] as const;
 
 export function GNB() {
@@ -63,15 +63,8 @@ export function GNB() {
           })}
         </nav>
 
-        {/* 우측 영역 — 오늘의 픽 CTA + 검색/알림/프로필 */}
+        {/* 우측 영역 — 검색/알림/프로필 아이콘 유틸 (좌측 메뉴와 중복 라벨 제거) */}
         <div className="ml-auto flex shrink-0 items-center gap-2.5">
-          <Link
-            href="/focus"
-            className="flex items-center gap-1.5 rounded-[999px] bg-accent px-4 py-2 text-xs font-bold text-[#0B0C10] hover:bg-accent-2 transition-colors"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            오늘의 픽
-          </Link>
           <Link
             href="/screener"
             aria-label="종목 검색"
