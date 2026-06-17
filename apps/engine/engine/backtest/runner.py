@@ -48,13 +48,19 @@ def _load_active_frames(bars: int = 500) -> dict[int, pd.DataFrame]:
     return {k: v for k, v in frames.items() if not v.empty}
 
 
-def run(thresholds: GateThresholds | None = None) -> dict[tuple[str, str], bool]:
+def run(
+    thresholds: GateThresholds | None = None, *, scaleout: bool = True
+) -> dict[tuple[str, str], bool]:
     """전 종목·(셋업×스타일) 매트릭스 백테스트 → 조합별 게이트 결과. {(setup,style): passed}.
 
     각 셋업을 그 셋업이 '논리적으로 허용하고(playbooks.ALLOWED_STYLES) 일봉으로 검증
     가능한(DAILY_TESTABLE_STYLES)' 스타일마다 백테스트한다. 통과한 (셋업×스타일) 조합만
     발행된다 — 같은 셋업이 swing·position 둘 다 통과하면 둘 다 발행. day/scalping 은
     분봉 필요(2단계)라 여기서 평가 대상이 아니다.
+
+    scaleout: 청산 규칙. True(기본)=분할익절(tp1 50%+본전스톱 후 tp2 런) — 라이브
+    수명주기(resolve_pick_status)와 동일 규칙. 게이트와 라이브가 같은 청산을 쓰도록
+    단일 출처로 둔다(diag_scaleout 검증: 6/7 셋업 net 기대값↑).
     """
     thr = thresholds or GateThresholds()
     frames = _load_active_frames(bars=500)
@@ -87,6 +93,7 @@ def run(thresholds: GateThresholds | None = None) -> dict[tuple[str, str], bool]
                         earnings=earnings_map.get(iid),
                         costs=costs,
                         style_override=style,
+                        scaleout=scaleout,
                     )
                 )
             # 시간순 정렬 — MDD 는 순서 민감(시간순 = 실제 시퀀스).

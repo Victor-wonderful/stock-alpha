@@ -20,6 +20,67 @@ _TIMEOUT_BARS: dict[TradeStyle, int] = {
     "scalping": 1, "day": 1, "swing": 10, "position": 60,
 }
 
+# 스케일아웃 분할 비중 (tp1 익절 / 런). 검증(diag_scaleout): 6/7 셋업 기대값↑.
+SCALEOUT_W1 = 0.5
+SCALEOUT_W2 = 0.5
+
+
+def _exit_single(df, i, n, entry, stop, tp, timeout, costs):
+    """전량 단일청산 — 손절/tp1/타임아웃. 반환: (net_pnl, gross_pnl, bars)."""
+    exit_idx = min(i + timeout, n - 1)
+    exit_price = None
+    for j in range(i + 1, exit_idx + 1):
+        lo, hi = float(df["low"].iloc[j]), float(df["high"].iloc[j])
+        if lo <= stop:                 # 손절 우선(보수적)
+            exit_price, exit_idx = stop, j
+            break
+        if hi >= tp:
+            exit_price, exit_idx = tp, j
+            break
+    if exit_price is None:             # 타임아웃 → 종가
+        exit_price = float(df["close"].iloc[exit_idx])
+    return costs.net_pnl(entry, exit_price), exit_price - entry, exit_idx - i
+
+
+def _exit_scaleout(df, i, n, entry, stop, tp1, tp2, timeout, costs):
+    """분할청산 — tp1 에서 W1 익절 + 잔량 본전(entry)스톱 후 tp2 런.
+
+    반환: (net_pnl, gross_pnl, bars) — 블렌디드. 같은 봉서 1·2차 동시 청산 불허(보수적).
+    """
+    cap = min(i + timeout, n - 1)
+    t1 = t2 = None
+    t1_done = False
+    idx = cap
+    for j in range(i + 1, cap + 1):
+        lo, hi = float(df["low"].iloc[j]), float(df["high"].iloc[j])
+        if not t1_done:
+            if lo <= stop:             # tp1 전 손절 → 전량 손절
+                t1 = t2 = stop
+                idx = j
+                break
+            if hi >= tp1:              # 1차 익절, 잔량 본전스톱
+                t1 = tp1
+                t1_done = True
+                continue               # 같은 봉서 tp2 불허
+        else:
+            if lo <= entry:            # 본전 청산(보수적: 먼저 검사)
+                t2 = entry
+                idx = j
+                break
+            if hi >= tp2:              # 2차 목표
+                t2 = tp2
+                idx = j
+                break
+    if t1 is None:                     # tp1 미도달 → 타임아웃 전량 종가
+        t1 = t2 = float(df["close"].iloc[cap])
+        idx = cap
+    elif t2 is None:                   # tp1 후 타임아웃 → 잔량 종가
+        t2 = float(df["close"].iloc[cap])
+        idx = cap
+    net = SCALEOUT_W1 * costs.net_pnl(entry, t1) + SCALEOUT_W2 * costs.net_pnl(entry, t2)
+    gross = SCALEOUT_W1 * (t1 - entry) + SCALEOUT_W2 * (t2 - entry)
+    return net, gross, idx - i
+
 
 def backtest_playbook(
     df: pd.DataFrame,
@@ -31,6 +92,7 @@ def backtest_playbook(
     earnings: pd.DataFrame | None = None,
     costs: CostModel | None = None,
     style_override: TradeStyle | None = None,
+    scaleout: bool = False,
 ) -> list[Trade]:
     """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
 
@@ -89,33 +151,24 @@ def backtest_playbook(
             continue
 
         timeout = _TIMEOUT_BARS.get(eff_style, 10)
-        exit_price = None
-        exit_idx = min(i + timeout, n - 1)
-        for j in range(i + 1, exit_idx + 1):
-            lo = float(df["low"].iloc[j])
-            hi = float(df["high"].iloc[j])
-            if lo <= stop:                 # 손절 우선(보수적)
-                exit_price = stop
-                exit_idx = j
-                break
-            if hi >= tp:
-                exit_price = tp
-                exit_idx = j
-                break
-        if exit_price is None:             # 타임아웃 → 종가 청산
-            exit_price = float(df["close"].iloc[exit_idx])
+        # 청산: 단일(tp1 전량) 또는 스케일아웃(tp1 50%+본전스톱 후 tp2 런).
+        if scaleout:
+            pnl, gross, bars = _exit_scaleout(
+                df, i, n, entry, stop, tp, lv.tp2, timeout, costs)
+        else:
+            pnl, gross, bars = _exit_single(
+                df, i, n, entry, stop, tp, timeout, costs)
 
         # 순손익(비용 차감) — 수수료·거래세·슬리피지 반영. 리스크는 계획값(entry-stop)
         # 유지 → '계획 리스크 대비 실현 순R'.
-        pnl = costs.net_pnl(entry, exit_price)
         r_multiple = pnl / risk
-        r_gross = (exit_price - entry) / risk      # 비용 미반영 — 진단용
+        r_gross = gross / risk                     # 비용 미반영 — 진단용
         ret_pct = (pnl / entry) * (lv.position_size_pct / 100.0)
         entry_ts = str(df["ts"].iloc[i]) if "ts" in df.columns else ""
         trades.append(Trade(
-            r_multiple=r_multiple, ret_pct=ret_pct, bars_held=exit_idx - i,
+            r_multiple=r_multiple, ret_pct=ret_pct, bars_held=bars,
             entry_ts=entry_ts, r_gross=r_gross,
         ))
-        i = exit_idx + 1                   # 청산 다음 봉부터 재탐색(중첩 방지)
+        i = i + bars + 1                   # 청산 다음 봉부터 재탐색(중첩 방지)
 
     return trades

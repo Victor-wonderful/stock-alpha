@@ -51,6 +51,22 @@ def passed_setups_from_db() -> set[str]:
     return {setup for (setup, _s), bt in latest.items() if backtest_passed(bt)}
 
 
+def gate_expectancy_from_db() -> dict[tuple[str, str], float]:
+    """backtests 최신 행 기준 (setup,style)→expectancy_r — 복수 통과 스타일 중 선택용."""
+    latest: dict[tuple[str, str], dict] = {}
+    for bt in sorted(
+        select_all("backtests", "setup,style,expectancy_r,created_at"),
+        key=lambda b: b.get("created_at") or "",
+    ):
+        if bt.get("setup") and bt.get("style"):
+            latest[(bt["setup"], bt["style"])] = bt
+    return {
+        k: float(bt["expectancy_r"])
+        for k, bt in latest.items()
+        if bt.get("expectancy_r") is not None
+    }
+
+
 def track_a_symbols(passed: set[str]) -> list[str]:
     """트랙 A — 게이트 통과 셋업의 EOD 매수 시그널 보유 종목 (강도순)."""
     rows = (
@@ -90,21 +106,58 @@ def track_b_symbols(top: int = COVERAGE_TOP) -> list[str]:
     return [s for s in candidates if s in active]
 
 
+def _plan_gate_ok(row: dict, passed_combos: dict[str, list[str]] | None) -> bool:
+    """플랜 1행의 (setup, style)이 백테스트 게이트를 통과했는가.
+
+    passed_combos=None 이면 게이트 미적용(테스트·하위호환). 운영 호출은 항상 주입한다.
+    엣지가 검증된 조합만 발행 → 적자 슬라이스(예: 게이트 탈락 swing) 차단.
+    """
+    if passed_combos is None:
+        return True
+    return row.get("style") in passed_combos.get(row.get("setup") or "", [])
+
+
+def _best_plan(
+    plan: list[dict], expectancy_by_combo: dict[tuple[str, str], float] | None
+) -> dict:
+    """한 종목이 복수 스타일로 통과했을 때 발행할 플랜 1개 선택.
+
+    검증 기대값(expectancy_r) 높은 (setup,style) 우선 — "어떤 스타일이 맞나"를
+    시그널 강도가 아닌 백테스트 성과로 결정. 미주입·동률이면 강도(strength) 폴백.
+    """
+    def key(row: dict) -> tuple[float, float]:
+        exp = None
+        if expectancy_by_combo is not None:
+            exp = expectancy_by_combo.get((row.get("setup"), row.get("style")))
+        return (
+            exp if exp is not None else float("-inf"),
+            float(row.get("strength") or 0),
+        )
+
+    return max(plan, key=key)
+
+
 def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
-                 min_score: float = PICKS_MIN_SCORE) -> list[dict]:
+                 min_score: float = PICKS_MIN_SCORE,
+                 passed_combos: dict[str, list[str]] | None = None,
+                 expectancy_by_combo: dict[tuple[str, str], float] | None = None,
+                 ) -> list[dict]:
     """오늘의 포커스 선정 — 순수 함수. reports: 그날 발행 리포트 행(payload 포함).
 
+    passed_combos: {setup: [통과 스타일]} — 주입 시 게이트 통과 (setup,style) 플랜만 발행.
+    expectancy_by_combo: {(setup,style): expectancy_r} — 복수 통과 시 기대값 높은 스타일 선택.
     기준 미달이면 빈 리스트(빈 날 허용).
     """
     cands = []
     for r in reports:
         p = r.get("payload") or {}
         verdict = p.get("verdict") or {}
-        # EOD 스타일 플랜만 — 발행 정책 변경 전의 옛 payload(데이/종가베팅 플랜)가
-        # 섞여 있어도 픽으로 새지 않게 선정 단에서도 필터(이중 방어).
+        # EOD 스타일 + 게이트 통과 플랜만 — 옛 payload(데이/종가베팅)나 엣지 미검증
+        # 조합(게이트 탈락 swing 등)이 픽으로 새지 않게 선정 단에서 이중 방어.
         plan = [
             row for row in (p.get("plan") or [])
             if row.get("style") in EOD_STYLES
+            and _plan_gate_ok(row, passed_combos)
         ]
         tradable = (p.get("tradability") or {}).get("passed", False)
         score = float(verdict.get("score") or 0)
@@ -113,7 +166,8 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             continue
         if rating != "매수" and score < min_score:
             continue
-        cands.append((score, r, plan[0]))
+        # 종목 내 스타일 선택은 검증 기대값 우선, 종목 간 순위는 점수(score)로.
+        cands.append((score, r, _best_plan(plan, expectancy_by_combo)))
     cands.sort(key=lambda t: t[0], reverse=True)
 
     picks = []
@@ -121,6 +175,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
         narrative = (r.get("payload") or {}).get("narrative") or {}
         picks.append({
             "basket_type": "daily_focus",
+            "setup": top_plan.get("setup"),   # 실제 셋업 라벨(미적재 시 DB 기본값 오라벨 방지)
             "style": top_plan["style"],
             "instrument_id": r["instrument_id"],
             "weight": None,
@@ -128,6 +183,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             "thesis": narrative.get("thesis") or r.get("summary"),
             "entry_price": top_plan.get("entry_price"),
             "target_price": top_plan.get("tp1"),
+            "tp2_price": top_plan.get("tp2"),   # 스케일아웃 잔량 런 목표(있으면 분할청산)
             "stop_loss": top_plan.get("stop_loss"),
             "as_of": r["as_of"],
         })
@@ -137,39 +193,81 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
 PICK_EXPIRE_DAYS = 30  # 발행 후 30일(달력) 경과 시 만료 — 스윙 보유기간 상한 근사
 
 
+def _close_patch(status: str, today: date, exit_price: float,
+                 ret: float | None, *, tp1_hit: bool | None = None) -> dict:
+    patch = {
+        "status": status,
+        "closed_at": today.isoformat(),
+        "exit_price": exit_price,
+        "close_return_pct": round(ret, 4) if ret is not None else None,
+    }
+    if tp1_hit is not None:
+        patch["tp1_hit"] = tp1_hit
+    return patch
+
+
 def resolve_pick_status(
     pick: dict, last_close: float | None, today: date
 ) -> dict | None:
     """열린 픽 1건의 상태 판정 (순수 함수). 변경 없으면 None.
 
     종가 기준 근사(장중 터치 미반영) — 손절 우선(보수적).
+
+    분할익절(0022): tp2_price 가 있으면 스케일아웃 상태기계.
+      1) tp1 전: 손절 / tp1 도달(→1차 익절·본전스톱, 비종결) / 만료
+      2) tp1 후: 본전(entry) 청산 → 'partial' / tp2 → 'target' / 만료
+      블렌디드 수익 = 0.5·tp1수익 + 0.5·잔량수익.
+    tp2_price 가 없으면(옛 픽) 기존 단일 tp1 청산 유지 — 진행 픽 소급 변경 방지.
     """
     if last_close is None:
         return None
     stop = pick.get("stop_loss")
-    target = pick.get("target_price")
+    tp1 = pick.get("target_price")
+    tp2 = pick.get("tp2_price")
     entry = pick.get("entry_price")
+    tp1_hit = bool(pick.get("tp1_hit"))
     as_of = date.fromisoformat(str(pick["as_of"]))
+    expired = (today - as_of).days >= PICK_EXPIRE_DAYS
 
-    status: str | None = None
-    if stop is not None and last_close <= float(stop):
-        status = "stopped"
-    elif target is not None and last_close >= float(target):
-        status = "target"
-    elif (today - as_of).days >= PICK_EXPIRE_DAYS:
-        status = "expired"
-    if status is None:
+    # ── 옛 픽(tp2 없음) 또는 진입가 결손 → 기존 단일 청산 ──
+    if tp2 is None or entry in (None, 0):
+        status: str | None = None
+        if stop is not None and last_close <= float(stop):
+            status = "stopped"
+        elif tp1 is not None and last_close >= float(tp1):
+            status = "target"
+        elif expired:
+            status = "expired"
+        if status is None:
+            return None
+        ret = (last_close / float(entry) - 1) if entry not in (None, 0) else None
+        return _close_patch(status, today, last_close, ret)
+
+    e = float(entry)
+    tp1_ret = (float(tp1) / e - 1) if tp1 is not None else 0.0
+
+    if not tp1_hit:
+        if stop is not None and last_close <= float(stop):           # 손절(전량)
+            return _close_patch("stopped", today, last_close, last_close / e - 1)
+        if last_close >= float(tp2):           # tp1·tp2 동시 돌파 → 양 트랜치 실현
+            blended = 0.5 * tp1_ret + 0.5 * (float(tp2) / e - 1)
+            return _close_patch("target", today, last_close, blended, tp1_hit=True)
+        if tp1 is not None and last_close >= float(tp1):             # 1차 익절(비종결)
+            return {"tp1_hit": True, "tp1_hit_at": today.isoformat()}
+        if expired:
+            return _close_patch("expired", today, last_close, last_close / e - 1)
         return None
-    ret = (
-        round(last_close / float(entry) - 1, 4)
-        if entry not in (None, 0) else None
-    )
-    return {
-        "status": status,
-        "closed_at": today.isoformat(),
-        "exit_price": last_close,
-        "close_return_pct": ret,
-    }
+
+    # ── tp1 익절 후: 잔량은 본전스톱 / tp2 / 만료 ──
+    if last_close <= e:                        # 본전 청산 → 1차 익절만 실현
+        return _close_patch("partial", today, last_close, 0.5 * tp1_ret + 0.5 * 0.0)
+    if last_close >= float(tp2):               # 2차 목표 → 전량 익절
+        return _close_patch("target", today, last_close,
+                            0.5 * tp1_ret + 0.5 * (float(tp2) / e - 1))
+    if expired:                                # 만료 → 잔량 종가 청산
+        return _close_patch("expired", today, last_close,
+                            0.5 * tp1_ret + 0.5 * (last_close / e - 1))
+    return None
 
 
 def manage_picks(today: str | None = None) -> dict[str, int]:
@@ -178,11 +276,13 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
     d = date.fromisoformat(today) if today else date.today()
     open_picks = (
         client.table("recommendations")
-        .select("id,as_of,entry_price,target_price,stop_loss,instrument_id")
+        .select("id,as_of,entry_price,target_price,tp2_price,stop_loss,"
+                "tp1_hit,instrument_id")
         .eq("basket_type", "daily_focus").eq("status", "open").execute()
     ).data or []
 
-    counts = {"target": 0, "stopped": 0, "expired": 0, "open": 0}
+    counts = {"target": 0, "stopped": 0, "expired": 0, "partial": 0,
+              "tp1_hit": 0, "open": 0}
     for p in open_picks:
         last = (
             client.table("ohlcv").select("close")
@@ -195,7 +295,11 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
             counts["open"] += 1
             continue
         client.table("recommendations").update(patch).eq("id", p["id"]).execute()
-        counts[patch["status"]] += 1
+        if "status" in patch:                  # 종결 패치
+            counts[patch["status"]] += 1
+        else:                                  # 1차 익절(비종결) — 여전히 open
+            counts["tp1_hit"] += 1
+            counts["open"] += 1
     log.info("reports.daily.manage_picks", **counts)
     return counts
 
@@ -213,7 +317,13 @@ def select_and_store_picks(as_of: str) -> int:
         .eq("report_type", "indepth").eq("status", "published").eq("as_of", as_of)
         .execute()
     ).data or []
-    picks = select_picks(rows)
+    from engine.backtest.runner import passed_combos_from_db
+
+    picks = select_picks(
+        rows,
+        passed_combos=passed_combos_from_db(),
+        expectancy_by_combo=gate_expectancy_from_db(),
+    )
     rebalance_id = int(as_of.replace("-", ""))
     for p in picks:
         p["rebalance_id"] = rebalance_id
