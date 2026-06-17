@@ -94,7 +94,8 @@ export interface RecommendationView {
   conviction: number; // 0~1
   thesis: string;
   entry_price: number | null;
-  target_price: number | null;
+  target_price: number | null; // = tp1 (1차 목표)
+  tp2_price?: number | null; // 2차 목표 (스케일아웃 잔량 런) — 있으면 분할익절 픽
   stop_loss: number | null;
   as_of?: string | null; // 발행 기준일 (daily_focus 스냅샷)
 }

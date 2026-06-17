@@ -92,11 +92,16 @@ export function PickCard({
         <div className="hidden xl:grid grid-cols-5 gap-3 text-center">
           {[
             { label: "진입가", value: fmtPrice(pick.entry_price) },
-            { label: "목표가", value: fmtPrice(pick.target_price), tone: "good" },
+            {
+              label: pick.tp2_price != null ? "목표가 (1차)" : "목표가",
+              value: fmtPrice(pick.target_price),
+              tone: "good",
+              sub: pick.tp2_price != null ? `2차 ${fmtPrice(pick.tp2_price)}` : undefined,
+            },
             { label: "손절가", value: fmtPrice(pick.stop_loss), tone: "bad" },
             { label: "R:R", value: rr != null ? `${rr.toFixed(1)}` : "—" },
             { label: "권장 비중", value: sizePct != null ? `${sizePct.toFixed(1)}%` : "—", tone: "accent" },
-          ].map(({ label, value, tone }) => (
+          ].map(({ label, value, tone, sub }) => (
             <div key={label} className="min-w-[56px]">
               <p className="text-[10px] text-text-mute">{label}</p>
               <p
@@ -112,6 +117,7 @@ export function PickCard({
               >
                 {value}
               </p>
+              {sub && <p className="tnum mt-0.5 text-[10px] text-good/70">{sub}</p>}
             </div>
           ))}
         </div>
@@ -137,7 +143,13 @@ export function PickCard({
       <div className="grid grid-cols-3 gap-2 px-5 pb-3 xl:hidden">
         {[
           { label: "진입", value: fmtPrice(pick.entry_price) },
-          { label: "목표", value: fmtPrice(pick.target_price) },
+          {
+            label: pick.tp2_price != null ? "목표 1·2차" : "목표",
+            value:
+              pick.tp2_price != null
+                ? `${fmtPrice(pick.target_price)} / ${fmtPrice(pick.tp2_price)}`
+                : fmtPrice(pick.target_price),
+          },
           { label: "손절", value: fmtPrice(pick.stop_loss) },
         ].map(({ label, value }) => (
           <div key={label} className="rounded-[8px] bg-surface-2 px-2.5 py-2 text-center">
