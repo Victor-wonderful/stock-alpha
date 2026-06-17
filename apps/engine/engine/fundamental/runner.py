@@ -13,7 +13,15 @@ from engine.logging import get_logger
 
 log = get_logger(__name__)
 
-SOURCE_VERSION = "valuation-v1"
+SOURCE_VERSION = "valuation-v2"   # v2: 신뢰 가드(밴드 밖 None) + OCF 보수추정
+
+# ── 밸류에이션 신뢰 가드 ──
+# 소형주·일회성 이익에서 DCF 적정가/PER 가 비현실적으로 폭주(+1000% upside, PER<1)
+# → "믿을 수 있을 때만 값을 저장, 아니면 None". 쓰레기 발행 금지(포커스 게이트와 동일 철학).
+FCF_FROM_OCF_HAIRCUT = 0.7        # FCF 미적재 시 OCF×0.7 로 보수 추정(capex 근사 차감)
+DCF_TRUST_BAND = (0.2, 3.0)       # 적정가/현재가 신뢰 구간 — 밖이면 dcf/upside None
+PER_BAND = (2.5, 150.0)           # PER 신뢰 구간 — 일회성 이익(PER<2.5)·적자 왜곡 제외
+ROE_MAX = 1.0                     # ROE>100% = 일회성/레버리지 아티팩트 → None
 
 
 def _latest_close(instrument_id: int) -> float | None:
@@ -66,8 +74,19 @@ def build_valuation_row(
     shares = fin.get("shares")
     r = ratios.compute_ratios(fin, price=price, shares=shares)
 
+    # 비율 신뢰 가드 — 일회성 이익/적자로 왜곡된 값은 저장하지 않는다(None).
+    per = r["per"]
+    if per is not None and not (PER_BAND[0] <= per <= PER_BAND[1]):
+        per = None
+    roe = r["roe"]
+    if roe is not None and roe > ROE_MAX:
+        roe = None
+
+    # FCF 미적재 시 OCF 를 그대로 쓰면 DCF 가 부풀려진다 → 보수 추정(×0.7).
     dcf_val = None
-    fcf = fin.get("fcf") or fin.get("ocf")
+    fcf = fin.get("fcf")
+    if fcf is None and fin.get("ocf"):
+        fcf = fin["ocf"] * FCF_FROM_OCF_HAIRCUT
     if fcf and shares:
         try:
             dcf_val = dcf.dcf_value(
@@ -77,16 +96,24 @@ def build_valuation_row(
         except ValueError:
             dcf_val = None
 
+    up = dcf.upside_pct(dcf_val, price)
+    # DCF 신뢰 밴드 — 적정가가 현재가의 [0.2, 3.0] 밖이면 신뢰 불가 → None.
+    if dcf_val is not None and price:
+        ratio = dcf_val / price
+        if not (DCF_TRUST_BAND[0] <= ratio <= DCF_TRUST_BAND[1]):
+            dcf_val, up = None, None
+
     row = {
         "instrument_id": instrument_id,
         "date": (as_of or date.today()).isoformat(),
-        "per": r["per"],
+        "per": per,
         "pbr": r["pbr"],
         "ev_ebitda": r["ev_ebitda"],
-        "roe": r["roe"],
+        "roe": roe,
         "dcf_value": dcf_val,
-        "upside_pct": dcf.upside_pct(dcf_val, price),
-        "method": {"wacc": wacc, "growth": growth, "source": fin.get("source")},
+        "upside_pct": up,
+        "method": {"wacc": wacc, "growth": growth, "source": fin.get("source"),
+                   "fcf_proxy": fin.get("fcf") is None},
         "source_version": SOURCE_VERSION,
     }
     return row

@@ -79,15 +79,42 @@ def test_peer_implied_price_filters_invalid():
 
 
 def test_build_valuation_row_assembles():
+    # 현실적 값 — eps 15, price 200 → per 13.3, dcf 적정가도 price 대비 밴드 안.
     fin = {
         "revenue": 1000.0, "op_income": 200.0, "net_income": 150.0,
-        "equity": 1000.0, "debt": 0.0, "eps": 1500.0, "bps": 10000.0,
+        "equity": 1000.0, "debt": 0.0, "eps": 15.0, "bps": 100.0,
         "fcf": 100.0, "shares": 10.0, "source": "DART",
     }
-    row = build_valuation_row(7, fin, price=30000.0)
+    row = build_valuation_row(7, fin, price=200.0)
     assert row["instrument_id"] == 7
-    assert row["per"] == pytest.approx(20.0)
+    assert row["per"] == pytest.approx(200.0 / 15.0)
     assert row["roe"] == pytest.approx(0.15)
     assert row["dcf_value"] is not None
     assert row["upside_pct"] is not None
-    assert row["source_version"] == "valuation-v1"
+    assert row["source_version"] == "valuation-v2"
+
+
+# ── 밸류에이션 신뢰 가드 (v2) ──
+def test_valuation_nulls_implausible_dcf():
+    # 소형주: OCF 대비 현재가가 극단적으로 낮아 적정가가 현재가의 3배 초과 → None.
+    fin = {"net_income": 100.0, "equity": 1000.0, "debt": 0.0,
+           "ocf": 1000.0, "shares": 10.0}  # fcf 없음 → ocf 보수추정
+    row = build_valuation_row(1, fin, price=1.0)
+    assert row["dcf_value"] is None      # 신뢰 밴드 밖 → 폐기
+    assert row["upside_pct"] is None
+
+
+def test_valuation_nulls_oneoff_per():
+    # 일회성 이익 등으로 PER 가 비현실적으로 낮음(<2.5) → None.
+    fin = {"net_income": 100.0, "equity": 1000.0, "eps": 10.0, "shares": 10.0}
+    row = build_valuation_row(1, fin, price=5.0)  # per = 5/10 = 0.5
+    assert row["per"] is None
+
+
+def test_valuation_ocf_haircut_used_when_fcf_missing():
+    # FCF 미적재 → OCF×0.7 로 DCF 산출, method.fcf_proxy=True.
+    fin = {"net_income": 50.0, "equity": 500.0, "debt": 0.0,
+           "ocf": 100.0, "shares": 10.0}
+    row = build_valuation_row(1, fin, price=130.0)  # 적정가 밴드 안 가격
+    assert row["method"]["fcf_proxy"] is True
+    assert row["dcf_value"] is not None
