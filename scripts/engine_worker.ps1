@@ -5,7 +5,8 @@
 # 로그: logs\worker-YYYYMMDD.log
 
 $ErrorActionPreference = "Continue"
-$root = "D:\Stock-Alpha"
+# 리포 루트를 스크립트 위치에서 자동 도출(머신·드라이브 무관) — scripts\ 의 부모가 루트.
+$root = Split-Path -Parent $PSScriptRoot
 $logDir = Join-Path $root "logs"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 
