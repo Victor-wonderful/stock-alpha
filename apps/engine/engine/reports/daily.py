@@ -28,6 +28,7 @@ DAILY_CAP = 100            # 일 발행 상한 (비용 가드레일)
 COVERAGE_TOP = 50          # 트랙 B — 시총 상위 N
 COVERAGE_SKIP_DAYS = 3     # 트랙 B — 판정 동일 시 재발행 생략 기간
 PICKS_MAX = 5              # 오늘의 포커스 최대 종목 수
+PICKS_MAX_PER_SECTOR = 2   # 한 섹터에서 뽑을 수 있는 픽 상한 (집중 리스크 분산)
 # 매수 판정이 아니어도 픽 후보가 되는 점수 하한.
 # 60 → 50 완화(2026-06-11): 판정 체계(매수≥65/중립≥45)에서 50은 "중립 상위".
 # 60 기준으론 하루 후보가 1~2개라 포커스 5슬롯이 비어 다님 — 50이면 거래가능+
@@ -157,12 +158,17 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
                  passed_combos: dict[str, list[str]] | None = None,
                  expectancy_by_combo: dict[tuple[str, str], float] | None = None,
                  regime: str | None = None,
+                 sector_by_id: dict[int, str | None] | None = None,
+                 max_per_sector: int = PICKS_MAX_PER_SECTOR,
                  ) -> list[dict]:
     """오늘의 포커스 선정 — 순수 함수. reports: 그날 발행 리포트 행(payload 포함).
 
     passed_combos: {setup: [통과 스타일]} — 주입 시 게이트 통과 (setup,style) 플랜만 발행.
     expectancy_by_combo: {(setup,style): expectancy_r} — 복수 통과 시 기대값 높은 스타일 선택.
     regime: 발행일 시장 국면('risk_off' 면 추세·돌파 픽 억제 — 하락장 손실 회피).
+    sector_by_id: {instrument_id: 섹터} — 주입 시 한 섹터당 max_per_sector 로 픽을
+      제한(집중 리스크 분산). 섹터 미상(null/'ALL')은 제약 없음 → 섹터 데이터가
+      없으면 기존(점수 상위 N)과 동일 동작(graceful). 미주입(기본)이면 상한 미적용.
     기준 미달이면 빈 리스트(빈 날 허용).
     """
     risk_off = regime == "risk_off"
@@ -190,8 +196,23 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
         cands.append((score, r, _best_plan(plan, expectancy_by_combo)))
     cands.sort(key=lambda t: t[0], reverse=True)
 
+    # 섹터 집중 상한 — 점수순으로 뽑되 한 섹터가 max_per_sector 를 넘기면 건너뛰고
+    # 다른 섹터의 차순위로 슬롯을 채운다(분산). 섹터 미상은 카운트에서 제외(무제약).
+    sec_count: dict[str, int] = {}
+    selected: list[tuple[float, dict, dict]] = []
+    for cand in cands:
+        if len(selected) >= max_picks:
+            break
+        sec = (sector_by_id or {}).get(cand[1]["instrument_id"])
+        known = bool(sec) and sec != "ALL"
+        if known and sec_count.get(sec, 0) >= max_per_sector:
+            continue
+        selected.append(cand)
+        if known:
+            sec_count[sec] = sec_count.get(sec, 0) + 1
+
     picks = []
-    for score, r, top_plan in cands[:max_picks]:
+    for score, r, top_plan in selected:
         narrative = (r.get("payload") or {}).get("narrative") or {}
         picks.append({
             "basket_type": "daily_focus",
@@ -373,11 +394,18 @@ def select_and_store_picks(as_of: str) -> int:
     ).data
     regime = reg_row[0]["regime"] if reg_row else None
 
+    # 섹터 맵 — 픽 집중 분산용. 섹터 미수집(null)이면 자연히 무제약으로 동작.
+    sector_by_id = {
+        it["id"]: it.get("sector")
+        for it in select_all("instruments", "id,sector")
+    }
+
     picks = select_picks(
         rows,
         passed_combos=passed_combos_from_db(),
         expectancy_by_combo=gate_expectancy_from_db(),
         regime=regime,
+        sector_by_id=sector_by_id,
     )
     log.info("reports.daily.picks.regime", as_of=as_of, regime=regime)
     rebalance_id = int(as_of.replace("-", ""))

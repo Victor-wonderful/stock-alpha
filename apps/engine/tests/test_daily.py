@@ -75,6 +75,46 @@ def test_picks_capped():
     assert picks[0]["instrument_id"] == 9  # 최고 점수 우선
 
 
+# ── 섹터 집중 분산 ─────────────────────────────────────────────────────
+
+def test_picks_sector_cap_limits_concentration():
+    # 1~4번 모두 반도체(점수 높음), 5~7번 각기 다른 섹터 → 반도체 2개 + 타섹터 3개로 채움.
+    reports = [_report(i, "매수", 90.0 - i) for i in range(1, 8)]
+    sectors = {1: "반도체", 2: "반도체", 3: "반도체", 4: "반도체",
+               5: "2차전지", 6: "바이오", 7: "자동차"}
+    picks = select_picks(reports, max_picks=5, sector_by_id=sectors, max_per_sector=2)
+    ids = [p["instrument_id"] for p in picks]
+    # 반도체는 점수 상위 2개(1,2)만, 그 다음 타섹터 차순위로 5슬롯 채움
+    assert ids.count(1) == 1 and ids.count(2) == 1
+    assert 3 not in ids and 4 not in ids       # 반도체 3·4는 상한에 걸려 제외
+    assert {5, 6, 7} <= set(ids)               # 타섹터는 차순위로 편입
+    assert len(picks) == 5
+
+
+def test_picks_sector_cap_prefers_diversification_over_filling():
+    # 후보가 한 섹터에만 몰리면, 슬롯을 억지로 채우기보다 상한을 지킨다(분산 우선).
+    reports = [_report(i, "매수", 90.0 - i) for i in range(1, 6)]
+    sectors = {i: "반도체" for i in range(1, 6)}
+    picks = select_picks(reports, max_picks=5, sector_by_id=sectors, max_per_sector=2)
+    assert [p["instrument_id"] for p in picks] == [1, 2]   # 5슬롯이어도 2개만
+
+
+def test_picks_sector_cap_noop_without_map():
+    # sector_by_id 미주입(기본) → 상한 미적용, 점수 상위 N 그대로(하위호환).
+    reports = [_report(i, "매수", 90.0 - i) for i in range(1, 7)]
+    picks = select_picks(reports, max_picks=5)
+    assert [p["instrument_id"] for p in picks] == [1, 2, 3, 4, 5]
+
+
+def test_picks_sector_cap_unknown_sector_unconstrained():
+    # 섹터 null/'ALL'(미수집)은 무제약 → 전부 null 이면 점수 상위 N 그대로.
+    reports = [_report(i, "매수", 90.0 - i) for i in range(1, 7)]
+    sectors = {i: None for i in range(1, 7)}
+    sectors[3] = "ALL"
+    picks = select_picks(reports, max_picks=5, sector_by_id=sectors, max_per_sector=2)
+    assert [p["instrument_id"] for p in picks] == [1, 2, 3, 4, 5]
+
+
 def test_picks_gate_filters_failing_combo():
     # 픽 플랜은 (breakout, swing). 게이트가 breakout 을 position 으로만 통과시키면
     # 엣지 미검증 swing 플랜은 발행되지 않는다(빈 날 허용).
