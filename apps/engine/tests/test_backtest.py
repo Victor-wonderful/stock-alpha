@@ -211,6 +211,83 @@ def test_r_mdd_sample_size_invariant():
     assert large.mdd < 0.10  # 우위 전략의 R-MDD 는 낮게 유지
 
 
+# ── 워크포워드(하위기간 지속성) ──
+
+def _fold_trades(start_iso: str, rs: list[float], step: int = 3) -> list[Trade]:
+    """start_iso 부터 step 일 간격으로 진입일을 찍은 트레이드 묶음."""
+    from datetime import date, timedelta
+    d0 = date.fromisoformat(start_iso)
+    return [
+        Trade(r_multiple=r, ret_pct=r * 0.01, bars_held=3,
+              entry_ts=(d0 + timedelta(days=i * step)).isoformat())
+        for i, r in enumerate(rs)
+    ]
+
+
+def test_subperiod_expectancy_splits_by_calendar_time():
+    # 4분기에 클러스터 배치 → 4개 하위기간, 과거 양(+)·최근 음(-)
+    trades = (
+        _fold_trades("2025-01-06", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-04-07", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-07-07", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-10-06", [-1.0] * 6 + [2.0] * 2)
+    )
+    sp = m.subperiod_expectancy(trades, 4)
+    assert [f["n"] for f in sp] == [8, 8, 8, 8]
+    assert sp[0]["expectancy_r"] > 0
+    assert sp[3]["expectancy_r"] < 0
+
+
+def test_subperiod_expectancy_ignores_undated_and_short():
+    assert m.subperiod_expectancy(_trades([1, -1, 2]), 4) == []   # entry_ts 없음
+    assert m.subperiod_expectancy([], 4) == []
+
+
+def test_gate_fails_walkforward_on_recent_decay():
+    # 전 구간 기대값은 +(과거 우위)지만 최근 하위기간이 음 → 발행 차단.
+    trades = (
+        _fold_trades("2025-01-06", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-04-07", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-07-07", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-10-06", [-1.0] * 6 + [2.0] * 2)   # 최근 -0.25R
+    )
+    # max_mdd 완화로 WF 만 단독 차단 요인이 되게 한다.
+    gr = evaluate_gate(trades, GateThresholds(min_trades=20, max_mdd=1.0))
+    assert gr.expectancy_r > 0.05                      # 전 구간 기대값은 통과 수준
+    assert not gr.passed
+    assert any("워크포워드" in r for r in gr.reasons)
+    assert gr.walkforward["evaluable"] is True
+    assert gr.walkforward["recent_expectancy_r"] < 0
+
+
+def test_gate_passes_walkforward_consistent_edge():
+    # 네 하위기간 모두 양(+) → WF 통과.
+    trades = (
+        _fold_trades("2025-01-06", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-04-07", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-07-07", [2.0] * 6 + [-1.0] * 2)
+        + _fold_trades("2025-10-06", [2.0] * 6 + [-1.0] * 2)
+    )
+    gr = evaluate_gate(trades, GateThresholds(min_trades=20))
+    assert gr.passed, gr.reasons
+    assert gr.walkforward["evaluable"] is True
+    assert gr.walkforward["ok"] is True
+
+
+def test_gate_walkforward_noop_when_folds_sparse():
+    # fold 당 표본<6 → 자격 하위기간 부족 → WF 무력(전체 기대값으로만 판정).
+    five = [2.0, 2.0, -1.0, 2.0, -1.0]
+    trades = (
+        _fold_trades("2025-01-06", five)
+        + _fold_trades("2025-04-07", five)
+        + _fold_trades("2025-07-07", five)
+        + _fold_trades("2025-10-06", [-1.0] * 5)
+    )
+    gr = evaluate_gate(trades, GateThresholds(min_trades=20, max_mdd=1.0))
+    assert gr.walkforward["evaluable"] is False
+    assert not any("워크포워드" in r for r in gr.reasons)
+
+
 # ── 게이트 히스테리시스 (0020) ──
 
 def test_hysteresis_first_run_takes_raw():

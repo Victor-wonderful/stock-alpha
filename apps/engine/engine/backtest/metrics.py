@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import date
 
 
 @dataclass
@@ -115,6 +116,36 @@ def daily_r_curve(
         rs = by_day[day]
         eq.append(eq[-1] * (1 + risk_frac * (sum(rs) / len(rs))))
     return eq
+
+
+def subperiod_expectancy(trades: list[Trade], n_folds: int = 4) -> list[dict]:
+    """진입일(entry_ts) 기준 시간 균등 N등분 하위기간별 기대값(R)·표본수.
+
+    워크포워드(엣지의 시간적 지속성) 검증용. 전 구간 expectancy 가 한 시기(예:
+    특정 불장)에서만 나온 것인지, 여러 하위기간에 걸쳐 지속되는지를 본다.
+    트레이드 '개수'가 아니라 '달력 기간'을 등분한다 — 트레이드 밀도는 시기마다
+    다르므로 기간 등분이 시간 지속성을 더 정직하게 반영한다.
+
+    반환: [{"fold": k(0=과거…N-1=최근), "n": 표본수, "expectancy_r": float|None}].
+    entry_ts 없는 트레이드는 제외. 기간 폭이 0(전부 같은 날)이면 빈 리스트.
+    """
+    dated = sorted((t for t in trades if t.entry_ts), key=lambda t: t.entry_ts)
+    if len(dated) < n_folds:
+        return []
+    d0 = date.fromisoformat(dated[0].entry_ts[:10])
+    d1 = date.fromisoformat(dated[-1].entry_ts[:10])
+    span = (d1 - d0).days
+    if span <= 0:
+        return []
+    folds: list[list[Trade]] = [[] for _ in range(n_folds)]
+    for t in dated:
+        di = (date.fromisoformat(t.entry_ts[:10]) - d0).days
+        k = min(n_folds - 1, int(di / (span + 1) * n_folds))
+        folds[k].append(t)
+    return [
+        {"fold": k, "n": len(fts), "expectancy_r": expectancy_r(fts)}
+        for k, fts in enumerate(folds)
+    ]
 
 
 def information_coefficient(scores: list[float], fwd_returns: list[float]) -> float | None:

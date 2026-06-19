@@ -27,6 +27,7 @@ from engine.backtest.metrics import (
     daily_r_curve,
     expectancy_r,
     max_drawdown,
+    subperiod_expectancy,
     win_rate,
 )
 
@@ -41,6 +42,14 @@ class GateThresholds:
     max_mdd: float = 0.40           # 일별 리스크예산 곡선(daily_r_curve) 최대 낙폭
     risk_frac: float = 0.01         # 하루 리스크 예산 비율
     winsor_r: float = 10.0          # R 멀티플 클립(±) — 이상치의 기대값 왜곡 차단
+    # 워크포워드(하위기간 지속성) — 전 구간 기대값이 한 시기에서만 나왔는지 검증.
+    # 자격 하위기간(표본 충분)이 2개 미만이면 평가 불가 → 무력화(전체 게이트가 판정).
+    # 즉 데이터가 충분한 셋업에 한해 게이트를 '더 엄격하게만' 만든다(느슨하게 X).
+    wf_enabled: bool = True
+    wf_folds: int = 4               # 진입일 기준 시간 균등 분할 수
+    wf_min_fold_trades: int = 6     # 하위기간을 평가에 포함시킬 최소 표본
+    wf_min_positive_frac: float = 0.5   # 자격 하위기간 중 양의 기대값 비율 하한
+    wf_recent_floor: float = 0.0    # 가장 최근 자격 하위기간 기대값(R) 하한 — 엣지 쇠퇴 차단
 
 
 @dataclass
@@ -52,6 +61,7 @@ class GateResult:
     expectancy_r: float | None
     mdd: float | None               # R 기준
     reasons: list[str]
+    walkforward: dict | None = None  # 하위기간 지속성 진단(folds·판정) — backtests 적재·UI용
 
     def as_metrics(self) -> dict:
         return {
@@ -77,6 +87,7 @@ def evaluate_gate(trades: list[Trade], thr: GateThresholds | None = None) -> Gat
     rr = avg_rr(clipped)
     exp = expectancy_r(clipped)
     mdd = max_drawdown(daily_r_curve(clipped, thr.risk_frac))
+    wf = _walkforward(clipped, thr) if thr.wf_enabled else None
 
     reasons: list[str] = []
     if n < thr.min_trades:
@@ -85,8 +96,44 @@ def evaluate_gate(trades: list[Trade], thr: GateThresholds | None = None) -> Gat
         reasons.append(f"기대값 미달({exp})")
     if mdd is not None and mdd > thr.max_mdd:
         reasons.append(f"R-MDD 초과({mdd})")
+    if wf is not None and not wf["ok"]:
+        reasons.append(f"워크포워드 불안정({wf['reason']})")
 
     return GateResult(
         passed=not reasons, n_trades=n, win_rate=wr, avg_rr=rr,
-        expectancy_r=exp, mdd=mdd, reasons=reasons,
+        expectancy_r=exp, mdd=mdd, reasons=reasons, walkforward=wf,
     )
+
+
+def _walkforward(trades: list[Trade], thr: GateThresholds) -> dict:
+    """하위기간 지속성 판정 (순수). clipped 트레이드 기준.
+
+    자격 하위기간(표본 >= wf_min_fold_trades)이 2개 미만이면 평가 불가 →
+    ok=True(무력). 자격 하위기간 과반이 양(+)이고 가장 최근 자격 하위기간이
+    wf_recent_floor 이상이어야 통과. 게이트를 더 엄격하게만 만든다.
+    """
+    folds = subperiod_expectancy(trades, thr.wf_folds)
+    qualifying = [
+        f for f in folds
+        if f["n"] >= thr.wf_min_fold_trades and f["expectancy_r"] is not None
+    ]
+    if len(qualifying) < 2:
+        return {"ok": True, "reason": None, "evaluable": False,
+                "folds": folds, "n_qualifying": len(qualifying)}
+    pos = sum(1 for f in qualifying if f["expectancy_r"] > 0)
+    frac = pos / len(qualifying)
+    recent = float(qualifying[-1]["expectancy_r"])
+    ok = frac >= thr.wf_min_positive_frac and recent >= thr.wf_recent_floor
+    reason = None
+    if not ok:
+        parts = []
+        if frac < thr.wf_min_positive_frac:
+            parts.append(f"양의기간 {pos}/{len(qualifying)}")
+        if recent < thr.wf_recent_floor:
+            parts.append(f"최근기간 {recent:+.3f}R")
+        reason = ", ".join(parts)
+    return {
+        "ok": ok, "reason": reason, "evaluable": True,
+        "folds": folds, "n_qualifying": len(qualifying),
+        "positive_frac": round(frac, 3), "recent_expectancy_r": round(recent, 4),
+    }

@@ -115,7 +115,8 @@ def run(
                 "setup": setup,
                 "style": style,
                 "params": {"thresholds": thr.__dict__, "costs": costs.__dict__,
-                           "gross_expectancy_r": gross_exp},
+                           "gross_expectancy_r": gross_exp,
+                           "walkforward": gr.walkforward},
                 "sharpe": sharpe([t.ret_pct for t in trades]),
                 "mdd": gr.mdd,
                 "win_rate": gr.win_rate,
@@ -128,10 +129,13 @@ def run(
             if effective != gr.passed:
                 log.info("backtest.gate.held", setup=setup, style=style,
                          raw=gr.passed, held=effective)
+            wf = gr.walkforward or {}
             log.info("backtest.setup", setup=setup, style=style, passed=effective,
                      raw=gr.passed, n=gr.n_trades, gross_exp=gross_exp,
                      net_exp=gr.expectancy_r, cost_drag=cost_drag,
-                     mdd=gr.mdd, reasons=gr.reasons)
+                     mdd=gr.mdd, wf_eval=wf.get("evaluable"),
+                     wf_pos_frac=wf.get("positive_frac"),
+                     wf_recent=wf.get("recent_expectancy_r"), reasons=gr.reasons)
 
     upsert("backtests", bt_rows)
     return passed
