@@ -119,27 +119,55 @@ def test_skip_unchanged():
 
 # ── 픽 수명주기 ─────────────────────────────────────────────────────
 
+def _bar(low: float, high: float, close: float | None = None) -> dict:
+    """테스트용 일봉 한 개 — 종가 미지정 시 고가로 채움."""
+    return {"low": low, "high": high, "close": high if close is None else close}
+
+
 _PICK = {"as_of": "2026-06-10", "entry_price": 100.0,
          "target_price": 120.0, "stop_loss": 95.0}
 
 
-def test_pick_status_target_stop_priority():
+def test_pick_status_level_fill_and_priority():
     today = date(2026, 6, 11)
-    assert resolve_pick_status(_PICK, 121.0, today)["status"] == "target"
-    assert resolve_pick_status(_PICK, 94.0, today)["status"] == "stopped"
-    # 진행 중 — 변경 없음
-    assert resolve_pick_status(_PICK, 105.0, today) is None
-    # 종가 없음 — 판정 보류
+    # 고가가 목표 도달 → 목표가(120) 레벨 체결 (종가 오버슈트 아님)
+    out = resolve_pick_status(_PICK, [_bar(118, 121)], today)
+    assert out["status"] == "target" and out["exit_price"] == 120.0
+    assert out["close_return_pct"] == pytest.approx(0.20)
+    # 저가가 손절 도달 → 손절가(95) 레벨 체결
+    out = resolve_pick_status(_PICK, [_bar(94, 99)], today)
+    assert out["status"] == "stopped" and out["exit_price"] == 95.0
+    assert out["close_return_pct"] == pytest.approx(-0.05)
+    # 같은 봉서 손절·목표 동시 → 손절 우선(보수적)
+    assert resolve_pick_status(_PICK, [_bar(94, 121)], today)["status"] == "stopped"
+    # 진행 중(미터치, 타임아웃 전) — 변경 없음
+    assert resolve_pick_status(_PICK, [_bar(98, 105)], today) is None
+    # 봉 없음 — 판정 보류
+    assert resolve_pick_status(_PICK, [], today) is None
     assert resolve_pick_status(_PICK, None, today) is None
 
 
-def test_pick_status_expiry_and_return():
-    expired_day = date(2026, 7, 10)  # 발행 후 30일 경과
-    assert (expired_day - date(2026, 6, 10)).days >= PICK_EXPIRE_DAYS
-    out = resolve_pick_status(_PICK, 105.0, expired_day)
+def test_pick_status_timeout_closes_at_close():
+    # 스타일 미지정 → 기본 타임아웃 10봉. 미터치 10봉 → 마지막 봉 종가 청산.
+    bars = [_bar(98, 108, 105.0) for _ in range(10)]
+    out = resolve_pick_status(_PICK, bars, date(2026, 6, 30))
     assert out["status"] == "expired"
-    assert out["close_return_pct"] == 0.05
     assert out["exit_price"] == 105.0
+    assert out["close_return_pct"] == pytest.approx(0.05)
+
+
+def test_pick_status_style_timeout_position_longer():
+    # position(60봉) 은 10봉으론 타임아웃 안 됨 → 아직 진행 중.
+    pick = {**_PICK, "style": "position"}
+    bars = [_bar(98, 108, 105.0) for _ in range(10)]
+    assert resolve_pick_status(pick, bars, date(2026, 6, 30)) is None
+
+
+def test_pick_status_calendar_safety_net():
+    # 봉이 적어(거래정지) 봉-타임아웃 미도달이지만 캘린더 안전망 경과 → 강제 만료.
+    far = date(2026, 6, 10) + __import__("datetime").timedelta(days=PICK_EXPIRE_DAYS)
+    out = resolve_pick_status(_PICK, [_bar(98, 108, 103.0)], far)
+    assert out["status"] == "expired" and out["exit_price"] == 103.0
 
 
 # ── 분할익절(스케일아웃) 수명주기 (0022) ──
@@ -149,46 +177,58 @@ _SCALE = {"as_of": "2026-06-10", "entry_price": 100.0, "target_price": 110.0,
 
 def test_scaleout_tp1_hit_is_non_closing():
     today = date(2026, 6, 11)
-    # tp1(110) 도달, tp2 미만 → 종결 아님: tp1_hit 표시 + 본전스톱 전환.
-    out = resolve_pick_status(_SCALE, 112.0, today)
+    # tp1(110) 고가 도달, tp2 미만 → 종결 아님: tp1_hit 표시 + 본전스톱 전환.
+    out = resolve_pick_status(_SCALE, [_bar(105, 112)], today)
     assert out == {"tp1_hit": True, "tp1_hit_at": "2026-06-11"}
     assert "status" not in out
 
 
 def test_scaleout_stop_before_tp1():
-    out = resolve_pick_status(_SCALE, 94.0, date(2026, 6, 11))
+    out = resolve_pick_status(_SCALE, [_bar(94, 99)], date(2026, 6, 11))
     assert out["status"] == "stopped"
-    assert out["close_return_pct"] == pytest.approx(-0.06)
+    assert out["exit_price"] == 95.0
+    assert out["close_return_pct"] == pytest.approx(-0.05)  # 손절가 레벨 체결
 
 
 def test_scaleout_breakeven_after_tp1_is_partial():
-    # 이미 1차 익절한 픽이 본전(entry=100)으로 회귀 → 'partial', 블렌디드 0.5*0.10.
+    # 이미 1차 익절한 픽이 본전(entry=100) 저가 터치 → 'partial', 블렌디드 0.5*0.10.
     pick = {**_SCALE, "tp1_hit": True}
-    out = resolve_pick_status(pick, 99.0, date(2026, 6, 12))
+    out = resolve_pick_status(pick, [_bar(99, 103)], date(2026, 6, 12))
     assert out["status"] == "partial"
+    assert out["exit_price"] == 100.0
     assert out["close_return_pct"] == pytest.approx(0.05)
 
 
 def test_scaleout_tp2_after_tp1_is_full_target():
     pick = {**_SCALE, "tp1_hit": True}
-    out = resolve_pick_status(pick, 121.0, date(2026, 6, 12))
-    assert out["status"] == "target"
+    out = resolve_pick_status(pick, [_bar(115, 121)], date(2026, 6, 12))
+    assert out["status"] == "target" and out["exit_price"] == 120.0
     # 0.5*(110/100-1) + 0.5*(120/100-1) = 0.5*0.10 + 0.5*0.20 = 0.15
     assert out["close_return_pct"] == pytest.approx(0.15)
 
 
-def test_scaleout_same_day_through_tp2():
-    # tp1 미기록 상태서 종가가 tp2 초과 → 양 트랜치 실현 + tp1_hit 기록.
-    out = resolve_pick_status(_SCALE, 125.0, date(2026, 6, 11))
+def test_scaleout_multi_bar_tp1_then_tp2():
+    # 1봉서 tp1, 다음 봉서 tp2 — 봉 시퀀스 상태(tp1_hit) 유지 검증.
+    bars = [_bar(105, 112), _bar(113, 121)]
+    out = resolve_pick_status(_SCALE, bars, date(2026, 6, 12))
+    assert out["status"] == "target"
+    assert out["close_return_pct"] == pytest.approx(0.15)
+
+
+def test_scaleout_same_bar_through_tp2():
+    # tp1 미기록 봉서 고가가 tp2 초과 → 양 트랜치 실현(tp2 레벨 체결) + tp1_hit 기록.
+    out = resolve_pick_status(_SCALE, [_bar(105, 125)], date(2026, 6, 11))
     assert out["status"] == "target" and out["tp1_hit"] is True
+    assert out["exit_price"] == 120.0
     assert out["close_return_pct"] == pytest.approx(0.15)
 
 
 def test_scaleout_legacy_pick_without_tp2_unchanged():
-    # tp2 없는 옛 픽은 기존 단일 청산 — tp1 도달 시 바로 'target'(비분할).
-    out = resolve_pick_status(_PICK, 121.0, date(2026, 6, 11))
+    # tp2 없는 옛 픽은 단일 청산 — 목표가(120) 레벨 체결(종가 오버슈트 아님).
+    out = resolve_pick_status(_PICK, [_bar(118, 121)], date(2026, 6, 11))
     assert out["status"] == "target"
-    assert out["close_return_pct"] == pytest.approx(0.21)
+    assert out["exit_price"] == 120.0
+    assert out["close_return_pct"] == pytest.approx(0.20)
 
 
 # ── EOD 스타일 필터 ─────────────────────────────────────────────────

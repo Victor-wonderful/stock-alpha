@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from engine.backtest.event_backtest import _TIMEOUT_BARS
 from engine.db import get_client, select_all, upsert
 from engine.logging import get_logger
 from engine.reports.context import EOD_STYLES, backtest_passed
@@ -190,7 +191,9 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
     return picks
 
 
-PICK_EXPIRE_DAYS = 30  # 발행 후 30일(달력) 경과 시 만료 — 스윙 보유기간 상한 근사
+# 캘린더 안전망 — 타임아웃은 스타일별 봉 수(_TIMEOUT_BARS)가 주(主). 거래정지/상장폐지로
+# 봉이 안 쌓여 봉-타임아웃에 영영 못 닿는 픽만 이 날짜로 강제 만료(position 60봉≈84일보다 길게).
+PICK_EXPIRE_DAYS = 120
 
 
 def _close_patch(status: str, today: date, exit_price: float,
@@ -206,67 +209,90 @@ def _close_patch(status: str, today: date, exit_price: float,
     return patch
 
 
+def _bar_lhc(bar: dict) -> tuple[float, float, float]:
+    """일봉 한 개 → (저가, 고가, 종가)."""
+    return float(bar["low"]), float(bar["high"]), float(bar["close"])
+
+
 def resolve_pick_status(
-    pick: dict, last_close: float | None, today: date
+    pick: dict, bars: list[dict] | None, today: date
 ) -> dict | None:
     """열린 픽 1건의 상태 판정 (순수 함수). 변경 없으면 None.
 
-    종가 기준 근사(장중 터치 미반영) — 손절 우선(보수적).
+    백테스트(event_backtest._exit_*)와 **동일 청산**으로 단일화 —
+    진입(as_of) 다음 봉부터 따라가며 장중 터치 판정·**레벨 체결**:
+      · 저가 ≤ 손절가  → 손절가에 청산 (손절 우선, 보수적)
+      · 고가 ≥ 목표가  → 목표가에 청산
+      · 스타일별 타임아웃(_TIMEOUT_BARS: swing 10·position 60봉) → 그 봉 종가 청산
+    종가 오버슈트가 아니라 레벨 체결이라 실현 손익이 계획 R과 일치한다.
 
-    분할익절(0022): tp2_price 가 있으면 스케일아웃 상태기계.
-      1) tp1 전: 손절 / tp1 도달(→1차 익절·본전스톱, 비종결) / 만료
-      2) tp1 후: 본전(entry) 청산 → 'partial' / tp2 → 'target' / 만료
-      블렌디드 수익 = 0.5·tp1수익 + 0.5·잔량수익.
-    tp2_price 가 없으면(옛 픽) 기존 단일 tp1 청산 유지 — 진행 픽 소급 변경 방지.
+    분할익절(0022, tp2 있음): tp1 50% 익절 → 잔량 본전스톱 후 tp2 런.
+      블렌디드 = 0.5·tp1수익 + 0.5·잔량수익. 같은 봉서 1·2차 동시 실현 불허(보수적).
+    tp2 없는 옛 픽 / 진입가 결손은 단일 tp1 청산.
+
+    bars: as_of **다음** 거래일부터 오늘까지의 일봉 [{low,high,close}, ...] 오름차순.
     """
-    if last_close is None:
+    if not bars:
         return None
     stop = pick.get("stop_loss")
     tp1 = pick.get("target_price")
     tp2 = pick.get("tp2_price")
     entry = pick.get("entry_price")
-    tp1_hit = bool(pick.get("tp1_hit"))
+    e = float(entry) if entry not in (None, 0) else None
+    s = float(stop) if stop is not None else None
+    t1 = float(tp1) if tp1 is not None else None
+    t2 = float(tp2) if tp2 is not None else None
+    timeout = _TIMEOUT_BARS.get(pick.get("style"), 10)
     as_of = date.fromisoformat(str(pick["as_of"]))
-    expired = (today - as_of).days >= PICK_EXPIRE_DAYS
+    cal_expired = (today - as_of).days >= PICK_EXPIRE_DAYS
+    last_cl = _bar_lhc(bars[-1])[2]
 
-    # ── 옛 픽(tp2 없음) 또는 진입가 결손 → 기존 단일 청산 ──
-    if tp2 is None or entry in (None, 0):
-        status: str | None = None
-        if stop is not None and last_close <= float(stop):
-            status = "stopped"
-        elif tp1 is not None and last_close >= float(tp1):
-            status = "target"
-        elif expired:
-            status = "expired"
-        if status is None:
-            return None
-        ret = (last_close / float(entry) - 1) if entry not in (None, 0) else None
-        return _close_patch(status, today, last_close, ret)
-
-    e = float(entry)
-    tp1_ret = (float(tp1) / e - 1) if tp1 is not None else 0.0
-
-    if not tp1_hit:
-        if stop is not None and last_close <= float(stop):           # 손절(전량)
-            return _close_patch("stopped", today, last_close, last_close / e - 1)
-        if last_close >= float(tp2):           # tp1·tp2 동시 돌파 → 양 트랜치 실현
-            blended = 0.5 * tp1_ret + 0.5 * (float(tp2) / e - 1)
-            return _close_patch("target", today, last_close, blended, tp1_hit=True)
-        if tp1 is not None and last_close >= float(tp1):             # 1차 익절(비종결)
-            return {"tp1_hit": True, "tp1_hit_at": today.isoformat()}
-        if expired:
-            return _close_patch("expired", today, last_close, last_close / e - 1)
+    # ── 옛 픽(tp2 없음) 또는 진입가 결손 → 단일 청산 ──
+    if t2 is None or e is None:
+        for k, bar in enumerate(bars):
+            lo, hi, cl = _bar_lhc(bar)
+            if s is not None and lo <= s:
+                return _close_patch("stopped", today, s, (s / e - 1) if e else None)
+            if t1 is not None and hi >= t1:
+                return _close_patch("target", today, t1, (t1 / e - 1) if e else None)
+            if k + 1 >= timeout:
+                return _close_patch("expired", today, cl, (cl / e - 1) if e else None)
+        if cal_expired:
+            return _close_patch("expired", today, last_cl, (last_cl / e - 1) if e else None)
         return None
 
-    # ── tp1 익절 후: 잔량은 본전스톱 / tp2 / 만료 ──
-    if last_close <= e:                        # 본전 청산 → 1차 익절만 실현
-        return _close_patch("partial", today, last_close, 0.5 * tp1_ret + 0.5 * 0.0)
-    if last_close >= float(tp2):               # 2차 목표 → 전량 익절
-        return _close_patch("target", today, last_close,
-                            0.5 * tp1_ret + 0.5 * (float(tp2) / e - 1))
-    if expired:                                # 만료 → 잔량 종가 청산
-        return _close_patch("expired", today, last_close,
-                            0.5 * tp1_ret + 0.5 * (last_close / e - 1))
+    tp1_hit = bool(pick.get("tp1_hit"))
+    tp1_ret = (t1 / e - 1) if t1 is not None else 0.0
+
+    for k, bar in enumerate(bars):
+        lo, hi, cl = _bar_lhc(bar)
+        if not tp1_hit:
+            if s is not None and lo <= s:                  # 손절(전량)
+                return _close_patch("stopped", today, s, s / e - 1)
+            if hi >= t2:                                   # tp1·tp2 동시 → 양 트랜치
+                return _close_patch("target", today, t2,
+                                    0.5 * tp1_ret + 0.5 * (t2 / e - 1), tp1_hit=True)
+            if t1 is not None and hi >= t1:                # 1차 익절(비종결) — 본전스톱 전환
+                tp1_hit = True
+                continue                                   # 같은 봉서 tp2 불허
+            if k + 1 >= timeout:
+                return _close_patch("expired", today, cl, cl / e - 1)
+        else:
+            if lo <= e:                                    # 본전 청산 → 1차 익절만 실현
+                return _close_patch("partial", today, e, 0.5 * tp1_ret)
+            if hi >= t2:                                   # 2차 목표 → 전량 익절
+                return _close_patch("target", today, t2,
+                                    0.5 * tp1_ret + 0.5 * (t2 / e - 1))
+            if k + 1 >= timeout:
+                return _close_patch("expired", today, cl,
+                                    0.5 * tp1_ret + 0.5 * (cl / e - 1))
+
+    # ── 봉 소진(타임아웃 미도달) ──
+    if cal_expired:                                        # 캘린더 안전망 만료(잔량 종가)
+        base = (0.5 * tp1_ret + 0.5 * (last_cl / e - 1)) if tp1_hit else (last_cl / e - 1)
+        return _close_patch("expired", today, last_cl, base)
+    if tp1_hit and not pick.get("tp1_hit"):               # 신규 1차 익절만 기록(비종결)
+        return {"tp1_hit": True, "tp1_hit_at": today.isoformat()}
     return None
 
 
@@ -277,20 +303,22 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
     open_picks = (
         client.table("recommendations")
         .select("id,as_of,entry_price,target_price,tp2_price,stop_loss,"
-                "tp1_hit,instrument_id")
+                "tp1_hit,style,instrument_id")
         .eq("basket_type", "daily_focus").eq("status", "open").execute()
     ).data or []
 
     counts = {"target": 0, "stopped": 0, "expired": 0, "partial": 0,
               "tp1_hit": 0, "open": 0}
     for p in open_picks:
-        last = (
-            client.table("ohlcv").select("close")
+        # 진입(as_of) 다음 거래일부터의 일봉을 시간순으로 — 장중 고가/저가 터치 판정용.
+        ao = date.fromisoformat(str(p["as_of"]))
+        rows = (
+            client.table("ohlcv").select("low,high,close,ts")
             .eq("instrument_id", p["instrument_id"]).eq("interval", "1d")
-            .order("ts", desc=True).limit(1).execute()
-        ).data
-        last_close = float(last[0]["close"]) if last else None
-        patch = resolve_pick_status(p, last_close, d)
+            .gte("ts", p["as_of"]).order("ts").execute()
+        ).data or []
+        bars = [r for r in rows if date.fromisoformat(str(r["ts"])[:10]) > ao]
+        patch = resolve_pick_status(p, bars, d)
         if patch is None:
             counts["open"] += 1
             continue
