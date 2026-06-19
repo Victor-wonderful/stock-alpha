@@ -136,6 +136,36 @@ def load_latest_close_1d(active_only: bool = True) -> dict[int, float]:
     return out
 
 
+def latest_bar_date_by_iid(active_only: bool = True) -> dict[int, str]:
+    """전 종목 최신 일봉 날짜 → {instrument_id: 'YYYY-MM-DD'}. 단일 윈도우 쿼리.
+
+    신선도 가드용 경량 조회 — OHLCV 전체 대신 종목당 최신 ts 1개만. 인제스트가
+    as_of(목표 거래일) 봉을 채웠는지 유니버스 단위로 검증한다(engine.freshness).
+    """
+    import psycopg
+
+    join = (
+        "join instruments i on i.id = o.instrument_id and i.active = true"
+        if active_only else ""
+    )
+    sql = f"""
+        select instrument_id, ts from (
+          select o.instrument_id, o.ts,
+                 row_number() over (partition by o.instrument_id order by o.ts desc) rn
+          from ohlcv o {join}
+          where o.interval = '1d'
+        ) t where rn = 1
+    """
+    out: dict[int, str] = {}
+    with psycopg.connect(_dsn()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            for iid, ts in cur:
+                out[int(iid)] = str(ts)[:10]
+    log.info("db_direct.latest_bar_date", instruments=len(out))
+    return out
+
+
 def load_latest_financials_fy(active_only: bool = True) -> dict[int, dict]:
     """전 종목 최신 '연간(FY)' 재무 → {instrument_id: row dict}. 단일 윈도우 쿼리.
 

@@ -23,7 +23,9 @@ def _load_ohlcv(instrument_id: int, limit: int = 120) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
-    return df[["open", "high", "low", "close", "volume"]].astype(float)
+    out = df[["open", "high", "low", "close", "volume"]].astype(float)
+    out["ts"] = df["ts"]  # 신선도 가드(freshness)·PEAD point-in-time 용 — db_direct 와 동형
+    return out
 
 
 def _load_active_frames(bars: int = 120) -> dict[int, pd.DataFrame]:
@@ -95,10 +97,13 @@ def run(
     risk_per_trade_pct: float = 1.0,
     setups: list[str] | None = None,
     enforce_gate: bool = False,
+    as_of: str | None = None,
 ) -> int:
     """활성 종목 전체에 대해 시그널 생성·적재.
 
     enforce_gate=True 면 백테스트 품질 게이트를 통과한 셋업만 발행(M6 연동).
+    as_of 지정 시(YYYY-MM-DD) 최신 봉이 그날보다 낡은 종목은 제외 — 낡은 종가로
+    '최신 시그널'을 만들지 않는다(freshness 종목별 가드, 2026-06-19 사고 방지).
     """
     styles_by_setup: dict[str, list[str]] | None = None
     if enforce_gate:
@@ -118,6 +123,19 @@ def run(
     n_all = len(frames)
     frames = filter_liquid_frames(frames)
     log.info("signals.universe", total=n_all, liquid=len(frames))
+
+    # 종목별 신선도 가드 — 최신 봉이 as_of 보다 낡은 종목 제외(낡은 종가로 발행 금지).
+    if as_of:
+        from engine import freshness
+        fresh, stale = freshness.fresh_frames(frames, as_of)
+        if stale:
+            log.warning("signals.freshness.dropped", as_of=as_of,
+                        dropped=len(stale), kept=len(fresh))
+        frames = fresh
+        if not frames:
+            log.warning("signals.freshness.empty", as_of=as_of)
+            return 0
+
     ranks = _rs_ranks(frames)
     flows_map = (
         load_flows_map() if (setups is None or "flow_accumulation" in setups) else {}

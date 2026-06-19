@@ -260,6 +260,28 @@ def daily(
     else:
         typer.echo("[1/5] ingest skipped")
 
+    # 신선도 가드 — 인제스트가 목표 거래일(target) 봉을 못 채웠으면(장중·휴장·인제스트
+    # 실패) 낡은 가격으로 '종가 분석' 픽을 발행하는 사고(2026-06-19)를 차단하고 중단한다.
+    from datetime import date as _date
+    target = as_of or _date.today().isoformat()
+    from engine import db_direct, freshness
+    if db_direct.available():
+        fr_check = freshness.assess_dates(db_direct.latest_bar_date_by_iid(), target)
+        typer.echo(
+            f"      freshness: {fr_check['n_fresh']}/{fr_check['n']} "
+            f"({fr_check['fresh_frac']:.0%}) @ {target} · "
+            f"market_latest={fr_check['market_latest']}"
+        )
+        if not fr_check["ok"]:
+            typer.echo(
+                f"[중단] {target} 봉 미적재 — 낡은 데이터 발행 차단 "
+                f"(market_latest={fr_check['market_latest']}). 인제스트 점검 후 재실행."
+            )
+            log.error("daily.freshness.abort", **fr_check)
+            return
+    else:
+        log.warning("daily.freshness.skipped_no_db_direct")
+
     # 레짐을 팩터보다 먼저 — 같은 거래일 레짐으로 팩터 가중을 틸트(point-in-time).
     from engine.market import regime as rg
     r0 = rg.run()
@@ -284,7 +306,7 @@ def daily(
     setups = list(passed)
     if "factor_composite" in rd.passed_setups_from_db():
         setups.append("factor_composite")
-    n = sr.run(setups=setups)
+    n = sr.run(setups=setups, as_of=target)
     typer.echo(f"[4/5] signals: {n} rows ({', '.join(setups) or '(없음)'})")
 
     r = rd.run_daily(use_llm=llm, cap=cap, as_of=as_of)
