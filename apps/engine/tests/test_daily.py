@@ -102,6 +102,30 @@ def test_picks_exclude_factor_composite():
     assert [p["setup"] for p in picks] == ["breakout"]
 
 
+def test_picks_regime_suppresses_trend_in_risk_off():
+    # risk_off 국면 — 추세·돌파 셋업(leader_trend)은 픽에서 억제(빈 날 허용).
+    r = _report(1, "매수", 80.0)
+    r["payload"]["plan"] = [{"style": "position", "setup": "leader_trend",
+                             "strength": 0.9, "entry_price": 100.0,
+                             "tp1": 120.0, "stop_loss": 95.0}]
+    passed = {"leader_trend": ["position"]}
+    assert select_picks([r], passed_combos=passed, regime="risk_off") == []
+    # neutral/None 국면이면 정상 선정.
+    assert len(select_picks([r], passed_combos=passed, regime="neutral")) == 1
+    assert len(select_picks([r], passed_combos=passed)) == 1
+
+
+def test_picks_regime_keeps_flow_in_risk_off():
+    # 수급 매집(flow_accumulation)은 추세추종이 아니라 risk_off 에서도 허용.
+    r = _report(1, "매수", 80.0)
+    r["payload"]["plan"] = [{"style": "position", "setup": "flow_accumulation",
+                             "strength": 0.8, "entry_price": 100.0,
+                             "tp1": 120.0, "stop_loss": 95.0}]
+    picks = select_picks([r], passed_combos={"flow_accumulation": ["position"]},
+                         regime="risk_off")
+    assert [p["setup"] for p in picks] == ["flow_accumulation"]
+
+
 def test_picks_style_chosen_by_expectancy():
     # 한 종목이 swing·position 둘 다 통과 → 강도가 아닌 검증 기대값 높은 쪽 선택.
     r = _report(1, "매수", 70.0)

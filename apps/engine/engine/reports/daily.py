@@ -41,6 +41,14 @@ PICKS_MIN_SCORE = 50.0
 # 같은 종목이 다른 통과 셋업으로도 잡히면 그쪽으로 선정된다.
 PICK_EXCLUDED_SETUPS = frozenset({"factor_composite"})
 
+# risk_off 국면에서 픽으로 안 쓸 추세·돌파·모멘텀 셋업 — 하락장에서 실패.
+# 검증(2026-06-19): 닫힌 픽 11건 전량이 risk_off(시장 20일 -7.9%)에서 발행돼 평균 -2.85%.
+# 하락장에선 이 계열 픽을 억제(빈 날 허용)해 드로다운을 막는다. 수급(flow_accumulation)은
+# 덜 추세추종적이라 전 국면 허용. (pick-track-quality)
+TREND_PICK_SETUPS = frozenset(
+    {"high_52w", "breakout", "vol_squeeze", "leader_trend", "pullback"}
+)
+
 
 def passed_setups_from_db() -> set[str]:
     """backtests 최신 행 기준 게이트 통과 셋업 집합 (재백테스트 없이 read).
@@ -148,13 +156,16 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
                  min_score: float = PICKS_MIN_SCORE,
                  passed_combos: dict[str, list[str]] | None = None,
                  expectancy_by_combo: dict[tuple[str, str], float] | None = None,
+                 regime: str | None = None,
                  ) -> list[dict]:
     """오늘의 포커스 선정 — 순수 함수. reports: 그날 발행 리포트 행(payload 포함).
 
     passed_combos: {setup: [통과 스타일]} — 주입 시 게이트 통과 (setup,style) 플랜만 발행.
     expectancy_by_combo: {(setup,style): expectancy_r} — 복수 통과 시 기대값 높은 스타일 선택.
+    regime: 발행일 시장 국면('risk_off' 면 추세·돌파 픽 억제 — 하락장 손실 회피).
     기준 미달이면 빈 리스트(빈 날 허용).
     """
+    risk_off = regime == "risk_off"
     cands = []
     for r in reports:
         p = r.get("payload") or {}
@@ -165,6 +176,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             row for row in (p.get("plan") or [])
             if row.get("style") in EOD_STYLES
             and row.get("setup") not in PICK_EXCLUDED_SETUPS
+            and not (risk_off and row.get("setup") in TREND_PICK_SETUPS)
             and _plan_gate_ok(row, passed_combos)
         ]
         tradable = (p.get("tradability") or {}).get("passed", False)
@@ -354,11 +366,20 @@ def select_and_store_picks(as_of: str) -> int:
     ).data or []
     from engine.backtest.runner import passed_combos_from_db
 
+    # 발행일 시점 시장 국면(<=as_of 최신) — risk_off 면 추세·돌파 픽 억제.
+    reg_row = (
+        client.table("market_regime").select("regime")
+        .lte("date", as_of).order("date", desc=True).limit(1).execute()
+    ).data
+    regime = reg_row[0]["regime"] if reg_row else None
+
     picks = select_picks(
         rows,
         passed_combos=passed_combos_from_db(),
         expectancy_by_combo=gate_expectancy_from_db(),
+        regime=regime,
     )
+    log.info("reports.daily.picks.regime", as_of=as_of, regime=regime)
     rebalance_id = int(as_of.replace("-", ""))
     for p in picks:
         p["rebalance_id"] = rebalance_id
