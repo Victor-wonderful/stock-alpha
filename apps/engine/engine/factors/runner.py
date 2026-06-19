@@ -6,23 +6,24 @@ from datetime import date
 import pandas as pd
 
 from engine.db import get_client, select_all, upsert
-from engine.factors.compose import composite_alpha, zscore_factors
+from engine.factors.compose import composite_alpha, regime_weights, zscore_factors
 from engine.factors.factors import compute_raw_factors
 from engine.logging import get_logger
 
 log = get_logger(__name__)
 
-SOURCE_VERSION = "factor-v1"
+SOURCE_VERSION = "factor-v2"  # v2: 레짐별 동적 가중(compose.regime_weights)
 
 
 def build_factor_scores(
     cross: pd.DataFrame,
     asof: str | None = None,
     weights: dict[str, float] | None = None,
+    source_version: str | None = None,
 ) -> list[dict]:
     """단면 DataFrame(index=instrument_id, 'sector' + raw 입력 컬럼) → factor_scores 행.
 
-    순수 함수 — DB 없이 테스트 가능.
+    순수 함수 — DB 없이 테스트 가능. source_version 으로 사용 가중(레짐) 을 기록한다.
     """
     if cross.empty:
         return []
@@ -36,6 +37,7 @@ def build_factor_scores(
         if c != "sector":
             cross[c] = pd.to_numeric(cross[c], errors="coerce")
 
+    sv = source_version or SOURCE_VERSION
     raw = compute_raw_factors(cross)
     z = zscore_factors(raw, sectors)
     alpha = composite_alpha(z, weights)
@@ -63,7 +65,7 @@ def build_factor_scores(
             "size_z": _f(r.get("size_z")),
             "composite_alpha": _f(r.get("composite_alpha")),
             "sector_rank": int(r["sector_rank"]) if pd.notna(r.get("sector_rank")) else None,
-            "source_version": SOURCE_VERSION,
+            "source_version": sv,
         })
     return rows
 
@@ -72,13 +74,30 @@ def _f(v) -> float | None:
     return None if v is None or pd.isna(v) else round(float(v), 4)
 
 
-def run(asof: str | None = None) -> int:
-    """DB 에서 단면을 구성해 factor_scores 적재. (입력 데이터 적재가 전제)"""
+def run(asof: str | None = None, regime: str | None = None) -> int:
+    """DB 에서 단면을 구성해 factor_scores 적재. (입력 데이터 적재가 전제)
+
+    regime 미지정 시 market_regime 최신 행을 읽어 레짐별 가중(compose.regime_weights)
+    을 적용한다. 데일리 배치는 regime 을 명시 전달(같은 거래일 산출값 재사용).
+    """
     cross = _load_cross_section()
-    rows = build_factor_scores(cross, asof)
+    if regime is None:
+        regime = _load_latest_regime()
+    weights = regime_weights(regime)
+    sv = f"{SOURCE_VERSION}:{regime or 'neutral'}"
+    rows = build_factor_scores(cross, asof, weights=weights, source_version=sv)
     n = upsert("factor_scores", rows, on_conflict="instrument_id,date")
-    log.info("factor.run.done", rows=n)
+    log.info("factor.run.done", rows=n, regime=regime or "neutral", weights=weights)
     return n
+
+
+def _load_latest_regime() -> str | None:
+    """market_regime 최신 레짐 (date 오름차순 마지막). 없으면 None(기본 가중)."""
+    rows = sorted(
+        select_all("market_regime", "date,regime"),
+        key=lambda r: r.get("date") or "",
+    )
+    return rows[-1].get("regime") if rows else None
 
 
 def _price_factors(closes: list[float]) -> tuple[float | None, float | None]:

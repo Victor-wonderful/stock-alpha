@@ -20,6 +20,24 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "momentum": 0.20,
 }
 
+# 레짐별 팩터 틸트 (PLAN: "국면 분류 → 팩터 가중 조정").
+# 검증된 VQM 집합 안에서만 재분배한다 — IC 감사에서 탈락한 lowvol/size/growth 를
+# 레짐 핑계로 다시 들이지 않는다. 금융 이론: 위험선호 국면은 추세(momentum)가,
+# 위험회피 국면은 방어적 가치·품질이 상대우위. 틸트는 보수적(momentum 0.10~0.40)
+# 으로, value·quality 핵심 우위를 뒤집지 않는 범위. neutral·미상 레짐은 기본 가중.
+REGIME_TILT: dict[str, dict[str, float]] = {
+    "risk_on":  {"value": 0.30, "quality": 0.30, "momentum": 0.40},
+    "risk_off": {"value": 0.45, "quality": 0.45, "momentum": 0.10},
+}
+
+
+def regime_weights(regime: str | None) -> dict[str, float]:
+    """레짐 → 팩터 가중치. risk_on=모멘텀 가산·risk_off=가치/품질 가산, 그 외 기본.
+
+    반환은 항상 합 1.0 (테이블·DEFAULT_WEIGHTS 모두 정규화 상태).
+    """
+    return dict(REGIME_TILT.get(regime or "", DEFAULT_WEIGHTS))
+
 
 def zscore_factors(raw: pd.DataFrame, sectors: pd.Series | None = None) -> pd.DataFrame:
     """raw 팩터 → (섹터 중립) z-score. 섹터 정보 없으면 전체 z-score."""

@@ -260,11 +260,14 @@ def daily(
     else:
         typer.echo("[1/5] ingest skipped")
 
-    typer.echo(f"[2/5] factors: {fr.run()} rows · valuations: {fdr.run(as_of=as_of)} rows")
-
+    # 레짐을 팩터보다 먼저 — 같은 거래일 레짐으로 팩터 가중을 틸트(point-in-time).
     from engine.market import regime as rg
     r0 = rg.run()
-    typer.echo(f"      regime: {r0['regime']} (score {r0['score']})")
+    typer.echo(f"[2/5] regime: {r0['regime']} (score {r0['score']})")
+    typer.echo(
+        f"      factors: {fr.run(regime=r0['regime'])} rows · "
+        f"valuations: {fdr.run(as_of=as_of)} rows"
+    )
 
     # br.run() 은 (셋업×스타일) 매트릭스 → {(setup, style): passed}. 튜플 키를
     # setup 문자열로 풀어야 한다(시그널 발행 필터는 셋업 단위, 스타일 게이팅은 내부 처리).
