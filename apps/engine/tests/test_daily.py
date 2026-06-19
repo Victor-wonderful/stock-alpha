@@ -86,6 +86,22 @@ def test_picks_gate_filters_failing_combo():
     assert picks[0]["setup"] == "breakout"
 
 
+def test_picks_exclude_factor_composite():
+    # factor_composite 는 픽에서 제외(시그널/리포트로는 유지). 단독이면 픽 없음.
+    r = _report(1, "매수", 80.0)
+    r["payload"]["plan"] = [{"style": "position", "setup": "factor_composite",
+                             "strength": 0.9, "entry_price": 100.0,
+                             "tp1": 120.0, "stop_loss": 95.0}]
+    assert select_picks([r], passed_combos={"factor_composite": ["position"]}) == []
+    # 같은 종목이 다른 통과 셋업으로도 잡히면 그 셋업으로 선정된다.
+    r["payload"]["plan"].append({"style": "swing", "setup": "breakout",
+                                 "strength": 0.7, "entry_price": 100.0,
+                                 "tp1": 118.0, "stop_loss": 96.0})
+    picks = select_picks([r], passed_combos={"factor_composite": ["position"],
+                                             "breakout": ["swing"]})
+    assert [p["setup"] for p in picks] == ["breakout"]
+
+
 def test_picks_style_chosen_by_expectancy():
     # 한 종목이 swing·position 둘 다 통과 → 강도가 아닌 검증 기대값 높은 쪽 선택.
     r = _report(1, "매수", 70.0)

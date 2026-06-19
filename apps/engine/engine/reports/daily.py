@@ -35,6 +35,12 @@ PICKS_MAX = 5              # 오늘의 포커스 최대 종목 수
 # 후보 부족일엔 여전히 5개 미만/빈 날 허용(품질 우선, 억지로 채우지 않음).
 PICKS_MIN_SCORE = 50.0
 
+# 픽(오늘의 포커스)에서 제외할 셋업 — 시그널·리포트로는 유지하되 '매수 픽'으로는 안 씀.
+# factor_composite: 횡단면 게이트 한계(상위 10% 초과수익 t≈-0.04, IC만 유효) + 라이브 픽
+# 승률 12.5%(8건)·기여 최저 → 매수 신호가 아니라 '하위 제외 필터' 성격(pick-track-quality).
+# 같은 종목이 다른 통과 셋업으로도 잡히면 그쪽으로 선정된다.
+PICK_EXCLUDED_SETUPS = frozenset({"factor_composite"})
+
 
 def passed_setups_from_db() -> set[str]:
     """backtests 최신 행 기준 게이트 통과 셋업 집합 (재백테스트 없이 read).
@@ -158,6 +164,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
         plan = [
             row for row in (p.get("plan") or [])
             if row.get("style") in EOD_STYLES
+            and row.get("setup") not in PICK_EXCLUDED_SETUPS
             and _plan_gate_ok(row, passed_combos)
         ]
         tradable = (p.get("tradability") or {}).get("passed", False)
