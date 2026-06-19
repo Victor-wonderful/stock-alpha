@@ -110,11 +110,7 @@ def _load_closes_bulk(bars: int = 160) -> dict[int, list[float]]:
 
     if db_direct.available():
         try:
-            frames = db_direct.load_all_ohlcv_1d(bars=bars, active_only=True)
-            return {
-                iid: [float(x) for x in df["close"].dropna().tolist()]
-                for iid, df in frames.items()
-            }
+            return db_direct.load_all_close_1d(bars=bars, active_only=True)
         except Exception as e:  # noqa: BLE001
             log.warning("factors.direct_pg_failed_fallback_rest", error=str(e)[:140])
 

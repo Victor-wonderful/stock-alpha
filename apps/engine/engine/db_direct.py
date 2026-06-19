@@ -70,6 +70,42 @@ def load_all_ohlcv_1d(bars: int = 500, active_only: bool = True) -> dict[int, pd
     return frames
 
 
+def load_all_close_1d(bars: int = 160, active_only: bool = True) -> dict[int, list[float]]:
+    """전 종목 최근 `bars` 종가만 → {instrument_id: [close...]} (시간 오름차순).
+
+    load_all_ohlcv_1d 의 close 전용·경량판. OHLCV 6컬럼·DataFrame 대신 종가 1컬럼만
+    스트리밍해 전송량(모스크바↔서울 WAN)을 줄인다 — 팩터 가격지표는 close 만 필요.
+    직접 PG 불가 시 호출측 REST 폴백.
+    """
+    import psycopg
+
+    join = (
+        "join instruments i on i.id = o.instrument_id and i.active = true"
+        if active_only else ""
+    )
+    sql = f"""
+        select instrument_id, close
+        from (
+          select o.instrument_id, o.ts, o.close,
+                 row_number() over (partition by o.instrument_id order by o.ts desc) rn
+          from ohlcv o {join}
+          where o.interval = '1d'
+        ) t
+        where rn <= %s
+        order by instrument_id, ts
+    """
+    out: dict[int, list[float]] = {}
+    with psycopg.connect(_dsn()) as conn:
+        with conn.cursor(name="close_stream") as cur:   # 서버사이드 커서(스트리밍)
+            cur.itersize = 50_000
+            cur.execute(sql, (bars,))
+            for iid, c in cur:
+                if c is not None:
+                    out.setdefault(int(iid), []).append(float(c))
+    log.info("db_direct.close", instruments=len(out), bars=bars)
+    return out
+
+
 def load_latest_close_1d(active_only: bool = True) -> dict[int, float]:
     """전 종목 최신 일봉 종가 → {instrument_id: close}. 단일 윈도우 쿼리.
 
