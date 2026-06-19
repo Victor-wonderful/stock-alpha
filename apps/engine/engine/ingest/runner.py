@@ -15,12 +15,39 @@ def _yyyymmdd(d: date) -> str:
     return d.strftime("%Y%m%d")
 
 
-def ingest_krx_prices(days: int = 30, workers: int = 12) -> int:
+def _run_with_retries(
+    items: list,
+    attempt_fn,
+    retries: int = 2,
+    on_retry=None,
+) -> tuple[int, list]:
+    """실패분만 재시도하는 순수 오케스트레이터 (네트워크 없음 — 테스트 가능).
+
+    attempt_fn(items) -> (success_rows, failed_items). 처음 1회 + 실패분 retries 회.
+    반환: (누적 success_rows, 끝까지 실패한 items). 부분 적재(종목별로 다른 날짜에서
+    멈춤, 2026-06-19 사고)를 일시적 실패 재시도로 완화한다.
+    """
+    total, failed = attempt_fn(items)
+    n = 0
+    while failed and n < retries:
+        n += 1
+        if on_retry is not None:
+            on_retry(n, failed)
+        more, failed = attempt_fn(failed)
+        total += more
+    return total, failed
+
+
+def ingest_krx_prices(days: int = 30, workers: int = 12, retries: int = 2) -> int:
     """KRX 전 종목(마스터에 등록된) 일봉 OHLCV 적재.
 
     pykrx 횡단면(by_ticker) 엔드포인트가 죽어 per-ticker 호출만 가능 → fetch 가
     병목이라 스레드풀로 병렬화(workers). upsert 는 메인스레드에서 순차(Supabase
-    동시쓰기 회피). 종목 단위 실패는 건너뛰고 계속.
+    동시쓰기 회피).
+
+    종목 단위 실패는 **재시도**(retries) — pykrx 스크레이프의 일시적 실패(레이트
+    리밋/네트워크)가 '종목별로 다른 날짜에서 멈추는' 부분 적재를 유발했다(2026-06-19).
+    끝까지 실패하면 incomplete 로 경고(신선도 가드가 발행을 막는다).
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -37,23 +64,37 @@ def ingest_krx_prices(days: int = 30, workers: int = 12) -> int:
         except Exception as e:  # noqa: BLE001
             return iid, symbol, [], str(e)
 
+    def _attempt(batch: list) -> tuple[int, list]:
+        rows_total = 0
+        done = 0
+        fails: list = []
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {ex.submit(_fetch, it): it for it in batch}
+            for fut in as_completed(futures):
+                _iid, symbol, rows, err = fut.result()
+                if err:
+                    fails.append(futures[fut])
+                    log.warning("ohlcv.fail", symbol=symbol, error=err)
+                elif rows:
+                    rows_total += upsert(
+                        "ohlcv", rows, on_conflict="instrument_id,ts,interval"
+                    )
+                done += 1
+                if done % 250 == 0:
+                    log.info("ohlcv.progress", done=done, of=len(batch),
+                             rows=rows_total, failed=len(fails))
+        return rows_total, fails
+
     items = list(imap.items())
-    total = 0
-    done = 0
-    failed = 0
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = [ex.submit(_fetch, it) for it in items]
-        for fut in as_completed(futures):
-            _iid, symbol, rows, err = fut.result()
-            if err:
-                failed += 1
-                log.warning("ohlcv.fail", symbol=symbol, error=err)
-            elif rows:
-                total += upsert("ohlcv", rows, on_conflict="instrument_id,ts,interval")
-            done += 1
-            if done % 250 == 0:
-                log.info("ohlcv.progress", done=done, of=len(items), rows=total, failed=failed)
-    log.info("ingest_krx_prices.done", rows=total, symbols=len(items), failed=failed)
+    total, failed = _run_with_retries(
+        items, _attempt, retries=retries,
+        on_retry=lambda n, fl: log.info("ohlcv.retry", attempt=n, retry_symbols=len(fl)),
+    )
+    if failed:
+        log.warning("ingest_krx_prices.incomplete", failed=len(failed),
+                    sample=[s for (s, _e), _i in failed[:20]])
+    log.info("ingest_krx_prices.done", rows=total, symbols=len(items),
+             failed=len(failed))
     return total
 
 
