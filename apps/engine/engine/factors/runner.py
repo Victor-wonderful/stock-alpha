@@ -100,6 +100,39 @@ def _price_factors(closes: list[float]) -> tuple[float | None, float | None]:
     return mom, vol
 
 
+def _load_closes_bulk(bars: int = 160) -> dict[int, list[float]]:
+    """전 종목 종가 히스토리(최근 `bars` 봉, 시간 오름차순)를 벌크 로드.
+
+    db_direct(직접 PG 서버사이드 커서) 우선 — 종목별 REST 호출(수천 왕복·수십 분)을
+    단일 스트리밍 쿼리(~수십 초)로 대체. 실패 시 REST 종목별 폴백(백테스트와 동일 패턴).
+    """
+    from engine import db_direct
+
+    if db_direct.available():
+        try:
+            frames = db_direct.load_all_ohlcv_1d(bars=bars, active_only=True)
+            return {
+                iid: [float(x) for x in df["close"].dropna().tolist()]
+                for iid, df in frames.items()
+            }
+        except Exception as e:  # noqa: BLE001
+            log.warning("factors.direct_pg_failed_fallback_rest", error=str(e)[:140])
+
+    client = get_client()
+    out: dict[int, list[float]] = {}
+    for it in select_all("instruments", "id", eq={"active": True}):
+        px = (
+            client.table("ohlcv").select("close")
+            .eq("instrument_id", it["id"]).eq("interval", "1d")
+            .order("ts", desc=True).limit(bars).execute()
+        )
+        out[it["id"]] = [
+            float(r["close"]) for r in reversed(px.data or [])
+            if r.get("close") is not None
+        ]
+    return out
+
+
 def _load_cross_section() -> pd.DataFrame:
     """instruments + financials + 가격 히스토리(모멘텀·변동성) 로 단면 구성.
 
@@ -112,7 +145,6 @@ def _load_cross_section() -> pd.DataFrame:
     """
     from engine.fundamental.periods import latest_annual, yoy_growth
 
-    client = get_client()
     inst = select_all("instruments", "id,sector", eq={"active": True})
     if not inst:
         return pd.DataFrame()
@@ -122,21 +154,17 @@ def _load_cross_section() -> pd.DataFrame:
     for r in select_all("financials", "*"):
         fins.setdefault(r["instrument_id"], []).append(r)
 
+    # 가격 히스토리도 벌크 1회 로드 — 종목별 REST(수천 왕복·~40분)를 직접 PG
+    # 벌크 스트리밍(~수십 초)으로 대체. 데일리 배치 최대 병목 해소.
+    closes_by_iid = _load_closes_bulk()
+
     records: list[dict] = []
     for it in inst:
         iid = it["id"]
         fin_rows = fins.get(iid, [])
         fin = latest_annual(fin_rows) or {}
         rev_g, eps_g = yoy_growth(fin_rows)
-        px_res = (
-            client.table("ohlcv").select("close")
-            .eq("instrument_id", iid).eq("interval", "1d")
-            .order("ts", desc=True).limit(160).execute()
-        )
-        closes = [
-            float(r["close"]) for r in reversed(px_res.data or [])
-            if r.get("close") is not None
-        ]
+        closes = closes_by_iid.get(iid, [])
         price = closes[-1] if closes else None
         mom, vol = _price_factors(closes)
         shares = fin.get("shares")
