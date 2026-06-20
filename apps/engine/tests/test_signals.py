@@ -43,18 +43,27 @@ def test_leader_trend_no_trigger_on_downtrend():
 
 # ── 과대낙폭 반등 ──
 def test_oversold_bounce_triggers():
-    closes = list(np.linspace(100, 74, 24)) + [75.0]  # 급락 후 마지막 반등
-    df = _mk(
-        [c + 0.5 for c in closes], [c + 0.8 for c in closes],
-        [c - 0.8 for c in closes], closes, [1000.0] * 25,
-    )
+    # 투매(30봉 급락) 후 강한 반전 양봉(거래량 동반) — 새 역추세 조건 충족
+    decline = list(np.linspace(100, 62, 30))
+    closes = decline + [64.0]                       # 반전봉 종가(+3.2%)
+    opens = [c + 0.3 for c in decline] + [62.2]     # 반전봉 양봉(close>open)
+    highs = [c + 0.5 for c in decline] + [64.2]     # 종가 고가권
+    lows = [c - 0.5 for c in decline] + [61.9]
+    vols = [1000.0] * 30 + [2500.0]                 # 거래량 급증
+    df = _mk(opens, highs, lows, closes, vols)
     c = playbooks.detect_oversold_bounce(df)
     assert c is not None and c.setup == "oversold_bounce"
 
 
-def test_oversold_no_trigger_without_bounce():
-    closes = list(np.linspace(100, 73, 25))  # 마지막도 하락
-    df = _mk(closes, [c + 1 for c in closes], [c - 1 for c in closes], closes, [1000.0] * 25)
+def test_oversold_no_trigger_on_weak_bounce():
+    # 과매도·투매여도 반전 확인이 약하면(전일 종가 +1% 미만, 종가 저가권) 트리거 안 함.
+    decline = list(np.linspace(100, 62, 30))
+    closes = decline + [62.2]                        # +0.3% — 약한 반등
+    opens = [c + 0.3 for c in decline] + [62.1]
+    highs = [c + 0.5 for c in decline] + [63.5]      # 종가가 고가권 아님
+    lows = [c - 0.5 for c in decline] + [61.9]
+    vols = [1000.0] * 30 + [2500.0]
+    df = _mk(opens, highs, lows, closes, vols)
     assert playbooks.detect_oversold_bounce(df) is None
 
 

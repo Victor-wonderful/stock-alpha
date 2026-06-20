@@ -59,25 +59,52 @@ def detect_leader_trend(
 
 
 def detect_oversold_bounce(df: pd.DataFrame) -> Candidate | None:
-    """과대낙폭 반등: RSI<30 또는 이격도<90 + 당일 반등(종가>전일 종가)."""
-    if len(df) < 20:
+    """과대낙폭 반등(투매 후 반전) — 한국시장 숏 불가 → 하락장에서 롱으로 수익 내는 역추세.
+
+    단순 과매도 매수는 '떨어지는 칼날'을 잡아 손실(구버전 -0.07R). 핵심은 **투매**
+    (capitulation: 급락·연속음봉)로 과매도가 된 뒤, **반전이 실제로 시작됐다는 확인**
+    (강한 양봉·종가 고가권·거래량)이 있을 때만 진입하는 것. 손절은 반전 저점(당일 저가)
+    바로 아래라 타이트 → 실패 시 빠르게 끊고 R:R 확보.
+    """
+    if len(df) < 30:
         return None
-    close = df["close"]
+    o, h, l, close = df["open"], df["high"], df["low"], df["close"]
+    c0 = _last(close)
+    if c0 <= 0:                                        # 거래정지 이력(0원) 가드
+        return None
     rsi = _last(ind.rsi(close))
     disp = _last(ind.disparity(close, 20))
-    bounced = _last(close) > float(close.iloc[-2])
-    oversold = rsi < 30 or disp < 90
-    if not (oversold and bounced):
+    # 1) 과매도 — RSI·이격도 둘 다(진짜 낙폭). 단일 조건(OR)은 약함.
+    if not (rsi < 35 and disp < 95):
+        return None
+    # 2) 투매 — 직전까지 2연속 이상 음봉 또는 최근 5일 급락(-6% 이하)
+    down = ind.consecutive_down(close.iloc[:-1])
+    ret5 = c0 / float(close.iloc[-6]) - 1 if len(close) >= 6 else 0.0
+    if not (down >= 2 or ret5 <= -0.06):
+        return None
+    # 3) 반전 확인 — 당일 강한 양봉 + 종가 고가권(상위 45%) + 전일 종가 1%+ 상회
+    co, ch, cl = _last(o), _last(h), _last(l)
+    rng = ch - cl
+    if c0 <= co or rng <= 0:                           # 양봉 아님
+        return None
+    if (ch - c0) / rng > 0.45:                         # 종가가 당일 고가권 아님
+        return None
+    if c0 < float(close.iloc[-2]) * 1.01:              # 전일 대비 1%+ 반등(반전 강도)
+        return None
+    # 4) 거래량 확인 — 평균 이상(참여 동반)
+    avg_vol = float(df["volume"].iloc[-21:-1].mean())
+    if avg_vol > 0 and _last(df["volume"]) < avg_vol:
         return None
     atr = _last(ind.atr(df))
-    down = ind.consecutive_down(close.iloc[:-1])  # 반등 직전까지 연속 음봉
-    strength = 0.5 + min(0.3, down * 0.05) + (0.1 if rsi < 25 else 0.0)
-    bits = [f"RSI {rsi:.0f}", f"이격도 {disp:.0f}", f"직전 연속음봉 {down}", "당일 반등"]
+    strength = 0.55 + min(0.25, down * 0.05) + (0.1 if rsi < 28 else 0.0)
+    bits = [f"RSI {rsi:.0f}·이격도 {disp:.0f}(과매도)",
+            f"투매(연속음봉 {down}·5일 {ret5:+.1%})", "강한 반전 양봉·거래량 동반"]
     return Candidate(
         setup="oversold_bounce", side="buy", style="swing", session="regular",
-        entry_ref=_last(close), atr=atr, support=_last(df["low"]),
+        entry_ref=c0, atr=atr, support=cl,             # 손절=반전 저점(당일 저가) 하단
         strength=min(1.0, strength), rationale=bits,
-        payload={"rsi": rsi, "disparity": disp, "down_streak": down},
+        payload={"rsi": rsi, "disparity": disp, "down_streak": down,
+                 "ret5": round(ret5, 4)},
     )
 
 
