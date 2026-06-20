@@ -629,7 +629,8 @@ export interface PickRecord {
   return_pct: number | null; // 진입가 대비 (확정 픽은 청산가 기준)
   status: "진행중" | "목표 도달" | "손절" | "만료" | "1차 익절" | "—";
   closed: boolean; // 엔진이 확정 기록한 픽인지(0017) — 표시 구분용
-  reselects?: number; // 진행중 종목이 여러 날 재선정된 횟수(>1이면 '연속 선정' 표시)
+  closed_at?: string | null; // 청산일 — 포지션 합산(보유 창) 판정용
+  reselects?: number; // 같은 포지션이 여러 날 재선정된 횟수(>1이면 '연속 선정' 표시)
 }
 
 const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
@@ -665,6 +666,7 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
           entry_price: entry,
           target_price: target,
           stop_loss: stop,
+          closed_at: (r.closed_at as string) ?? null,
         };
 
         // 엔진이 확정(0017)한 픽 — 기록된 청산가/수익률 그대로 (트랙레코드)
@@ -700,28 +702,33 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
       }),
     );
 
-    // 진행중 중복 제거 — 같은 종목을 여러 날 재선정해도 '하나의 포지션(최초 진입)'으로.
-    // 보기 혼란·손익 중복집계 방지. 종결 픽(목표/손절/만료)은 각각 완결된 거래라 보존.
-    // 최초 진입(최소 as_of)을 포지션으로 두고, 재선정 횟수는 reselects 로 표시.
-    const openBySymbol = new Map<string, PickRecord>();
-    const openCount = new Map<string, number>();
-    const closed: PickRecord[] = [];
+    // 중복 제거 — 같은 종목의 연속 재선정을 '하나의 포지션'으로 합산(진행중·종결 공통).
+    // 모델: 첫 픽(진입)부터 청산까지 한 포지션. 보유 중 재선정(같은 포지션 재확인)은
+    // 흡수하고, 청산 이후 다시 픽되면 별개 포지션. 손익·손절률 중복집계 방지(정직한 통계).
+    // 포지션 대표 = 첫 픽(최초 진입가·청산 결과). reselects = 흡수한 재선정 수.
+    const bySymbol = new Map<string, PickRecord[]>();
     for (const r of rows) {
-      if (r.closed) {
-        closed.push(r);
-        continue;
-      }
-      openCount.set(r.symbol, (openCount.get(r.symbol) ?? 0) + 1);
-      const prev = openBySymbol.get(r.symbol);
-      if (!prev || r.as_of < prev.as_of) openBySymbol.set(r.symbol, r);
+      const arr = bySymbol.get(r.symbol);
+      if (arr) arr.push(r);
+      else bySymbol.set(r.symbol, [r]);
     }
-    const openDeduped = [...openBySymbol.values()].map((r) => ({
-      ...r,
-      reselects: openCount.get(r.symbol) ?? 1,
-    }));
-    const deduped = [...closed, ...openDeduped].sort((a, b) =>
-      b.as_of.localeCompare(a.as_of),
-    );
+    const positions: PickRecord[] = [];
+    for (const picks of bySymbol.values()) {
+      picks.sort((a, b) => a.as_of.localeCompare(b.as_of)); // 오래된 순
+      let cur: PickRecord | null = null;
+      for (const p of picks) {
+        // 현재 포지션 보유 창 안의 재선정인가 — 열려있거나(청산일 없음) 청산일 이전/당일
+        const within =
+          cur != null && (cur.closed_at == null || p.as_of <= cur.closed_at);
+        if (within && cur) {
+          cur.reselects = (cur.reselects ?? 1) + 1;
+        } else {
+          cur = { ...p, reselects: 1 };
+          positions.push(cur);
+        }
+      }
+    }
+    const deduped = positions.sort((a, b) => b.as_of.localeCompare(a.as_of));
     return { data: deduped, isSample: false };
   } catch {
     return { data: [], isSample: false };

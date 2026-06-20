@@ -167,7 +167,7 @@ export default async function PicksPage({
           )}
           <p className="mt-3 text-[11px] text-text-mute">
             진행중 픽은 매일 16:30 종가로 평가 — 목표·손절 도달 시 자동 확정되며, &quot;(예정)&quot;은 종가 확정 배치 전 상태입니다.
-            같은 종목이 여러 날 재선정돼도 진행중은 <span className="text-text-dim">최초 진입 1건</span>으로 합산합니다(&quot;N일 선정&quot;) — 손익 중복집계 방지.
+            같은 종목의 연속 재선정은 <span className="text-text-dim">하나의 포지션</span>으로 합산합니다(진행중·종결 공통, &quot;N일 선정&quot;) — 청산 후 다시 픽되면 별개 거래. 손익·손절률 중복집계 방지.
           </p>
         </section>
       </div>
