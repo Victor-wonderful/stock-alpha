@@ -91,6 +91,32 @@ def test_picks_sector_cap_limits_concentration():
     assert len(picks) == 5
 
 
+def test_picks_excludes_stale_entry_far_from_close():
+    # 진입가가 현재 종가에서 18% 위(낡은 시그널) → 실행 불가능으로 제외.
+    r = _report(1, "매수", 80.0)
+    r["payload"]["plan"][0]["entry_price"] = 39150.0   # 시그널 발생가(며칠 전)
+    closes = {1: 33050.0}                               # 현재 종가
+    assert select_picks([r], close_by_id=closes) == []
+    # 같은 픽이라도 진입가가 현재가 근처면 통과(신선 시그널).
+    closes_fresh = {1: 38500.0}                         # 괴리 ~1.7%
+    assert len(select_picks([r], close_by_id=closes_fresh)) == 1
+
+
+def test_picks_entry_gate_noop_without_close_map():
+    # close_by_id 미주입(기본) → 검증 안 함(하위호환).
+    r = _report(1, "매수", 80.0)
+    r["payload"]["plan"][0]["entry_price"] = 39150.0
+    assert len(select_picks([r])) == 1
+
+
+def test_picks_entry_gate_unknown_close_unconstrained():
+    # 종가 미상(맵에 없음/None)은 검증 안 함(graceful).
+    r = _report(1, "매수", 80.0)
+    r["payload"]["plan"][0]["entry_price"] = 39150.0
+    assert len(select_picks([r], close_by_id={1: None})) == 1
+    assert len(select_picks([r], close_by_id={2: 33050.0})) == 1  # 다른 종목만 있음
+
+
 def test_picks_sector_cap_prefers_diversification_over_filling():
     # 후보가 한 섹터에만 몰리면, 슬롯을 억지로 채우기보다 상한을 지킨다(분산 우선).
     reports = [_report(i, "매수", 90.0 - i) for i in range(1, 6)]

@@ -29,6 +29,11 @@ COVERAGE_TOP = 50          # 트랙 B — 시총 상위 N
 COVERAGE_SKIP_DAYS = 3     # 트랙 B — 판정 동일 시 재발행 생략 기간
 PICKS_MAX = 5              # 오늘의 포커스 최대 종목 수
 PICKS_MAX_PER_SECTOR = 2   # 한 섹터에서 뽑을 수 있는 픽 상한 (집중 리스크 분산)
+# 진입가가 현재 종가에서 이 비율을 넘게 벗어나면 '실행 불가능(낡은 시그널)'으로 픽 제외.
+# 시그널은 valid_until 까지 살아 upsert 로 갱신만 되는데, 며칠 전 발생한 시그널이 그때
+# 진입가 그대로 '오늘의 포커스'에 재등장하면(현재가와 6~18% 괴리) 다음날 그 가격 진입이
+# 불가능하다(2026-06-19 사고의 2차 원인). 신선한 시그널은 entry≈현재종가라 안 걸린다.
+PICKS_MAX_ENTRY_DRIFT = 0.05
 # 매수 판정이 아니어도 픽 후보가 되는 점수 하한.
 # 60 → 50 완화(2026-06-11): 판정 체계(매수≥65/중립≥45)에서 50은 "중립 상위".
 # 60 기준으론 하루 후보가 1~2개라 포커스 5슬롯이 비어 다님 — 50이면 거래가능+
@@ -133,6 +138,19 @@ def _plan_gate_ok(row: dict, passed_combos: dict[str, list[str]] | None) -> bool
     return row.get("style") in passed_combos.get(row.get("setup") or "", [])
 
 
+def _entry_actionable(row: dict, close: float | None, max_drift: float) -> bool:
+    """플랜 진입가가 현재 종가에서 max_drift 안쪽인가 (낡은 시그널 배제).
+
+    close 미상 또는 진입가 결손이면 검증하지 않음(True) — 신선도 가드가 별도로
+    데이터 신선도를 보장하므로 과도 차단 안 함. 신선 시그널은 entry≈close 라 통과.
+    """
+    close = None if close in (None, 0) else float(close)
+    entry = row.get("entry_price")
+    if close is None or entry in (None, 0):
+        return True
+    return abs(float(entry) / close - 1) <= max_drift
+
+
 def _best_plan(
     plan: list[dict], expectancy_by_combo: dict[tuple[str, str], float] | None
 ) -> dict:
@@ -160,6 +178,8 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
                  regime: str | None = None,
                  sector_by_id: dict[int, str | None] | None = None,
                  max_per_sector: int = PICKS_MAX_PER_SECTOR,
+                 close_by_id: dict[int, float | None] | None = None,
+                 max_entry_drift: float = PICKS_MAX_ENTRY_DRIFT,
                  ) -> list[dict]:
     """오늘의 포커스 선정 — 순수 함수. reports: 그날 발행 리포트 행(payload 포함).
 
@@ -169,6 +189,8 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
     sector_by_id: {instrument_id: 섹터} — 주입 시 한 섹터당 max_per_sector 로 픽을
       제한(집중 리스크 분산). 섹터 미상(null/'ALL')은 제약 없음 → 섹터 데이터가
       없으면 기존(점수 상위 N)과 동일 동작(graceful). 미주입(기본)이면 상한 미적용.
+    close_by_id: {instrument_id: 최신 종가} — 주입 시 진입가가 현재가에서 max_entry_drift
+      넘게 벗어난 플랜(낡은 시그널)을 제외. 종가 미상은 검증 안 함(graceful).
     기준 미달이면 빈 리스트(빈 날 허용).
     """
     risk_off = regime == "risk_off"
@@ -176,14 +198,17 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
     for r in reports:
         p = r.get("payload") or {}
         verdict = p.get("verdict") or {}
+        close = (close_by_id or {}).get(r["instrument_id"])
         # EOD 스타일 + 게이트 통과 플랜만 — 옛 payload(데이/종가베팅)나 엣지 미검증
         # 조합(게이트 탈락 swing 등)이 픽으로 새지 않게 선정 단에서 이중 방어.
+        # + 진입가 실행가능성(낡은 시그널 제외).
         plan = [
             row for row in (p.get("plan") or [])
             if row.get("style") in EOD_STYLES
             and row.get("setup") not in PICK_EXCLUDED_SETUPS
             and not (risk_off and row.get("setup") in TREND_PICK_SETUPS)
             and _plan_gate_ok(row, passed_combos)
+            and _entry_actionable(row, close, max_entry_drift)
         ]
         tradable = (p.get("tradability") or {}).get("passed", False)
         score = float(verdict.get("score") or 0)
@@ -372,6 +397,27 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
     return counts
 
 
+def _latest_close_map() -> dict[int, float]:
+    """전 종목 최신 종가 {iid: close} — 진입가 실행가능성 검증용. 직접 PG 우선, REST 폴백."""
+    from engine import db_direct
+    if db_direct.available():
+        try:
+            return db_direct.load_latest_close_1d()
+        except Exception as e:  # noqa: BLE001
+            log.warning("picks.latest_close.direct_failed", error=str(e)[:140])
+    out: dict[int, float] = {}
+    client = get_client()
+    for it in select_all("instruments", "id", eq={"active": True}):
+        px = (
+            client.table("ohlcv").select("close")
+            .eq("instrument_id", it["id"]).eq("interval", "1d")
+            .order("ts", desc=True).limit(1).execute()
+        ).data
+        if px and px[0].get("close") is not None:
+            out[it["id"]] = float(px[0]["close"])
+    return out
+
+
 def select_and_store_picks(as_of: str) -> int:
     """해당 일자 발행 리포트에서 픽 선정·적재. 단독 재실행 가능(픽만 갱신).
 
@@ -400,12 +446,16 @@ def select_and_store_picks(as_of: str) -> int:
         for it in select_all("instruments", "id,sector")
     }
 
+    # 최신 종가 맵 — 진입가 실행가능성 검증용(낡은 시그널 제외). 직접 PG 벌크 우선.
+    close_by_id = _latest_close_map()
+
     picks = select_picks(
         rows,
         passed_combos=passed_combos_from_db(),
         expectancy_by_combo=gate_expectancy_from_db(),
         regime=regime,
         sector_by_id=sector_by_id,
+        close_by_id=close_by_id,
     )
     log.info("reports.daily.picks.regime", as_of=as_of, regime=regime)
     rebalance_id = int(as_of.replace("-", ""))
