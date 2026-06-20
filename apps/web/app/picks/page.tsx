@@ -133,6 +133,14 @@ export default async function PicksPage({
                           {r.name}
                         </Link>
                         <span className="mono ml-2 text-2xs text-text-mute">{r.symbol}</span>
+                        {r.reselects != null && r.reselects > 1 && (
+                          <span
+                            className="ml-2 rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent"
+                            title={`최초 진입 후 ${r.reselects}일 연속 기준 통과 — 하나의 포지션으로 집계`}
+                          >
+                            {r.reselects}일 선정
+                          </span>
+                        )}
                       </td>
                       <td className="tnum px-3 py-2.5 text-left text-text-dim">{r.as_of}</td>
                       <td className="tnum px-3 py-2.5 text-right text-text">{fmtPrice(r.entry_price)}</td>
@@ -159,6 +167,7 @@ export default async function PicksPage({
           )}
           <p className="mt-3 text-[11px] text-text-mute">
             진행중 픽은 매일 16:30 종가로 평가 — 목표·손절 도달 시 자동 확정되며, &quot;(예정)&quot;은 종가 확정 배치 전 상태입니다.
+            같은 종목이 여러 날 재선정돼도 진행중은 <span className="text-text-dim">최초 진입 1건</span>으로 합산합니다(&quot;N일 선정&quot;) — 손익 중복집계 방지.
           </p>
         </section>
       </div>

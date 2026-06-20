@@ -629,6 +629,7 @@ export interface PickRecord {
   return_pct: number | null; // 진입가 대비 (확정 픽은 청산가 기준)
   status: "진행중" | "목표 도달" | "손절" | "만료" | "1차 익절" | "—";
   closed: boolean; // 엔진이 확정 기록한 픽인지(0017) — 표시 구분용
+  reselects?: number; // 진행중 종목이 여러 날 재선정된 횟수(>1이면 '연속 선정' 표시)
 }
 
 const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
@@ -698,7 +699,30 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
         return { ...base, last_close: last, return_pct: ret, status, closed: false };
       }),
     );
-    return { data: rows, isSample: false };
+
+    // 진행중 중복 제거 — 같은 종목을 여러 날 재선정해도 '하나의 포지션(최초 진입)'으로.
+    // 보기 혼란·손익 중복집계 방지. 종결 픽(목표/손절/만료)은 각각 완결된 거래라 보존.
+    // 최초 진입(최소 as_of)을 포지션으로 두고, 재선정 횟수는 reselects 로 표시.
+    const openBySymbol = new Map<string, PickRecord>();
+    const openCount = new Map<string, number>();
+    const closed: PickRecord[] = [];
+    for (const r of rows) {
+      if (r.closed) {
+        closed.push(r);
+        continue;
+      }
+      openCount.set(r.symbol, (openCount.get(r.symbol) ?? 0) + 1);
+      const prev = openBySymbol.get(r.symbol);
+      if (!prev || r.as_of < prev.as_of) openBySymbol.set(r.symbol, r);
+    }
+    const openDeduped = [...openBySymbol.values()].map((r) => ({
+      ...r,
+      reselects: openCount.get(r.symbol) ?? 1,
+    }));
+    const deduped = [...closed, ...openDeduped].sort((a, b) =>
+      b.as_of.localeCompare(a.as_of),
+    );
+    return { data: deduped, isSample: false };
   } catch {
     return { data: [], isSample: false };
   }
