@@ -91,16 +91,17 @@ def test_double_bottom_triggers():
 # ── 기준봉 눌림 ──
 def test_anchor_pullback_triggers():
     import numpy as np
-    pull = list(np.linspace(108, 103, 7))
-    closes = [100.0] * 36 + [110.0] + pull + [106.0]
-    opens = [100.0] * 36 + [100.0] + list(np.linspace(107, 104, 7)) + [104.0]
-    highs = [101.0] * 36 + [111.0] + [c + 1 for c in pull] + [106.5]
-    lows = [99.0] * 36 + [99.5] + [c - 1 for c in pull] + [102.0]
+    # 신고가 장대양봉(기준봉, 대량) → 하위 35% 지지 얕은 눌림 → 거래량 동반 반등
+    pull = list(np.linspace(108, 105, 7))
+    closes = [100.0] * 36 + [110.0] + pull + [107.0]
+    opens = [100.0] * 36 + [100.0] + list(np.linspace(107, 106, 7)) + [105.0]
+    highs = [101.0] * 36 + [111.0] + [c + 1 for c in pull] + [107.5]
+    lows = [99.0] * 36 + [99.5] + [c - 1 for c in pull] + [104.5]
     vols = [1000.0] * 36 + [5000.0] + [1500.0] * 7 + [1500.0]
     df = _mk(opens, highs, lows, closes, vols)
     c = playbooks.detect_anchor_pullback(df)
     assert c is not None and c.setup == "anchor_pullback"
-    assert c.support <= c.entry_ref <= c.resistance  # 기준봉 저점~고점 범위 내 진입
+    assert c.support < c.entry_ref < c.resistance  # 눌림 저점 < 진입 < 기준봉 고점
 
 
 # ── 돌파 ──

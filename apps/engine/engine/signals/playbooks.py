@@ -402,13 +402,16 @@ def detect_double_bottom(
 
 
 def detect_anchor_pullback(
-    df: pd.DataFrame, lookback: int = 12, body_atr: float = 1.8, vol_mult: float = 2.0,
+    df: pd.DataFrame, lookback: int = 10, body_atr: float = 2.5, vol_mult: float = 3.0,
 ) -> Candidate | None:
-    """기준봉 눌림 — 대량거래 장대양봉(기준봉) 후 그 범위로 눌렸다 반등.
+    """기준봉 눌림 — 신고가 돌파한 대량 장대양봉(기준봉) 후 '얕게' 눌렸다 반등.
 
-    스탁알파 시그니처 패턴. 기준봉 = 큰손이 들어온 자리(큰 범위·대량). 그 자리를
-    안 깨고(저점 지지) 눌림하면 매집 구간으로 보고, 반등 시작 시 진입. 손절은 기준봉
-    저점 아래(자리 이탈), 목표는 기준봉 고점 돌파.
+    스탁알파 시그니처 패턴. 기준봉 = 큰손이 신고가로 들어온 자리(큰 범위·대량·종가
+    고가권). 핵심은 **얕은 눌림(상위 지지)** — 기준봉 하위 35%를 안 깨고 버티다 반등할
+    때만 진짜 매집. 손절은 눌림 저점 바로 아래(타이트) → R:R 확보, 목표는 기준봉 고점 돌파.
+
+    강화(2026-06-20): 느슨한 1차판(+0.021R·R:R 1.28)을 조임 — 신고가 돌파 요건·종가
+    고가권·3x 거래량·얕은 지지·타이트 손절(눌림 저점).
     """
     if len(df) < 40:
         return None
@@ -418,6 +421,7 @@ def detect_anchor_pullback(
         return None
     atr = ind.atr(df)
     avg_vol = v.rolling(20, min_periods=5).mean()
+    pr_high = ind.rolling_high(h, 10)                  # 기준봉 직전 10봉 고가
     anchor = None
     start = max(len(df) - 1 - lookback, 1)
     for i in range(len(df) - 2, start - 1, -1):        # 최근→과거에서 기준봉 탐색
@@ -425,37 +429,46 @@ def detect_anchor_pullback(
         rng = float(h.iloc[i] - l.iloc[i])
         if body <= 0 or rng <= 0:
             continue
-        if rng < body_atr * float(atr.iloc[i]):        # 장대(큰 범위)
+        if rng < body_atr * float(atr.iloc[i]):        # 장대(2.5x ATR 이상)
             continue
-        if body / rng < 0.6:                           # 몸통 큰 양봉
+        if body / rng < 0.6:                           # 큰 몸통 양봉
+            continue
+        if (float(h.iloc[i]) - float(c.iloc[i])) / rng > 0.35:  # 종가 고가권(상위 35%)
             continue
         av = float(avg_vol.iloc[i])
-        if av > 0 and float(v.iloc[i]) < vol_mult * av:  # 대량거래
+        if av > 0 and float(v.iloc[i]) < vol_mult * av:  # 대량거래(3x)
+            continue
+        if float(c.iloc[i]) <= float(pr_high.iloc[i]):  # 신고가 돌파 양봉(진짜 자리)
             continue
         anchor = i
         break
     if anchor is None:
         return None
     a_low, a_high = float(l.iloc[anchor]), float(h.iloc[anchor])
-    a_mid = (a_low + a_high) / 2
-    after_low = float(l.iloc[anchor + 1:].min())       # 기준봉 이후 최저
-    if after_low < a_low:                              # 기준봉 저점 이탈 → 무효
+    rng_a = a_high - a_low
+    after_low = float(l.iloc[anchor + 1:].min())       # 기준봉 이후 최저(눌림 저점)
+    if after_low < a_low + 0.35 * rng_a:               # 얕은 지지(하위 35% 위서 버팀)
         return None
-    if not (a_low < c0 < a_high):                      # 현재가 기준봉 범위 안(눌림)
+    if after_low >= a_high - 0.10 * rng_a:             # 실제 눌림이 있었음(고가서 안 빠진 것 제외)
         return None
-    if after_low > a_mid:                              # 충분히 안 눌림(중심 이하 눌려야)
+    if not (a_low < c0 < a_high):                      # 현재가 기준봉 범위 안
         return None
     if c0 <= _last(o) or c0 <= float(c.iloc[-2]):      # 당일 반등 양봉
         return None
-    strength = 0.6 + (0.1 if float(v.iloc[anchor]) > 3 * float(avg_vol.iloc[anchor] or 0) else 0.0)
+    if _last(ind.sma(c, 20)) <= _last(ind.sma(c, 60)):  # 상승 추세 구조에서만(하락 기준봉 거름)
+        return None
+    avgv = float(avg_vol.iloc[-1] or 0)
+    if avgv > 0 and _last(v) < avgv:                   # 반등 거래량 동반
+        return None
+    strength = 0.62 + (0.1 if float(v.iloc[anchor]) > 4 * float(avg_vol.iloc[anchor] or 1) else 0.0)
     return Candidate(
         setup="anchor_pullback", side="buy", style="swing", session="regular",
-        entry_ref=c0, atr=_last(atr), support=a_low, resistance=a_high,
+        entry_ref=c0, atr=_last(atr), support=after_low, resistance=a_high,  # 손절=눌림 저점(타이트)
         strength=min(1.0, strength),
-        rationale=[f"기준봉(장대양봉) {a_low:,.0f}~{a_high:,.0f}",
-                   "범위 내 눌림 후 반등", "기준봉 저점 지지"],
+        rationale=[f"기준봉(신고가 장대양봉·대량) {a_low:,.0f}~{a_high:,.0f}",
+                   "하위 35% 지지 얕은 눌림", "거래량 동반 반등"],
         payload={"anchor_low": a_low, "anchor_high": a_high,
-                 "anchor_bars_ago": len(df) - 1 - anchor},
+                 "pullback_low": after_low, "anchor_bars_ago": len(df) - 1 - anchor},
     )
 
 
