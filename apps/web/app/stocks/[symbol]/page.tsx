@@ -1,7 +1,8 @@
 import { AppShell } from "@/components/AppShell";
 import { SignalTable } from "@/components/SignalTable";
 import { FactorBars } from "@/components/FactorBars";
-import { PriceChart } from "@/components/PriceChart";
+import { AlphaZoneChart } from "@/components/AlphaZoneChart";
+import { SetupChip } from "@/components/AxisChips";
 import { EmptyState, Panel, SampleBadge, Stat } from "@/components/ui";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,15 @@ export default async function StockDetailPage({
     close: c.close,
   }));
   const upside = val.data?.upside_pct ?? null;
+  // R:R — 대표 시그널의 (목표−진입)/(진입−손절). 셋 다 있을 때만.
+  const target = lead?.tp1 ?? null;
+  const rr =
+    lead?.entry_price != null &&
+    lead?.stop_loss != null &&
+    target != null &&
+    lead.entry_price > lead.stop_loss
+      ? (target - lead.entry_price) / (lead.entry_price - lead.stop_loss)
+      : null;
 
   return (
     <AppShell
@@ -144,16 +154,41 @@ export default async function StockDetailPage({
       <div className="grid gap-4 lg:grid-cols-3">
         {/* 차트 + 밸류에이션 */}
         <div className="space-y-4 lg:col-span-2">
-          <Panel title="가격 차트 · 진입/손절/목표 오버레이">
-            <PriceChart
+          <Panel
+            title="알파존 차트"
+            action={
+              lead ? (
+                <div className="flex items-center gap-2">
+                  <SetupChip setup={lead.setup} />
+                  {rr != null && (
+                    <span className="text-2xs text-text-mute">
+                      R:R <span className="tnum font-semibold text-text-dim">{rr.toFixed(1)}</span>
+                    </span>
+                  )}
+                </div>
+              ) : null
+            }
+          >
+            <AlphaZoneChart
               anchor={anchor}
-              levels={{ entry: lead?.entry_price, stop: lead?.stop_loss, tp1: lead?.tp1 }}
+              levels={{
+                entry: lead?.entry_price,
+                stop: lead?.stop_loss,
+                tp1: lead?.tp1,
+                tp2: lead?.tp2,
+              }}
               candles={candles.length > 0 ? candles : undefined}
             />
+            {/* 존 범례 */}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
+              <ZoneKey color="rgba(46,189,133,0.85)" label="목표 존 (진입→목표)" />
+              <ZoneKey color="rgba(61,123,255,0.85)" label="알파 존 (진입→손절)" />
+              <ZoneKey color="#f6465d" label="손절선" line />
+            </div>
             <p className="mt-2 text-2xs text-text-mute">
               {candles.length > 0
-                ? `* KIS 일봉 ${candles.length}개. 점선은 대표 시그널의 진입/손절/TP1.`
-                : "* 실 OHLCV 연결 전 합성 캔들로 구조를 표시합니다. 점선은 대표 시그널의 진입/손절/TP1."}
+                ? `* KIS 일봉 ${candles.length}개. 색 존은 대표 시그널의 목표/진입/손절 가격대.`
+                : "* 실 OHLCV 연결 전 합성 캔들로 구조를 표시합니다. 색 존은 대표 시그널의 목표/진입/손절 가격대."}
             </p>
           </Panel>
 
@@ -286,6 +321,22 @@ export default async function StockDetailPage({
         </p>
       )}
     </AppShell>
+  );
+}
+
+function ZoneKey({ color, label, line }: { color: string; label: string; line?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className="inline-block rounded-sm"
+        style={
+          line
+            ? { width: 14, height: 0, borderTop: `2px dashed ${color}` }
+            : { width: 14, height: 10, background: color, opacity: 0.55 }
+        }
+      />
+      {label}
+    </span>
   );
 }
 

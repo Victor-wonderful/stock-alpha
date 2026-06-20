@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/", label: "대시보드", exact: true },
   { href: "/focus", label: "오늘의 포커스" },
+  { href: "/alpha-zone", label: "알파존" },
   { href: "/screener", label: "추천 종목" },
   { href: "/diagnosis", label: "종목진단" },
   { href: "/reports", label: "종목 분석" },

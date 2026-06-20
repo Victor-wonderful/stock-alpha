@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { TradeSetup, TradeStyle } from "@stock-alpha/db";
 import {
   computePositionSizePct,
   DEFAULT_RISK_PER_TRADE_PCT,
@@ -884,6 +885,218 @@ export async function getLatestPrice(
   } catch {
     return { data: null, isSample: true };
   }
+}
+
+// ── 알파존 종목 (그리드) ──
+// 현재가가 '진입~손절 알파 존'에 들어온(=매수 실행 구간) 종목만 모아 카드 그리드로.
+// zone_pos = (현재가−손절)/(진입−손절): 1.0=진입가 도달, 0=손절 임박. 음수=손절 이탈.
+// 미니 차트용 일봉 (시·고·저·종)
+export interface MiniBar {
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+}
+
+export interface AlphaZoneCard {
+  symbol: string;
+  name: string;
+  exchange: string;
+  currency: string;
+  setup: TradeSetup;
+  style: TradeStyle;
+  strength: number;
+  entry: number;
+  stop: number;
+  tp1: number | null;
+  tp2: number | null;
+  price: number;
+  changePct: number | null;
+  rr: number | null;
+  zonePos: number; // (price−stop)/(entry−stop)
+  bars: MiniBar[]; // 미니 차트용 최근 일봉
+}
+
+const MINI_BARS = 32; // 미니 캔들 개수
+
+// 알파 존 판정: 손절 위 ~ 진입가 +3% 이내(진입 임박 포함)면 '존 진입'으로 간주.
+const ALPHA_ZONE_TOP = 1.03;
+
+function zonePosition(price: number, entry: number, stop: number): number {
+  return (price - stop) / (entry - stop);
+}
+
+export async function getAlphaZoneStocks(
+  limit = 12,
+): Promise<Loaded<AlphaZoneCard[]>> {
+  try {
+    const supabase = await createClient();
+    // 매수 시그널 + 레벨. 강도순 상위에서 종목별 최강 1건만.
+    const { data: sigs, error } = await supabase
+      .from("signals")
+      .select(
+        "instrument_id,setup,style,strength,entry_price,stop_loss,tp1,tp2,risk_reward,instruments!inner(symbol,name,exchange,currency)",
+      )
+      .eq("signal_type", "buy")
+      .order("strength", { ascending: false })
+      .limit(300);
+    if (error || !sigs || sigs.length === 0) throw error ?? new Error("empty");
+
+    type Row = Record<string, unknown> & { instruments: Record<string, unknown> };
+    const best = new Map<number, Row>();
+    for (const r of sigs as Row[]) {
+      const iid = r.instrument_id as number;
+      if (r.entry_price == null || r.stop_loss == null) continue;
+      if (!best.has(iid)) best.set(iid, r);
+    }
+    const ids = [...best.keys()];
+    if (ids.length === 0) throw new Error("no leveled signals");
+
+    // 최근 일봉(OHLC) 일괄 조회 (종목별 그룹).
+    const { data: rows } = await supabase
+      .from("ohlcv")
+      .select("instrument_id,ts,open,high,low,close")
+      .eq("interval", "1d")
+      .in("instrument_id", ids)
+      .order("ts", { ascending: false })
+      .limit(ids.length * (MINI_BARS + 5));
+    const barsById = new Map<number, MiniBar[]>();
+    for (const b of (rows ?? []) as Record<string, number | string>[]) {
+      const iid = Number(b.instrument_id);
+      const arr = barsById.get(iid) ?? [];
+      if (arr.length < MINI_BARS) {
+        arr.push({
+          o: Number(b.open),
+          h: Number(b.high),
+          l: Number(b.low),
+          c: Number(b.close),
+        });
+      }
+      barsById.set(iid, arr);
+    }
+
+    const cards: AlphaZoneCard[] = [];
+    for (const [iid, r] of best) {
+      const desc = barsById.get(iid);
+      if (!desc || desc.length < 2) continue;
+      const bars = [...desc].reverse(); // 오름차순(과거→현재)
+      const price = bars[bars.length - 1].c;
+      const prev = bars[bars.length - 2].c;
+      const entry = Number(r.entry_price);
+      const stop = Number(r.stop_loss);
+      if (entry <= stop) continue;
+      // 알파 존 안에 있는가 (손절 위 ~ 진입 +3%).
+      if (price <= stop || price > entry * ALPHA_ZONE_TOP) continue;
+      const inst = r.instruments;
+      cards.push({
+        symbol: inst.symbol as string,
+        name: inst.name as string,
+        exchange: inst.exchange as string,
+        currency: (inst.currency as string) ?? "KRW",
+        setup: r.setup as TradeSetup,
+        style: r.style as TradeStyle,
+        strength: Number(r.strength),
+        entry,
+        stop,
+        tp1: r.tp1 != null ? Number(r.tp1) : null,
+        tp2: r.tp2 != null ? Number(r.tp2) : null,
+        price,
+        changePct: prev ? (price - prev) / prev : null,
+        rr: r.risk_reward != null ? Number(r.risk_reward) : null,
+        zonePos: zonePosition(price, entry, stop),
+        bars,
+      });
+    }
+    if (cards.length === 0) throw new Error("none in zone");
+    // 강도 우선, 동률이면 진입가 근접(zonePos 1.0 근처) 우선.
+    cards.sort(
+      (a, b) =>
+        b.strength - a.strength ||
+        Math.abs(1 - a.zonePos) - Math.abs(1 - b.zonePos),
+    );
+    return { data: cards.slice(0, limit), isSample: false };
+  } catch {
+    return { data: sampleAlphaZoneCards(limit), isSample: true };
+  }
+}
+
+// 결정적 PRNG (LCG) — 종목 심볼+인덱스 시드. 매 호출 결과 동일(SSR 재현성).
+function lcg(seed: number): () => number {
+  let s = seed % 0x7fffffff;
+  if (s <= 0) s += 0x7fffffff - 1;
+  return () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff; // [0,1)
+  };
+}
+
+// 실제 차트처럼 보이는 일봉 OHLC — 경로(추세)로의 평균회귀 + 자연스러운 일중 노이즈·꼬리.
+// 고점에서 눌려 entry 근처(존)에 도달하는 '눌림 진입' 서사. 종목별 변동성/형태 변주.
+function sampleBars(
+  symbol: string,
+  idx: number,
+  entry: number,
+  endPrice: number,
+): MiniBar[] {
+  let h = 0;
+  for (let i = 0; i < symbol.length; i++) h = (h * 31 + symbol.charCodeAt(i)) & 0x7fffffff;
+  const rnd = lcg(h + (idx + 1) * 2654435);
+  const vol = 0.012 + rnd() * 0.016; // 일 변동성 1.2~2.8%
+  const startMult = 1.05 + rnd() * 0.09; // 시작가 = entry × 1.05~1.14 (고점)
+  const startPrice = entry * startMult;
+
+  const bars: MiniBar[] = [];
+  let price = startPrice;
+  for (let k = 0; k < MINI_BARS; k++) {
+    const t = k / (MINI_BARS - 1);
+    const pathTarget = startPrice + (endPrice - startPrice) * t; // 추세 경로
+    const pull = (pathTarget - price) * 0.18; // 경로로의 평균회귀
+    const shock = (rnd() * 2 - 1) * price * vol; // 일일 충격
+    const open = price;
+    const close =
+      k === MINI_BARS - 1 ? endPrice : Math.max(1, Math.round(price + pull + shock));
+    // 꼬리: 몸통 + 추가 변동
+    const span = Math.abs(close - open) + price * vol * (0.35 + rnd() * 0.8);
+    const high = Math.round(Math.max(open, close) + span * rnd() * 0.6);
+    const low = Math.round(Math.min(open, close) - span * rnd() * 0.6);
+    bars.push({ o: Math.round(open), h: high, l: low, c: close });
+    price = close;
+  }
+  return bars;
+}
+
+// 샘플: SAMPLE_SIGNALS 를 '존 진입' 상태로 변형(현재가를 진입가 근처로) + 결정적 일봉(OHLC) 시퀀스.
+function sampleAlphaZoneCards(limit: number): AlphaZoneCard[] {
+  return SAMPLE_SIGNALS.filter(
+    (s) => s.entry_price != null && s.stop_loss != null,
+  )
+    .slice(0, limit)
+    .map((s, i) => {
+      const entry = s.entry_price as number;
+      const stop = s.stop_loss as number;
+      // 현재가: 진입가의 0.985~1.015 사이(존 안)로 결정적 배치.
+      const off = ((i % 5) - 2) * 0.006; // -1.2% ~ +1.2%
+      const price = Math.round(entry * (1 + off));
+      const bars = sampleBars(s.symbol, i, entry, price);
+      return {
+        symbol: s.symbol,
+        name: s.name,
+        exchange: s.exchange,
+        currency: s.currency,
+        setup: s.setup,
+        style: s.style,
+        strength: s.strength,
+        entry,
+        stop,
+        tp1: s.tp1,
+        tp2: s.tp2,
+        price,
+        changePct: s.change_pct ?? null,
+        rr: s.risk_reward,
+        zonePos: zonePosition(price, entry, stop),
+        bars,
+      };
+    });
 }
 
 // ── 리스크 (종목 상세) ── 엔진 risk_metrics(베타·변동성·VaR·MDD) + factor_scores
