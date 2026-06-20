@@ -21,6 +21,32 @@ function RatingBadge({ rating }: { rating: string | null }) {
   );
 }
 
+// 행동 스탠스 — 판정 등급에서 도출. 점수로 편입된 '중립'을 매수처럼 보이게 하지 않고
+// 명확히 '관찰 대기'로 구분한다(픽 5개는 그대로 노출, 라벨만 정직하게).
+function stanceFor(rating: string | null): {
+  label: string;
+  cls: string;
+  hint: string;
+} {
+  if (rating === "매수")
+    return {
+      label: "매수 후보",
+      cls: "bg-good-soft text-good",
+      hint: "기준 통과 — 진입 검토 대상",
+    };
+  if (rating === "중립")
+    return {
+      label: "관찰 대기",
+      cls: "bg-warn-soft text-warn",
+      hint: "점수 상위로 편입 · 확신 매수 아님 — 진입 신호 확인 후 대응",
+    };
+  return {
+    label: "관망",
+    cls: "bg-surface-3 text-text-mute",
+    hint: "보류",
+  };
+}
+
 export function PickCard({
   pick,
   rank,
@@ -48,9 +74,8 @@ export function PickCard({
         )
       : null;
 
-  // 진입 상태: 실데이터 없으면 랜덤 시뮬레이션 대신 "대기" 기본
-  // (단언으로 union 유지 — const 리터럴 narrowing 회피, 아래 "진입권" 분기 보존)
-  const entryStatus = "대기" as "진입권" | "대기";
+  // 행동 스탠스 — 판정 등급 기반(매수 후보 / 관찰 대기 / 관망).
+  const stance = stanceFor(report?.rating ?? null);
 
   return (
     <div
@@ -122,19 +147,16 @@ export function PickCard({
           ))}
         </div>
 
-        {/* 우측: 점수 + 진입상태 */}
+        {/* 우측: 점수 + 행동 스탠스 */}
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <span className="tnum text-xl font-extrabold text-accent">
             {report?.score != null ? report.score : Math.round(pick.conviction * 100)}
           </span>
           <span
-            className={`rounded-[999px] px-2.5 py-1 text-[10px] font-semibold ${
-              entryStatus === "진입권"
-                ? "bg-good-soft text-good"
-                : "bg-warn-soft text-warn"
-            }`}
+            title={stance.hint}
+            className={`rounded-[999px] px-2.5 py-1 text-[10px] font-semibold ${stance.cls}`}
           >
-            {entryStatus}
+            {stance.label}
           </span>
         </div>
       </div>
