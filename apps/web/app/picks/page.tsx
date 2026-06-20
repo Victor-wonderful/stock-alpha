@@ -34,6 +34,7 @@ export default async function PicksPage({
   // 요약 집계 — 전체 발행 기준 (필터와 무관)
   const closedTarget = all.filter((r) => r.status === "목표 도달");
   const closedStop = all.filter((r) => r.status === "손절");
+  const inProgress = all.filter((r) => r.status === "진행중");
   const closed = all.filter((r) => r.closed && r.return_pct != null);
   const avgClosed =
     closed.length > 0
@@ -58,7 +59,7 @@ export default async function PicksPage({
     >
       <div className="space-y-4">
         {/* 요약 스탯 */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
             { label: "누적 발행", value: `${all.length}건`, sub: "전체 트랙레코드", color: "text-text" },
             {
@@ -72,6 +73,17 @@ export default async function PicksPage({
               value: `${closedStop.length}건${all.length ? ` (${Math.round((closedStop.length / all.length) * 100)}%)` : ""}`,
               sub: avg(closedStop) != null ? `평균 ${fmtPct(avg(closedStop))}` : undefined,
               color: "text-bad",
+            },
+            {
+              label: "진행중 (미실현)",
+              value: avg(inProgress) != null ? fmtPct(avg(inProgress)) : "—",
+              sub: `${inProgress.length}건 보유 중 · 현재가 기준`,
+              color:
+                avg(inProgress) == null
+                  ? "text-text"
+                  : avg(inProgress)! >= 0
+                    ? "text-good"
+                    : "text-bad",
             },
             {
               label: "확정 픽 평균 수익률",
