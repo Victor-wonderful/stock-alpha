@@ -321,9 +321,10 @@ export default async function FocusContent() {
             </span>
             <p className="text-[12px] leading-relaxed text-text-dim">
               <span className="font-bold text-bad">하락장(위험회피) 구간</span> — 추세·돌파 매수픽은
-              하락장에서 손실 위험이 큽니다. 고확신 <span className="font-semibold text-text">매수</span>{" "}
-              종목만 노출하며, <span className="font-semibold text-text">분할 진입·타이트 손절</span>을
-              권장합니다. 약한 신호(중립 추세)는 자동 억제됩니다.
+              하락장에서 손실 위험이 커 <span className="font-semibold text-text">자동 억제</span>됩니다.
+              대신 <span className="font-semibold text-text">과대낙폭 반등(역추세)·수급</span> 픽 위주로
+              제시하며, 기준을 통과하는 종목이 없으면 <span className="font-semibold text-text">빈 날</span>로
+              둡니다(억지로 채우지 않음). 진입 시 분할·타이트 손절 권장.
             </p>
           </div>
         )}

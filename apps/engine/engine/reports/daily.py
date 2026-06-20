@@ -204,14 +204,14 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
         # EOD 스타일 + 게이트 통과 플랜만 — 옛 payload(데이/종가베팅)나 엣지 미검증
         # 조합(게이트 탈락 swing 등)이 픽으로 새지 않게 선정 단에서 이중 방어.
         # + 진입가 실행가능성(낡은 시그널 제외).
-        # risk_off 추세 억제는 '매수 등급이 아닌' 픽에만 적용 — 고확신 매수 추세픽
-        # (분석 최고점)은 하락장에도 노출(UI 경고와 짝), 약한 중립 추세픽만 억제
-        # (검증: 하락장 추세픽 평균 -2.85%). 수급(flow)은 전 국면 허용.
+        # 레짐 적응형 선택 — 하락장(risk_off)에선 추세·돌파 매수픽 억제(검증: 하락장
+        # 추세픽 평균 -2.85%·라이브 0% 승률). 한국시장 숏 불가 → 하락장 수익은 역추세
+        # (과대낙폭 반등)·수급(flow)으로. 적합한 게 없으면 빈 날(억지로 안 채움).
         plan = [
             row for row in (p.get("plan") or [])
             if row.get("style") in EOD_STYLES
             and row.get("setup") not in PICK_EXCLUDED_SETUPS
-            and not (risk_off and rating != "매수" and row.get("setup") in TREND_PICK_SETUPS)
+            and not (risk_off and row.get("setup") in TREND_PICK_SETUPS)
             and _plan_gate_ok(row, passed_combos)
             and _entry_actionable(row, close, max_entry_drift)
         ]
