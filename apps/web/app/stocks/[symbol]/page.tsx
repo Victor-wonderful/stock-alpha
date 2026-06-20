@@ -179,7 +179,6 @@ export default async function StockDetailPage({
               }}
               candles={candles.length > 0 ? candles : undefined}
             />
-            {/* 존 범례 */}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
               <ZoneKey color="rgba(46,189,133,0.85)" label="목표 존 (진입→목표)" />
               <ZoneKey color="rgba(61,123,255,0.85)" label="알파 존 (진입→손절)" />
@@ -191,6 +190,21 @@ export default async function StockDetailPage({
                 : "* 실 OHLCV 연결 전 합성 캔들로 구조를 표시합니다. 색 존은 대표 시그널의 목표/진입/손절 가격대."}
             </p>
           </Panel>
+
+          {/* 알파존 레벨 — 진입/손절/목표 + 존 위치 */}
+          {lead?.entry_price != null && lead?.stop_loss != null && (
+            <Panel title="알파존 레벨">
+              <AlphaLevels
+                price={anchor}
+                entry={lead.entry_price}
+                stop={lead.stop_loss}
+                tp1={lead.tp1}
+                tp2={lead.tp2}
+                rr={rr}
+                currency={inst.data.currency}
+              />
+            </Panel>
+          )}
 
           <Panel title="밸류에이션">
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
@@ -337,6 +351,77 @@ function ZoneKey({ color, label, line }: { color: string; label: string; line?: 
       />
       {label}
     </span>
+  );
+}
+
+// 알파존 레벨: 진입/손절/목표 + 현재가의 존 위치(손절 0 ~ 진입 1) 막대.
+function AlphaLevels({
+  price,
+  entry,
+  stop,
+  tp1,
+  tp2,
+  rr,
+  currency,
+}: {
+  price: number;
+  entry: number;
+  stop: number;
+  tp1: number | null;
+  tp2: number | null;
+  rr: number | null;
+  currency: string;
+}) {
+  const toEntry = (price - entry) / entry;
+  const tpPct = tp1 != null ? (tp1 - entry) / entry : null;
+  const slPct = (stop - entry) / entry;
+  const fill = Math.max(0, Math.min(1, (price - stop) / (entry - stop))) * 100;
+  const inZone = price >= entry * 0.97 && price <= entry * 1.03;
+
+  return (
+    <div>
+      {/* 존 위치 막대 */}
+      <div className="flex items-center justify-between text-2xs uppercase tracking-wide text-text-mute">
+        <span>손절</span>
+        <span className="text-text-dim">
+          진입가 대비{" "}
+          <span className={`tnum font-semibold ${toEntry >= 0 ? "text-bear" : "text-bull"}`}>
+            {fmtPct(toEntry)}
+          </span>
+          {inZone && <span className="ml-1.5 text-accent">· 진입 적합</span>}
+        </span>
+        <span>진입</span>
+      </div>
+      <div className="relative mt-1.5 h-2 rounded-full bg-bear/25">
+        <div
+          className="absolute left-0 top-0 h-2 rounded-full bg-gradient-to-r from-bear/40 to-accent"
+          style={{ width: `${fill}%` }}
+        />
+        <div
+          className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-bg bg-accent"
+          style={{ left: `${fill}%` }}
+        />
+      </div>
+
+      {/* 레벨 값 */}
+      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <Stat label="진입가" value={fmtPrice(entry, currency)} />
+        <Stat
+          label={tp2 != null ? "목표 (1차)" : "목표가"}
+          value={fmtPrice(tp1, currency)}
+          tone="bull"
+          sub={
+            tp2 != null
+              ? `2차 ${fmtPrice(tp2, currency)}`
+              : tpPct != null
+                ? fmtPct(tpPct)
+                : undefined
+          }
+        />
+        <Stat label="손절가" value={fmtPrice(stop, currency)} tone="bear" sub={fmtPct(slPct)} />
+        <Stat label="R:R" value={rr != null ? rr.toFixed(1) : "—"} tone="accent" />
+      </div>
+    </div>
   );
 }
 
