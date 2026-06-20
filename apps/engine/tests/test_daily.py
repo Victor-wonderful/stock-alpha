@@ -168,17 +168,24 @@ def test_picks_exclude_factor_composite():
     assert [p["setup"] for p in picks] == ["breakout"]
 
 
-def test_picks_regime_suppresses_trend_in_risk_off():
-    # risk_off 국면 — 추세·돌파 셋업(leader_trend)은 픽에서 억제(빈 날 허용).
-    r = _report(1, "매수", 80.0)
-    r["payload"]["plan"] = [{"style": "position", "setup": "leader_trend",
-                             "strength": 0.9, "entry_price": 100.0,
-                             "tp1": 120.0, "stop_loss": 95.0}]
+def test_picks_regime_suppresses_only_weak_trend_in_risk_off():
+    # risk_off 추세 억제는 '매수 아닌' 픽에만 — 고확신 매수 추세픽(분석 최고점)은
+    # 하락장에도 노출(UI 경고와 짝), 약한 중립 추세픽만 억제(검증: 하락장 추세 -2.85%).
     passed = {"leader_trend": ["position"]}
-    assert select_picks([r], passed_combos=passed, regime="risk_off") == []
-    # neutral/None 국면이면 정상 선정.
-    assert len(select_picks([r], passed_combos=passed, regime="neutral")) == 1
-    assert len(select_picks([r], passed_combos=passed)) == 1
+
+    def trend_report(rating: str) -> dict:
+        r = _report(1, rating, 80.0)
+        r["payload"]["plan"] = [{"style": "position", "setup": "leader_trend",
+                                 "strength": 0.9, "entry_price": 100.0,
+                                 "tp1": 120.0, "stop_loss": 95.0}]
+        return r
+
+    # 중립 추세픽 → risk_off 억제
+    assert select_picks([trend_report("중립")], passed_combos=passed, regime="risk_off") == []
+    # 매수 추세픽 → risk_off 에도 노출(정책 변경)
+    assert len(select_picks([trend_report("매수")], passed_combos=passed, regime="risk_off")) == 1
+    # neutral 국면이면 중립 추세픽도 정상 선정
+    assert len(select_picks([trend_report("중립")], passed_combos=passed, regime="neutral")) == 1
 
 
 def test_picks_regime_keeps_flow_in_risk_off():

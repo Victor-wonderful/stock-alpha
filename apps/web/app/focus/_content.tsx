@@ -313,6 +313,21 @@ export default async function FocusContent() {
         {/* ── 선정 과정 3단계 ── */}
         <HowItWorks analyzed={gradeBoard.total} />
 
+        {/* ── 하락장 경고 — risk_off 에선 추세 매수픽이 손실 위험이 크다(분석=픽 노출하되 고지) ── */}
+        {regime?.regime === "risk_off" && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-[14px] border border-bad/30 bg-bad-soft px-4 py-3">
+            <span className="mt-0.5 shrink-0 text-bad" aria-hidden>
+              ⚠
+            </span>
+            <p className="text-[12px] leading-relaxed text-text-dim">
+              <span className="font-bold text-bad">하락장(위험회피) 구간</span> — 추세·돌파 매수픽은
+              하락장에서 손실 위험이 큽니다. 고확신 <span className="font-semibold text-text">매수</span>{" "}
+              종목만 노출하며, <span className="font-semibold text-text">분할 진입·타이트 손절</span>을
+              권장합니다. 약한 신호(중립 추세)는 자동 억제됩니다.
+            </p>
+          </div>
+        )}
+
         {/* ── 메인 2컬럼 ── */}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           {/* 픽 리스트 */}
