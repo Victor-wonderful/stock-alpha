@@ -54,17 +54,22 @@ def _macro_summary() -> list[dict]:
     return out
 
 
-def build_context() -> dict:
+def build_context(as_of: str | None = None) -> dict:
     client = get_client()
+    today = as_of or date.today().isoformat()
     regime = (
         client.table("market_regime").select("*")
+        .lte("date", today)
         .order("date", desc=True).limit(1).execute()
     ).data or [None]
+    # 브리프 시점(as_of) 이하 최신 픽만 참조 — EOD 갱신 시 그날 픽, 아침엔 전일 픽.
+    # 카드(오늘의 포커스)와 같은 픽 집합을 가리켜 브리프↔카드 불일치를 막는다.
     picks = (
         client.table("recommendations")
         .select("as_of,style,entry_price,target_price,stop_loss,thesis,"
                 "instruments(symbol,name)")
         .eq("basket_type", "daily_focus")
+        .lte("as_of", today)
         .order("as_of", desc=True).limit(10).execute()
     ).data or []
     latest_pick_day = picks[0]["as_of"] if picks else None
@@ -82,7 +87,7 @@ def build_context() -> dict:
             dist[r["rating"]] = dist.get(r["rating"], 0) + 1
 
     return {
-        "as_of": date.today().isoformat(),
+        "as_of": today,
         "regime": regime[0],
         "macro": _macro_summary(),
         "picks": [
@@ -116,9 +121,13 @@ def fallback_brief(ctx: dict) -> dict:
     }
 
 
-def publish_morning(*, use_llm: bool = True) -> dict:
-    """모닝 브리프 발행 — 같은 날 기존 건 교체."""
-    ctx = build_context()
+def publish_morning(*, use_llm: bool = True, as_of: str | None = None) -> dict:
+    """모닝 브리프 발행 — 같은 날(as_of) 기존 건 교체.
+
+    as_of 미지정 시 오늘. 데일리 EOD 배치가 픽 확정 후 같은 as_of 로 호출해 브리프가
+    그날 픽을 가리키게 한다(저녁~다음날 아침 브리프↔카드 불일치 방지).
+    """
+    ctx = build_context(as_of)
     narrative = (
         generate_json(
             SYSTEM,

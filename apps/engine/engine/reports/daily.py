@@ -512,6 +512,15 @@ def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
     # 오늘의 포커스 — 그날 발행분에서 선정
     n_picks = select_and_store_picks(today)
 
+    # 시장 브리프를 그날 픽으로 갱신 — 아침 브리프가 가리키던 전일 픽과 EOD 신규 픽이
+    # 어긋나 '브리프↔카드' 불일치가 생기던 것 차단(저녁부터 일치). morning 배치가
+    # 다음날 아침 해외변수로 다시 갱신.
+    from engine.reports.morning import publish_morning
+    try:
+        publish_morning(use_llm=use_llm, as_of=today)
+    except Exception as e:  # noqa: BLE001 — 브리프 실패가 픽 발행을 막지 않게
+        log.warning("reports.daily.brief_refresh_failed", error=str(e)[:140])
+
     log.info("reports.daily.done", track_a=len(a), track_b=len(b),
              published=published, skipped=skipped, picks=n_picks,
              pick_status=pick_status)
