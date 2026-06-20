@@ -164,6 +164,13 @@ export default async function DashboardPage() {
     : recs.data.filter((r) => r.basket_type === "daily_focus");
   const asOf = picks[0]?.as_of ?? null;
 
+  // 심볼별 최신 판정 — 픽 배지를 실제 판정으로(매수 하드코딩 버그 수정). reports.data 는
+  // as_of 내림차순이라 첫 등장이 최신. /focus 와 동일한 판정이 표시되게 한다.
+  const ratingBySymbol = new Map<string | null, string | null>();
+  for (const r of reports.data) {
+    if (!ratingBySymbol.has(r.symbol)) ratingBySymbol.set(r.symbol, r.rating);
+  }
+
   // 판정 분포 (리포트 기반)
   const latestDay = reports.data[0]?.as_of ?? null;
   const todayReps = reports.data.filter((r) => r.as_of === latestDay);
@@ -318,7 +325,7 @@ export default async function DashboardPage() {
                         <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-surface-3 text-text-dim">
                           {p.style}
                         </span>
-                        <RatingBadge rating="매수" />
+                        <RatingBadge rating={ratingBySymbol.get(p.symbol) ?? null} />
                         <div className="text-right">
                           <div className="tnum text-[11px] text-text-dim">
                             {fmtPrice(p.entry_price)} → {fmtPrice(p.target_price)}
