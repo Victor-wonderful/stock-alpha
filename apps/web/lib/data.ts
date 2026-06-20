@@ -943,9 +943,10 @@ export async function getAlphaZoneStocks(
       .limit(300);
     if (error || !sigs || sigs.length === 0) throw error ?? new Error("empty");
 
+    // PostGREST 임베드(instruments)는 타입상 배열로 추론되나 FK(다대일)라 런타임은 단일 객체.
     type Row = Record<string, unknown> & { instruments: Record<string, unknown> };
     const best = new Map<number, Row>();
-    for (const r of sigs as Row[]) {
+    for (const r of sigs as unknown as Row[]) {
       const iid = r.instrument_id as number;
       if (r.entry_price == null || r.stop_loss == null) continue;
       if (!best.has(iid)) best.set(iid, r);
