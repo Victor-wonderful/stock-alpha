@@ -14,7 +14,7 @@ export default async function AlphaZonePage() {
   return (
     <AppShell
       title="알파존"
-      subtitle="현재가가 ‘진입→손절’ 알파 존에 들어온 종목 — 검증 패턴이 가리키는 매수 실행 구간"
+      subtitle="현재가가 진입가 부근에 도달한 종목 — 검증 패턴이 가리키는 ‘지금 진입하기 좋은 자리’"
       badge={
         <span className="flex items-center gap-1.5 rounded-[999px] bg-accent/15 px-3 py-1 text-[11px] font-bold text-accent">
           존 진입 {cards.length}종목

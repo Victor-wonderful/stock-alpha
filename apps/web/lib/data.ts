@@ -919,8 +919,9 @@ export interface AlphaZoneCard {
 
 const MINI_BARS = 32; // 미니 캔들 개수
 
-// 알파 존 판정: 손절 위 ~ 진입가 +3% 이내(진입 임박 포함)면 '존 진입'으로 간주.
-const ALPHA_ZONE_TOP = 1.03;
+// 알파 존(진입 적합) 판정: 현재가가 진입가 ±3% 이내 = '지금 진입하기 좋은 자리'.
+// 손절 근처까지 밀린 종목은 진입엔 부적합하므로 제외(진입가 부근만 노출).
+const ENTRY_BAND = 0.03;
 
 function zonePosition(price: number, entry: number, stop: number): number {
   return (price - stop) / (entry - stop);
@@ -985,8 +986,8 @@ export async function getAlphaZoneStocks(
       const entry = Number(r.entry_price);
       const stop = Number(r.stop_loss);
       if (entry <= stop) continue;
-      // 알파 존 안에 있는가 (손절 위 ~ 진입 +3%).
-      if (price <= stop || price > entry * ALPHA_ZONE_TOP) continue;
+      // 진입 적합: 현재가가 진입가 ±3% 이내 = 지금 진입하기 좋은 자리.
+      if (price < entry * (1 - ENTRY_BAND) || price > entry * (1 + ENTRY_BAND)) continue;
       const inst = r.instruments;
       cards.push({
         symbol: inst.symbol as string,
