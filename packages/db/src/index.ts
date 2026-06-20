@@ -22,6 +22,8 @@ export type TradeSetup =
   | 'high_52w'
   | 'vol_squeeze'
   | 'pead'
+  | 'double_bottom'
+  | 'anchor_pullback'
   | 'theme'
   | 'new_listing';
 export type TradeSession = 'pre' | 'regular' | 'close' | 'after';
@@ -46,6 +48,8 @@ export const TRADE_SETUP_LABELS: Record<TradeSetup, string> = {
   high_52w: '52주 신고가',
   vol_squeeze: '변동성 수축 돌파',
   pead: '실적 모멘텀(PEAD)',
+  double_bottom: '쌍바닥(W) 반등',
+  anchor_pullback: '기준봉 눌림',
   theme: '테마주',
   new_listing: '신규주',
 };

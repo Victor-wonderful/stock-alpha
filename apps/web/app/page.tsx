@@ -26,6 +26,8 @@ const SETUP_NAMES: Record<string, string> = {
   high_52w: "52주 신고가",
   vol_squeeze: "변동성 수축 돌파",
   pead: "실적 모멘텀(PEAD)",
+  double_bottom: "쌍바닥(W) 반등",
+  anchor_pullback: "기준봉 눌림",
   factor_composite: "멀티팩터 종합",
 };
 

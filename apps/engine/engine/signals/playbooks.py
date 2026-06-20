@@ -344,6 +344,121 @@ def detect_pead(
     )
 
 
+def detect_double_bottom(
+    df: pd.DataFrame, window: int = 40, tol: float = 0.025, min_depth: float = 0.07,
+) -> Candidate | None:
+    """쌍바닥(W) 지지 반등 — 비슷한 가격대 두 바닥 + 사이 넥라인, 2차 바닥서 반등 확인.
+
+    스탁알파 시그니처 패턴. 두 번 같은 자리(쌍지지)에서 막힌 매도세가 소진된 뒤
+    반등하는 고전 반전형. 손절은 2차 바닥 바로 아래(쌍지지 깨지면 무효)라 타이트하고,
+    목표는 넥라인+패턴 높이(측정 이동)로 명확 → 알파 존이 깔끔하게 그려진다.
+    """
+    if len(df) < window + 2:
+        return None
+    o, c = df["open"], df["close"]
+    c0 = _last(c)
+    if c0 <= 0:                                        # 거래정지 이력(0원) 가드
+        return None
+    win = df.iloc[-(window + 1):-1]                    # 현재 봉 직전까지
+    lows = win["low"].to_numpy(dtype=float)
+    highs = win["high"].to_numpy(dtype=float)
+    n = len(lows)
+    half = n // 2
+    i1 = int(lows[:half].argmin())                     # 1차 바닥
+    i2 = half + int(lows[half:].argmin())              # 2차 바닥(더 최근)
+    b1, b2 = float(lows[i1]), float(lows[i2])
+    if b1 <= 0 or b2 <= 0 or i2 - i1 < 5:
+        return None
+    if abs(b2 / b1 - 1) > tol:                         # 쌍지지(비슷한 레벨)
+        return None
+    if b2 < b1 * (1 - tol):                            # 2차가 크게 낮지 않음(지지 유지)
+        return None
+    if n - i2 > 10:                                    # 2차 바닥이 최근(신선한 반등)이어야
+        return None
+    neck = float(highs[i1:i2 + 1].max())               # 넥라인(두 바닥 사이 고점)
+    base = (b1 + b2) / 2
+    if neck < base * (1 + min_depth):                  # 넥라인 충분히 높아야 진짜 W
+        return None
+    if c0 <= b2 * 1.01 or c0 >= neck:                  # 2차 바닥 반등 시작 & 넥라인 아래
+        return None
+    if c0 <= _last(o) or c0 <= float(c.iloc[-2]):      # 당일 반등 양봉
+        return None
+    if _last(ind.rsi(c)) > 50:                         # 약세 구간서 나온 반전(과열 아님)
+        return None
+    avg_vol = float(df["volume"].iloc[-21:-1].mean())
+    if avg_vol > 0 and _last(df["volume"]) < avg_vol:  # 반등 거래량 동반
+        return None
+    atr = _last(ind.atr(df))
+    strength = 0.6 + (0.15 if abs(b2 / b1 - 1) < 0.015 else 0.0)
+    return Candidate(
+        setup="double_bottom", side="buy", style="swing", session="regular",
+        entry_ref=c0, atr=atr, support=b2, resistance=neck,
+        strength=min(1.0, strength),
+        rationale=[f"쌍바닥(W) {b1:,.0f}·{b2:,.0f} 지지", f"넥라인 {neck:,.0f}",
+                   "2차 바닥 반등 확인"],
+        payload={"bottom1": b1, "bottom2": b2, "neckline": neck,
+                 "target_measured": round(neck + (neck - base), 2)},
+    )
+
+
+def detect_anchor_pullback(
+    df: pd.DataFrame, lookback: int = 12, body_atr: float = 1.8, vol_mult: float = 2.0,
+) -> Candidate | None:
+    """기준봉 눌림 — 대량거래 장대양봉(기준봉) 후 그 범위로 눌렸다 반등.
+
+    스탁알파 시그니처 패턴. 기준봉 = 큰손이 들어온 자리(큰 범위·대량). 그 자리를
+    안 깨고(저점 지지) 눌림하면 매집 구간으로 보고, 반등 시작 시 진입. 손절은 기준봉
+    저점 아래(자리 이탈), 목표는 기준봉 고점 돌파.
+    """
+    if len(df) < 40:
+        return None
+    o, h, l, c, v = df["open"], df["high"], df["low"], df["close"], df["volume"]
+    c0 = _last(c)
+    if c0 <= 0:
+        return None
+    atr = ind.atr(df)
+    avg_vol = v.rolling(20, min_periods=5).mean()
+    anchor = None
+    start = max(len(df) - 1 - lookback, 1)
+    for i in range(len(df) - 2, start - 1, -1):        # 최근→과거에서 기준봉 탐색
+        body = float(c.iloc[i] - o.iloc[i])
+        rng = float(h.iloc[i] - l.iloc[i])
+        if body <= 0 or rng <= 0:
+            continue
+        if rng < body_atr * float(atr.iloc[i]):        # 장대(큰 범위)
+            continue
+        if body / rng < 0.6:                           # 몸통 큰 양봉
+            continue
+        av = float(avg_vol.iloc[i])
+        if av > 0 and float(v.iloc[i]) < vol_mult * av:  # 대량거래
+            continue
+        anchor = i
+        break
+    if anchor is None:
+        return None
+    a_low, a_high = float(l.iloc[anchor]), float(h.iloc[anchor])
+    a_mid = (a_low + a_high) / 2
+    after_low = float(l.iloc[anchor + 1:].min())       # 기준봉 이후 최저
+    if after_low < a_low:                              # 기준봉 저점 이탈 → 무효
+        return None
+    if not (a_low < c0 < a_high):                      # 현재가 기준봉 범위 안(눌림)
+        return None
+    if after_low > a_mid:                              # 충분히 안 눌림(중심 이하 눌려야)
+        return None
+    if c0 <= _last(o) or c0 <= float(c.iloc[-2]):      # 당일 반등 양봉
+        return None
+    strength = 0.6 + (0.1 if float(v.iloc[anchor]) > 3 * float(avg_vol.iloc[anchor] or 0) else 0.0)
+    return Candidate(
+        setup="anchor_pullback", side="buy", style="swing", session="regular",
+        entry_ref=c0, atr=_last(atr), support=a_low, resistance=a_high,
+        strength=min(1.0, strength),
+        rationale=[f"기준봉(장대양봉) {a_low:,.0f}~{a_high:,.0f}",
+                   "범위 내 눌림 후 반등", "기준봉 저점 지지"],
+        payload={"anchor_low": a_low, "anchor_high": a_high,
+                 "anchor_bars_ago": len(df) - 1 - anchor},
+    )
+
+
 ALL_DETECTORS = {
     "leader_trend": detect_leader_trend,
     "oversold_bounce": detect_oversold_bounce,
@@ -354,6 +469,8 @@ ALL_DETECTORS = {
     "vol_squeeze": detect_vol_squeeze,
     "flow_accumulation": detect_flow_accumulation,
     "pead": detect_pead,
+    "double_bottom": detect_double_bottom,
+    "anchor_pullback": detect_anchor_pullback,
 }
 
 # 셋업별 '논리적으로 허용되는 스타일'(정체성). 게이트는 이 중 검증 가능한 스타일만 평가하고,
@@ -371,6 +488,8 @@ ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
     "vol_squeeze": ("swing", "position"),
     "flow_accumulation": ("swing", "position"),
     "pead": ("position",),
+    "double_bottom": ("swing", "position"),
+    "anchor_pullback": ("swing", "position"),
 }
 
 # 일봉 OHLCV 로 의미 있게 백테스트 가능한 스타일. day/scalping 은 분봉 필요(2단계).
