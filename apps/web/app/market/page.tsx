@@ -115,7 +115,7 @@ export default async function MarketPage() {
 
   return (
     <AppShell
-      title="시장 분석"
+      title="시장"
       subtitle="매크로 · 레짐 · 섹터 로테이션"
       badge={isSample ? <SampleBadge /> : undefined}
     >

@@ -4,6 +4,7 @@ import {
   computePositionSizePct,
   DEFAULT_RISK_PER_TRADE_PCT,
 } from "./position";
+import { computeSnowflake, type SnowflakeResult } from "./snowflake";
 import type {
   BacktestView,
   FactorView,
@@ -202,6 +203,93 @@ export async function getFactor(
     return { data: data as FactorView, isSample: false };
   } catch {
     return { data: sampleFactorFor(symbol), isSample: true };
+  }
+}
+
+// 카드용 미니 스노우플레이크 — 여러 종목의 5축을 벌크로(심볼당 호출 금지). 비싼 리스크
+// 계산은 제외하고 lowvol 팩터로 안정성을 대체(경량). 실패 시 빈 Map → 카드가 미니를 생략.
+export async function getSnowflakesForSymbols(
+  symbols: string[],
+): Promise<Map<string, SnowflakeResult>> {
+  const out = new Map<string, SnowflakeResult>();
+  const uniq = [...new Set(symbols.filter(Boolean))];
+  if (uniq.length === 0) return out;
+  try {
+    const supabase = await createClient();
+    const { data: insts } = await supabase
+      .from("instruments")
+      .select("id,symbol")
+      .in("symbol", uniq);
+    if (!insts || insts.length === 0) throw new Error("no instruments");
+    const idToSym = new Map<number, string>();
+    const ids: number[] = [];
+    for (const r of insts as { id: number; symbol: string }[]) {
+      idToSym.set(r.id, r.symbol);
+      ids.push(r.id);
+    }
+
+    // 종목별 '최신 1행' — instrument_id, date desc 정렬 후 첫 등장만 채택.
+    const latestById = async (
+      table: string,
+      cols: string,
+    ): Promise<Map<number, Record<string, number | null>>> => {
+      const m = new Map<number, Record<string, number | null>>();
+      const { data } = await supabase
+        .from(table)
+        .select(`instrument_id,${cols}`)
+        .in("instrument_id", ids)
+        .order("instrument_id", { ascending: true })
+        .order("date", { ascending: false });
+      for (const r of (data ?? []) as unknown as Record<string, number>[]) {
+        const iid = r.instrument_id as number;
+        if (!m.has(iid)) m.set(iid, r);
+      }
+      return m;
+    };
+
+    const [facM, valM] = await Promise.all([
+      latestById("factor_scores", "value_z,momentum_z,growth_z,lowvol_z"),
+      latestById("valuations", "roe,upside_pct"),
+    ]);
+    // 수급 — 종목별 최근 행들(외인·기관 순매수). instrument_id별 묶음.
+    const flowsById = new Map<number, FlowRowView[]>();
+    const { data: flowRows } = await supabase
+      .from("flows")
+      .select("instrument_id,foreign_net,inst_net")
+      .in("instrument_id", ids)
+      .order("instrument_id", { ascending: true })
+      .order("date", { ascending: false })
+      .limit(ids.length * 8);
+    for (const r of (flowRows ?? []) as unknown as Record<string, number>[]) {
+      const iid = r.instrument_id as number;
+      const arr = flowsById.get(iid) ?? [];
+      if (arr.length < 8) {
+        arr.push({
+          date: "",
+          foreign_net: (r.foreign_net as number) ?? null,
+          inst_net: (r.inst_net as number) ?? null,
+          retail_net: null,
+          short_volume: null,
+        });
+      }
+      flowsById.set(iid, arr);
+    }
+
+    for (const iid of ids) {
+      const sym = idToSym.get(iid)!;
+      out.set(
+        sym,
+        computeSnowflake({
+          val: (valM.get(iid) as never) ?? null,
+          fac: (facM.get(iid) as never) ?? null,
+          flows: flowsById.get(iid) ?? [],
+          risk: null,
+        }),
+      );
+    }
+    return out;
+  } catch {
+    return out; // 부분/전체 실패 시 빈 Map — 카드는 미니 없이 정상 동작.
   }
 }
 

@@ -5,18 +5,22 @@ import { usePathname } from "next/navigation";
 import { Activity, Bell, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// IA 원칙(2026-06-10 + V3): 첫 화면이 답이고, 도구는 뒤로, 검증은 자랑으로.
-// 좌측=페이지 네비, 우측=아이콘 유틸(검색·알림·프로필) — 중복 라벨 제거(2026-06-17):
-// '알림'은 우측 벨로, '오늘의 픽' CTA(=오늘의 포커스 중복)는 폐지.
+// IA 확정(2026-06-23, docs/PLAN.md '웹/앱 정보구조'): 8개 → 6개로 재편.
+// 같은 signals 데이터를 4중 노출하던 메뉴(오늘의 포커스·알파존·추천 종목·종목 분석)를
+// 통합하고, 각 메뉴가 수익 깔때기(유입→가치→신뢰→전환→락인) 역할을 하나씩 진다.
+//   ② 추천 = /focus(오늘의 포커스 기본 탭, 추후 수급·진입임박·전체 탭 통합)
+//   ③ 종목 = /reports(종목 상세 5축 스노우플레이크로 확장 예정)
+//   ⑤ 내 자산 = /watchlist(보유·진단·알림 통합 예정) · ⑥ 성과 = /picks(트랙레코드)
+// 우측 아이콘: 검색→/screener(전체 탐색), 알림→/alerts.
+// match: 통합 메뉴는 흡수한 구 라우트도 활성으로 표시(② 추천=포커스·알파존·스크리너 탭,
+// ③ 종목=리포트·종목상세, ⑤ 내 자산=관심·진단).
 const NAV_ITEMS = [
-  { href: "/", label: "대시보드", exact: true },
-  { href: "/focus", label: "오늘의 포커스" },
-  { href: "/alpha-zone", label: "알파존" },
-  { href: "/screener", label: "추천 종목" },
-  { href: "/diagnosis", label: "종목진단" },
-  { href: "/reports", label: "종목 분석" },
-  { href: "/market", label: "시장분석" },
-  { href: "/watchlist", label: "워치리스트" },
+  { href: "/", label: "홈", exact: true },
+  { href: "/focus", label: "추천", match: ["/focus", "/alpha-zone", "/screener"] },
+  { href: "/reports", label: "종목", match: ["/reports", "/stocks"] },
+  { href: "/market", label: "시장" },
+  { href: "/watchlist", label: "내 자산", match: ["/watchlist", "/diagnosis", "/alerts"] },
+  { href: "/picks", label: "성과" },
 ] as const;
 
 export function GNB() {
@@ -43,9 +47,11 @@ export function GNB() {
         {/* 네비게이션 */}
         <nav className="flex items-center gap-1" aria-label="주 메뉴">
           {NAV_ITEMS.map((item) => {
+            const matchPaths =
+              "match" in item && item.match ? item.match : [item.href];
             const active = ("exact" in item && item.exact)
               ? path === item.href
-              : path === item.href || path.startsWith(item.href + "/");
+              : matchPaths.some((p) => path === p || path.startsWith(p + "/"));
             return (
               <Link
                 key={item.href}

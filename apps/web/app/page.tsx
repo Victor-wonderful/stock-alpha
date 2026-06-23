@@ -208,7 +208,7 @@ export default async function DashboardPage() {
         {/* ── 페이지 헤더 ── */}
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-text">대시보드</h1>
+            <h1 className="text-xl font-bold text-text">홈</h1>
             <p className="mt-0.5 text-xs text-text-mute">
               {asOf ? `${asOf} 마감 데이터 기준 · 실시간 갱신` : "실시간 갱신"}
               {quotes.isSample && " · "}

@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { fmtPrice, fmtPct } from "@/lib/format";
+import { MiniSnowflake } from "@/components/MiniSnowflake";
+import type { SnowflakeAxis } from "@/lib/snowflake";
 import type { RecommendationView, ReportListItem } from "@/lib/types";
 
 function RatingBadge({ rating }: { rating: string | null }) {
@@ -52,11 +54,13 @@ export function PickCard({
   rank,
   report,
   riskPct,
+  mini,
 }: {
   pick: RecommendationView & { as_of?: string | null };
   rank: number;
   report?: ReportListItem | null;
   riskPct: number;
+  mini?: SnowflakeAxis[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -146,6 +150,13 @@ export function PickCard({
             </div>
           ))}
         </div>
+
+        {/* 미니 스노우플레이크 — 5축 한눈(밸류·수급·모멘텀·성장·안정성) */}
+        {mini && mini.length >= 5 && (
+          <div className="hidden shrink-0 lg:block">
+            <MiniSnowflake axes={mini} size={62} />
+          </div>
+        )}
 
         {/* 우측: 점수 + 행동 스탠스 */}
         <div className="flex shrink-0 flex-col items-end gap-1.5">

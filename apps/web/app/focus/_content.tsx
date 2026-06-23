@@ -9,11 +9,13 @@ import {
   getPickHistory,
   getRecommendations,
   getReports,
+  getSnowflakesForSymbols,
   getUserRiskPct,
 } from "@/lib/data";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { PickCard } from "./_pick-card";
+import { RecommendTabs } from "@/components/RecommendTabs";
 
 // 다음 거래일 라벨
 function nextTradingDayLabel(asOf: string): string {
@@ -139,6 +141,8 @@ export default async function FocusContent() {
   const picks = recs.isSample
     ? []
     : recs.data.filter((r) => r.basket_type === "daily_focus");
+  // 카드용 미니 스노우플레이크 5축 — 픽 종목만 벌크 1회 조회(실패 시 빈 Map).
+  const snowMap = await getSnowflakesForSymbols(picks.map((p) => p.symbol));
   const asOf = picks[0]?.as_of ?? null;
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
   const basisDay = asOf ? tradingDayLabel(asOf) : null;
@@ -199,7 +203,7 @@ export default async function FocusContent() {
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold text-text">오늘의 포커스</h1>
+              <h1 className="text-xl font-bold text-text">추천</h1>
               {basisDay && (
                 <span className="rounded-[999px] bg-surface-3 px-2.5 py-1 text-[10px] font-semibold text-text-dim">
                   {basisDay} 종가 분석
@@ -231,6 +235,9 @@ export default async function FocusContent() {
             </span>
           </div>
         </div>
+
+        {/* ── ② 추천 탭바 (포커스·수급·진입임박·전체) ── */}
+        <RecommendTabs />
 
         {/* ── 모닝 브리프 카드 ── */}
         {briefData && (
@@ -349,6 +356,7 @@ export default async function FocusContent() {
                   rank={i + 1}
                   report={reportBySymbol.get(p.symbol)}
                   riskPct={riskPct}
+                  mini={snowMap.get(p.symbol)?.axes}
                 />
               ))
             )}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
+import { AssetTabs } from "@/components/AssetTabs";
 import { DiagnosisForm } from "@/components/DiagnosisForm";
 import { Panel } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
@@ -183,7 +184,7 @@ export default async function DiagnosisPage({
 
   return (
     <AppShell
-      title="종목진단"
+      title="내 자산"
       subtitle="보유 중이거나 매수 검토 중인 조합을 입력하면 — 종목별 판정과 포트폴리오 리스크를 함께 진단합니다"
       badge={
         <span className="rounded-[999px] border border-border bg-surface-2 px-3 py-1 text-[11px] font-semibold text-text-dim">
@@ -191,6 +192,7 @@ export default async function DiagnosisPage({
         </span>
       }
     >
+      <AssetTabs />
       <div className="space-y-4">
         {/* ── 1행: 종목 입력(좌 560) + 진단 결과(우) — 시안 b5YzG ── */}
         <div className="grid items-stretch gap-4 lg:grid-cols-[560px_minmax(0,1fr)]">
