@@ -9,6 +9,7 @@ import {
   getPickHistory,
   getRecommendations,
   getReports,
+  getSnowflakesForSymbols,
   getUserRiskPct,
 } from "@/lib/data";
 import { SampleBadge } from "@/components/ui";
@@ -140,6 +141,8 @@ export default async function FocusContent() {
   const picks = recs.isSample
     ? []
     : recs.data.filter((r) => r.basket_type === "daily_focus");
+  // 카드용 미니 스노우플레이크 5축 — 픽 종목만 벌크 1회 조회(실패 시 빈 Map).
+  const snowMap = await getSnowflakesForSymbols(picks.map((p) => p.symbol));
   const asOf = picks[0]?.as_of ?? null;
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
   const basisDay = asOf ? tradingDayLabel(asOf) : null;
@@ -353,6 +356,7 @@ export default async function FocusContent() {
                   rank={i + 1}
                   report={reportBySymbol.get(p.symbol)}
                   riskPct={riskPct}
+                  mini={snowMap.get(p.symbol)?.axes}
                 />
               ))
             )}
