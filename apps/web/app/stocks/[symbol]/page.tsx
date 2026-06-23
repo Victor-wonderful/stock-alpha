@@ -17,6 +17,8 @@ import {
   getSignalsForSymbol,
   getValuation,
 } from "@/lib/data";
+import { computeSnowflake } from "@/lib/snowflake";
+import { SnowflakePanel } from "@/components/SnowflakePanel";
 import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
 import type { UTCTimestamp } from "lightweight-charts";
 
@@ -29,14 +31,18 @@ export default async function StockDetailPage({
 }) {
   const { symbol } = await params;
   const inst = await getInstrumentBySymbol(symbol);
-  const val = await getValuation(inst.data.id, symbol);
-  const fac = await getFactor(inst.data.id, symbol);
-  const sigs = await getSignalsForSymbol(symbol);
-  const flows = await getFlows(inst.data.id, symbol);
-  const risk = await getRisk(inst.data.id, symbol);
-  const price = await getLatestPrice(inst.data.id);
-  const ohlcv = await getOhlcv(inst.data.id);
-  const report = await getReportForInstrument(inst.data.id);
+  // 나머지는 inst.id/symbol 외 상호 의존이 없으므로 병렬 — 순차 8회 await(WAN 왕복 누적
+  // 45~60s)를 1회분으로 단축. 렌더 지연이 프리뷰 타임아웃을 유발하던 문제 동시 해결.
+  const [val, fac, sigs, flows, risk, price, ohlcv, report] = await Promise.all([
+    getValuation(inst.data.id, symbol),
+    getFactor(inst.data.id, symbol),
+    getSignalsForSymbol(symbol),
+    getFlows(inst.data.id, symbol),
+    getRisk(inst.data.id, symbol),
+    getLatestPrice(inst.data.id),
+    getOhlcv(inst.data.id),
+    getReportForInstrument(inst.data.id),
+  ]);
 
   const anySample =
     inst.isSample || val.isSample || fac.isSample || sigs.isSample || flows.isSample || risk.isSample;
@@ -61,6 +67,14 @@ export default async function StockDetailPage({
     lead.entry_price > lead.stop_loss
       ? (target - lead.entry_price) / (lead.entry_price - lead.stop_loss)
       : null;
+
+  // ③ 스노우플레이크 5축 — 이미 로드한 밸류·팩터·수급·리스크를 0~100 점수화.
+  const snow = computeSnowflake({
+    val: val.data,
+    fac: fac.data,
+    flows: flows.data,
+    risk: risk.data,
+  });
 
   return (
     <AppShell
@@ -107,6 +121,14 @@ export default async function StockDetailPage({
           </div>
         )}
       </div>
+
+      {/* ③ 스노우플레이크 히어로 — 5축 + 적정가 + 건강점수 + AI 한 줄 + ProTips */}
+      <SnowflakePanel
+        result={snow}
+        val={val.data}
+        anchor={anchor}
+        currency={inst.data.currency}
+      />
 
       {/* AI 애널리스트 리포트 */}
       <div className="mb-4">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
+import { AssetTabs } from "@/components/AssetTabs";
 
 // 워치리스트 — 회원 전용(watchlists 테이블 · RLS: 본인만 조회).
 // 로그인/CRUD 백엔드 연결 전까지는 V3 레이아웃 미리보기(예시 데이터)로 제공.
@@ -23,6 +24,7 @@ export default function WatchlistPage() {
         </span>
       }
     >
+      <AssetTabs />
       <div className="space-y-4">
         {/* 오늘의 변화 (예시) */}
         <section className="rounded-[20px] border border-accent/50 bg-surface px-5 py-4">

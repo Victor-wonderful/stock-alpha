@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { getSignals } from "@/lib/data";
+import { RecommendTabs } from "@/components/RecommendTabs";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
 import type { SignalView } from "@/lib/types";
 
@@ -175,6 +176,8 @@ export default async function ScreenerPage({
         </span>
       }
     >
+      <RecommendTabs />
+
       {isSample && (
         <div className="mb-4">
           <SampleBadge />

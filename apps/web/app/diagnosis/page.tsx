@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
+import { AssetTabs } from "@/components/AssetTabs";
 import { DiagnosisForm } from "@/components/DiagnosisForm";
 import { Panel } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
@@ -191,6 +192,7 @@ export default async function DiagnosisPage({
         </span>
       }
     >
+      <AssetTabs />
       <div className="space-y-4">
         {/* ── 1행: 종목 입력(좌 560) + 진단 결과(우) — 시안 b5YzG ── */}
         <div className="grid items-stretch gap-4 lg:grid-cols-[560px_minmax(0,1fr)]">

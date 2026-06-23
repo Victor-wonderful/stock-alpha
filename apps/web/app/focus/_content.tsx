@@ -14,6 +14,7 @@ import {
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { PickCard } from "./_pick-card";
+import { RecommendTabs } from "@/components/RecommendTabs";
 
 // 다음 거래일 라벨
 function nextTradingDayLabel(asOf: string): string {
@@ -231,6 +232,9 @@ export default async function FocusContent() {
             </span>
           </div>
         </div>
+
+        {/* ── ② 추천 탭바 (포커스·수급·진입임박·전체) ── */}
+        <RecommendTabs />
 
         {/* ── 모닝 브리프 카드 ── */}
         {briefData && (

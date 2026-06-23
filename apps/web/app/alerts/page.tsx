@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { AssetTabs } from "@/components/AssetTabs";
 import { getMorningBrief, getPickHistory, getReports } from "@/lib/data";
 
 import { EventToggles } from "./_toggles";
@@ -97,6 +98,7 @@ export default async function AlertsPage() {
       title="알림"
       subtitle="픽 발행 · 시그널 · 손절/목표 도달을 놓치지 않게 — 채널과 이벤트를 직접 선택합니다"
     >
+      <AssetTabs />
       <div className="grid gap-6 xl:grid-cols-[560px_minmax(0,1fr)]">
         {/* 좌측: 채널 + 이벤트 설정 */}
         <div className="flex flex-col gap-5">

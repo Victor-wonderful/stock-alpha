@@ -4,6 +4,7 @@ import { SampleBadge } from "@/components/ui";
 import { SetupChip, StyleChip } from "@/components/AxisChips";
 import { AlphaZoneMini } from "@/components/AlphaZoneMini";
 import { getAlphaZoneStocks, type AlphaZoneCard } from "@/lib/data";
+import { RecommendTabs } from "@/components/RecommendTabs";
 import { fmtPrice, fmtPct } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,8 @@ export default async function AlphaZonePage() {
         </span>
       }
     >
+      <RecommendTabs />
+
       {isSample && (
         <div className="mb-4">
           <SampleBadge />
