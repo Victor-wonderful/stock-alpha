@@ -240,7 +240,7 @@ export async function getSnowflakesForSymbols(
         .in("instrument_id", ids)
         .order("instrument_id", { ascending: true })
         .order("date", { ascending: false });
-      for (const r of (data ?? []) as Record<string, number>[]) {
+      for (const r of (data ?? []) as unknown as Record<string, number>[]) {
         const iid = r.instrument_id as number;
         if (!m.has(iid)) m.set(iid, r);
       }
@@ -260,7 +260,7 @@ export async function getSnowflakesForSymbols(
       .order("instrument_id", { ascending: true })
       .order("date", { ascending: false })
       .limit(ids.length * 8);
-    for (const r of (flowRows ?? []) as Record<string, number>[]) {
+    for (const r of (flowRows ?? []) as unknown as Record<string, number>[]) {
       const iid = r.instrument_id as number;
       const arr = flowsById.get(iid) ?? [];
       if (arr.length < 8) {
