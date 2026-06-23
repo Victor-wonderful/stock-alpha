@@ -102,7 +102,7 @@ export default async function ReportsPage({
 
   return (
     <AppShell
-      title="종목 분석"
+      title="종목"
       subtitle="AI 애널리스트 — 종가 기준 분석, 다음 거래일 장전 플랜 · 수치는 전부 DB 근거(source_refs)"
     >
       {/* 판정 탭 필 + 거래소 칩 */}

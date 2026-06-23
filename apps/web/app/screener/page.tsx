@@ -168,7 +168,7 @@ export default async function ScreenerPage({
 
   return (
     <AppShell
-      title="추천 종목"
+      title="추천"
       subtitle={`발행 중인 전체 시그널 ${total ?? allSignals.length}건 — 백테스트 게이트 통과 셋업만 발행 · 매일 16:30 갱신`}
       badge={
         <span className="flex items-center gap-1.5 rounded-[999px] bg-good-soft px-3 py-1 text-[11px] font-bold text-good">

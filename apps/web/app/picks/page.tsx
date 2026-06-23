@@ -49,8 +49,8 @@ export default async function PicksPage({
 
   return (
     <AppShell
-      title="픽 기록"
-      subtitle="발행한 모든 픽의 전체 기록 — 수정·삭제 없음 · 종가 기준 자동 확정 (목표 / 손절 / 만료 30일)"
+      title="성과"
+      subtitle="발행한 모든 픽의 트랙레코드 — 수정·삭제 없음 · 종가 기준 자동 확정 (목표 / 손절 / 만료 30일)"
       badge={
         <span className="rounded-[999px] border border-border bg-surface-2 px-3 py-1 text-[11px] font-semibold text-text-dim">
           🔒 기록 불변 — 발행 후 수정 불가

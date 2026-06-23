@@ -200,7 +200,7 @@ export default async function FocusContent() {
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold text-text">오늘의 포커스</h1>
+              <h1 className="text-xl font-bold text-text">추천</h1>
               {basisDay && (
                 <span className="rounded-[999px] bg-surface-3 px-2.5 py-1 text-[10px] font-semibold text-text-dim">
                   {basisDay} 종가 분석

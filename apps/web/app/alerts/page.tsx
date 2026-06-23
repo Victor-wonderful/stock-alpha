@@ -95,7 +95,7 @@ export default async function AlertsPage() {
 
   return (
     <AppShell
-      title="알림"
+      title="내 자산"
       subtitle="픽 발행 · 시그널 · 손절/목표 도달을 놓치지 않게 — 채널과 이벤트를 직접 선택합니다"
     >
       <AssetTabs />

@@ -16,7 +16,7 @@ const PREVIEW = [
 export default function WatchlistPage() {
   return (
     <AppShell
-      title="워치리스트"
+      title="내 자산"
       subtitle="관심 종목의 판정·시그널·픽 변화를 한곳에서 — 변화가 있던 종목이 위로 올라옵니다"
       badge={
         <span className="rounded-[999px] bg-warn-soft px-3 py-1 text-[11px] font-semibold text-warn">

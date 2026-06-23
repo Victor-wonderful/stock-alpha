@@ -184,7 +184,7 @@ export default async function DiagnosisPage({
 
   return (
     <AppShell
-      title="종목진단"
+      title="내 자산"
       subtitle="보유 중이거나 매수 검토 중인 조합을 입력하면 — 종목별 판정과 포트폴리오 리스크를 함께 진단합니다"
       badge={
         <span className="rounded-[999px] border border-border bg-surface-2 px-3 py-1 text-[11px] font-semibold text-text-dim">
