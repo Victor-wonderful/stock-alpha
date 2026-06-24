@@ -31,6 +31,7 @@ export type TradeSetup =
   | 'delta'
   | 'markov'
   | 'quantile'
+  | 'ensemble'
   | 'theme'
   | 'new_listing';
 export type TradeSession = 'pre' | 'regular' | 'close' | 'after';
@@ -64,6 +65,7 @@ export const TRADE_SETUP_LABELS: Record<TradeSetup, string> = {
   delta: '델타(AR1) 모멘텀',
   markov: '마르코프 레짐',
   quantile: '콴타일 반등',
+  ensemble: '앙상블 합의',
   theme: '테마주',
   new_listing: '신규주',
 };
