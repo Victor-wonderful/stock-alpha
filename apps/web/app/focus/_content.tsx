@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Calculator, ListFilter, ScanSearch } from "lucide-react";
 import { GNB } from "@/components/GNB";
 import {
+  getMarketState,
   getMorningBrief,
   getPickHistory,
   getRecommendations,
@@ -12,6 +13,7 @@ import {
   getSnowflakesForSymbols,
   getUserRiskPct,
 } from "@/lib/data";
+import { RegimeHeader } from "@/components/RegimeHeader";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { PickCard } from "./_pick-card";
@@ -130,12 +132,13 @@ function HowItWorks({ analyzed }: { analyzed: number }) {
 }
 
 export default async function FocusContent() {
-  const [recs, allReports, history, brief, riskPct] = await Promise.all([
+  const [recs, allReports, history, brief, riskPct, marketState] = await Promise.all([
     getRecommendations(),
     getReports(200, { includeUnfit: true }), // 최신일 분포 집계 — 일 발행 상한(100)+α 커버
     getPickHistory(),
     getMorningBrief(),
     getUserRiskPct(),
+    getMarketState(),
   ]);
 
   const picks = recs.isSample
@@ -238,6 +241,9 @@ export default async function FocusContent() {
 
         {/* ── ② 추천 탭바 (포커스·수급·진입임박·전체) ── */}
         <RecommendTabs />
+
+        {/* ── 국면 헤더 — 지금 시장 상태 → 그래서 이 종류를 추천(알파 노하우 ②) ── */}
+        <RegimeHeader state={marketState} />
 
         {/* ── 모닝 브리프 카드 ── */}
         {briefData && (

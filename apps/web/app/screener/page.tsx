@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
-import { getSignals } from "@/lib/data";
+import { getSignals, getMarketState } from "@/lib/data";
 import { RecommendTabs } from "@/components/RecommendTabs";
+import { RegimeHeader } from "@/components/RegimeHeader";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
 import type { SignalView } from "@/lib/types";
 
@@ -133,6 +134,7 @@ export default async function ScreenerPage({
 
   // 셋업 칩 건수·하이라이트 집계가 전체 기준이어야 함 — 오늘만 271건이라 200 한도는 잘림(2026-06-12 점검)
   const { data: allSignals, isSample, total } = await getSignals({}, 1000);
+  const marketState = await getMarketState();
 
   // 셋업별 건수 집계 (필터 전 전체 기준)
   const setupCounts = new Map<string, number>();
@@ -184,6 +186,7 @@ export default async function ScreenerPage({
       }
     >
       <RecommendTabs />
+      <RegimeHeader state={marketState} />
 
       {isSample && (
         <div className="mb-4">

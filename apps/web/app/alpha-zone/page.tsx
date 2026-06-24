@@ -4,14 +4,16 @@ import { SampleBadge } from "@/components/ui";
 import { StyleChip } from "@/components/AxisChips";
 import { setupCharacter, TONE_CLASS } from "@/lib/setupCharacter";
 import { AlphaZoneMini } from "@/components/AlphaZoneMini";
-import { getAlphaZoneStocks, type AlphaZoneCard } from "@/lib/data";
+import { getAlphaZoneStocks, getMarketState, type AlphaZoneCard } from "@/lib/data";
 import { RecommendTabs } from "@/components/RecommendTabs";
+import { RegimeHeader } from "@/components/RegimeHeader";
 import { fmtPrice, fmtPct } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function AlphaZonePage() {
   const { data: cards, isSample } = await getAlphaZoneStocks(12);
+  const marketState = await getMarketState();
 
   return (
     <AppShell
@@ -24,6 +26,7 @@ export default async function AlphaZonePage() {
       }
     >
       <RecommendTabs />
+      <RegimeHeader state={marketState} />
 
       {isSample && (
         <div className="mb-4">

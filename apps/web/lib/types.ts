@@ -65,10 +65,14 @@ export interface FactorView {
 
 // ── 시장(마켓) ──
 export type Regime = "risk_on" | "neutral" | "risk_off";
+// 4국면 — 방향(score) × 추세강도(ER). null 이면 구버전 레짐(미산출).
+export type MarketState = "uptrend" | "downtrend" | "range" | "transition";
 export interface RegimeView {
   regime: Regime;
   score: number; // -1(위험회피) ~ 1(위험선호)
   drivers: string[];
+  market_state?: MarketState | null; // 상승/하락/횡보/전환
+  structure?: "trend" | "chop" | null;
 }
 export interface MacroSeriesView {
   series_id: string;

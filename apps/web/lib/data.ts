@@ -673,6 +673,42 @@ export interface MorningBrief {
   created_at: string;
 }
 
+// 4국면 시장 상태 — market_regime 최신행 직접 읽기(모닝브리프 payload 와 별개).
+// market_state 미상(구버전 레짐)이면 regime 으로 폴백 추론.
+export interface MarketStateView {
+  regime: string;
+  score: number;
+  market_state: string | null; // uptrend|downtrend|range|transition
+  structure: string | null;
+  drivers: string[];
+}
+
+export async function getMarketState(): Promise<MarketStateView | null> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("market_regime")
+      .select("regime,score,drivers,market_state,structure")
+      .order("date", { ascending: false })
+      .limit(1)
+      .single();
+    if (!data) return null;
+    const regime = (data.regime as string) ?? "neutral";
+    // 폴백 — market_state 없으면 regime 으로 추론(상승/하락/중립).
+    const fallback =
+      regime === "risk_off" ? "downtrend" : regime === "risk_on" ? "uptrend" : "transition";
+    return {
+      regime,
+      score: Number(data.score ?? 0),
+      market_state: (data.market_state as string) ?? fallback,
+      structure: (data.structure as string) ?? null,
+      drivers: (data.drivers as string[]) ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
   try {
     const supabase = await createClient();
