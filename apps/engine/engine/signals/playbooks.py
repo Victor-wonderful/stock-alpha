@@ -674,9 +674,51 @@ def detect_quantile(
     )
 
 
+# 앙상블 멤버 — df 단일 인자로 호출 가능한 추세·돌파 셋업(검증 통과 위주).
+_ENSEMBLE_MEMBERS = (
+    "kalman", "median", "pivot", "leader_trend", "breakout",
+    "high_52w", "vol_squeeze", "double_bottom",
+)
+
+
+def detect_ensemble(df: pd.DataFrame, min_votes: int = 2) -> Candidate | None:
+    """앙상블(합의) — 통과 셋업 다수가 동시에 매수를 가리키면 고확신 진입.
+
+    독립적인 추세·돌파 셋업이 같은 종목·같은 봉에서 동시 트리거 = 신호 일치도↑.
+    표를 모아 min_votes 이상이면 합의 후보 발행. 지지선은 멤버 지지선 중 종가
+    아래 최댓값(가장 가까운 구조). 단일 셋업보다 승률·신뢰가 높은지는 게이트가 판단.
+    """
+    votes: list[Candidate] = []
+    for key in _ENSEMBLE_MEMBERS:
+        det = ALL_DETECTORS.get(key)
+        if det is None:
+            continue
+        try:
+            cand = det(df)
+        except TypeError:           # 컨텍스트 필요한 멤버는 건너뜀
+            continue
+        if cand is not None and cand.side == "buy":
+            votes.append(cand)
+    if len(votes) < min_votes:
+        return None
+    c = _last(df["close"])
+    atr = _last(ind.atr(df))
+    sups = [v.support for v in votes if v.support is not None and v.support < c]
+    support = max(sups) if sups else _last(ind.sma(df["close"], 20))
+    names = ",".join(sorted({v.setup for v in votes}))
+    return Candidate(
+        setup="ensemble", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=support,
+        strength=min(1.0, 0.6 + 0.1 * len(votes)),
+        rationale=[f"합의 {len(votes)}개 셋업: {names}", "다중 셋업 동시 신호"],
+        payload={"votes": len(votes), "members": names},
+    )
+
+
 ALL_DETECTORS = {
     "sigma": detect_sigma,
     "kalman": detect_kalman,
+    "ensemble": detect_ensemble,
     "delta": detect_delta,
     "markov": detect_markov,
     "pivot": detect_pivot,
@@ -708,6 +750,7 @@ ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
     "pivot": ("swing",),                 # 피봇 돌파
     "median": ("position",),             # 강건 추세
     "quantile": ("swing",),              # 분위 반등(평균회귀)
+    "ensemble": ("position",),           # 다중 셋업 합의(고확신)
     "leader_trend": ("swing", "position"),
     "oversold_bounce": ("swing",),
     "breakout": ("swing", "position"),

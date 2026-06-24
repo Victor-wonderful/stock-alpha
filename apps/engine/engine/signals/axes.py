@@ -28,6 +28,7 @@ TradeSetup = Literal[
     "delta",
     "markov",
     "quantile",
+    "ensemble",
 ]
 TradeSession = Literal["pre", "regular", "close", "after"]
 
@@ -37,7 +38,7 @@ SETUPS: tuple[TradeSetup, ...] = (
     "flow_accumulation", "pullback", "high_52w", "vol_squeeze", "pead",
     "theme", "new_listing",
     "double_bottom", "anchor_pullback", "kalman", "sigma",
-    "pivot", "median", "delta", "markov", "quantile",
+    "pivot", "median", "delta", "markov", "quantile", "ensemble",
 )
 SESSIONS: tuple[TradeSession, ...] = ("pre", "regular", "close", "after")
 
@@ -63,6 +64,7 @@ SETUP_LABELS: dict[TradeSetup, str] = {
     "delta": "델타(AR1) 모멘텀",
     "markov": "마르코프 레짐",
     "quantile": "콴타일 반등",
+    "ensemble": "앙상블 합의",
 }
 
 # 플레이북별 기본 매핑 (스타일·세션). 시그널 생성 시 기본값으로 사용.
@@ -86,6 +88,7 @@ SETUP_DEFAULT_STYLE = {
     "delta": "swing",
     "markov": "position",
     "quantile": "swing",
+    "ensemble": "position",
 }
 SETUP_DEFAULT_SESSION = {
     "factor_composite": "regular",
@@ -107,4 +110,5 @@ SETUP_DEFAULT_SESSION = {
     "delta": "regular",
     "markov": "regular",
     "quantile": "regular",
+    "ensemble": "regular",
 }

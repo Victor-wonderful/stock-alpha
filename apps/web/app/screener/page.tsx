@@ -19,6 +19,7 @@ const SETUP_LABELS: Record<string, string> = {
   flow_accumulation: "수급 동반 매집",
   pivot: "피봇 돌파",
   median: "메디안 추세",
+  ensemble: "앙상블 합의",
 };
 const STYLE_LABELS: Record<string, string> = {
   swing: "스윙",
