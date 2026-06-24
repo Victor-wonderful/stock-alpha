@@ -18,16 +18,31 @@ from engine.logging import get_logger
 
 log = get_logger(__name__)
 
-SOURCE_VERSION = "regime-v2"
+SOURCE_VERSION = "regime-v3"
+
+# 추세/횡보 경계 — 종목별 20일 효율성비율(ER) 평균. ER↑=방향성(추세), ↓=경로 꼬임(횡보).
+ER_TREND = 0.40
+
+
+def efficiency_ratio(close: pd.Series, n: int = 20) -> float | None:
+    """Kaufman 효율성비율 = |순변동| / Σ|일별변동| (0~1). 1=완전추세, 0=완전횡보."""
+    if len(close) < n + 1:
+        return None
+    seg = close.iloc[-(n + 1):]
+    net = abs(float(seg.iloc[-1]) - float(seg.iloc[0]))
+    path = float(seg.diff().abs().sum())
+    return net / path if path > 0 else 0.0
 
 
 def compute_regime(
-    returns_20d: list[float], foreign_net_5d: float | None
+    returns_20d: list[float], foreign_net_5d: float | None,
+    avg_er: float | None = None,
 ) -> dict:
-    """레짐 점수·동인 산출 (순수 함수).
+    """레짐 점수·동인·구조 산출 (순수 함수).
 
     returns_20d: 종목별 20일 수익률 단면.
     foreign_net_5d: 최근 5일 외국인 순매수 합(KRW). None 이면 수급 축 제외.
+    avg_er: 종목별 효율성비율 평균(추세/횡보 축). None 이면 구조 축 제외.
     """
     drivers: list[str] = []
     parts: list[float] = []
@@ -50,7 +65,29 @@ def compute_regime(
 
     score = round(sum(parts) / len(parts), 4) if parts else 0.0
     regime = "risk_on" if score > 0.2 else "risk_off" if score < -0.2 else "neutral"
-    return {"regime": regime, "score": score, "drivers": drivers}
+
+    # ── 2축: 방향(score) × 추세강도(ER) → 4국면(market_state) ──
+    # 방향이 강하면(|score|>0.2) 그게 우선 = 상승/하락추세(ER 무관). 평균회귀가
+    # 통하는 '진짜 횡보'는 방향이 약한 중립 구간 + 저ER(가격이 평균 주위 진동)일 때만.
+    # → -18%·상승5% 같은 강한 하락은 ER이 낮아도 '하락추세'로 분류(역추세·수급 라우팅).
+    structure: str | None = None
+    market_state: str | None = None
+    if avg_er is not None:
+        structure = "trend" if avg_er >= ER_TREND else "chop"
+        drivers.append(f"추세강도 ER {avg_er:.2f}")
+        if score > 0.2:
+            market_state = "uptrend"          # 상승추세 — 추세추종 우호
+        elif score < -0.2:
+            market_state = "downtrend"        # 하락추세 — 역추세·수급·방어
+        elif structure == "chop":
+            market_state = "range"            # 중립+저ER = 횡보 — 평균회귀 우호
+        else:
+            market_state = "transition"       # 중립+추세 = 방향 전환 구간
+
+    return {
+        "regime": regime, "score": score, "drivers": drivers,
+        "structure": structure, "market_state": market_state,
+    }
 
 
 def _load_closes(iid: int, limit: int = 25) -> pd.DataFrame:
@@ -80,6 +117,13 @@ def run(frames: dict[int, pd.DataFrame] | None = None) -> dict:
         if len(df) >= 21
     ]
 
+    # 추세/횡보 축 — 종목별 효율성비율 평균
+    ers = [
+        efficiency_ratio(df["close"]) for df in frames.values() if len(df) >= 21
+    ]
+    ers = [e for e in ers if e is not None]
+    avg_er = sum(ers) / len(ers) if ers else None
+
     # 외국인 5일 순매수 — flows 최신 5영업일 합 (적재된 종목 한정)
     fn: float | None = None
     flows = (
@@ -92,7 +136,7 @@ def run(frames: dict[int, pd.DataFrame] | None = None) -> dict:
                 if r["date"] in days and r.get("foreign_net") is not None]
         fn = sum(vals) if vals else None
 
-    out = compute_regime(rets, fn)
+    out = compute_regime(rets, fn, avg_er)
     row = {
         "date": date.today().isoformat(),
         **out,
