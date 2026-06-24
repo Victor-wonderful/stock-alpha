@@ -29,6 +29,8 @@ TradeSetup = Literal[
     "markov",
     "quantile",
     "ensemble",
+    "sortino",
+    "bayes",
 ]
 TradeSession = Literal["pre", "regular", "close", "after"]
 
@@ -39,6 +41,7 @@ SETUPS: tuple[TradeSetup, ...] = (
     "theme", "new_listing",
     "double_bottom", "anchor_pullback", "kalman", "sigma",
     "pivot", "median", "delta", "markov", "quantile", "ensemble",
+    "sortino", "bayes",
 )
 SESSIONS: tuple[TradeSession, ...] = ("pre", "regular", "close", "after")
 
@@ -65,6 +68,8 @@ SETUP_LABELS: dict[TradeSetup, str] = {
     "markov": "마르코프 레짐",
     "quantile": "콴타일 반등",
     "ensemble": "앙상블 합의",
+    "sortino": "소르티노 모멘텀",
+    "bayes": "베이즈 결합",
 }
 
 # 플레이북별 기본 매핑 (스타일·세션). 시그널 생성 시 기본값으로 사용.
@@ -89,6 +94,8 @@ SETUP_DEFAULT_STYLE = {
     "markov": "position",
     "quantile": "swing",
     "ensemble": "position",
+    "sortino": "position",
+    "bayes": "position",
 }
 SETUP_DEFAULT_SESSION = {
     "factor_composite": "regular",
@@ -111,4 +118,6 @@ SETUP_DEFAULT_SESSION = {
     "markov": "regular",
     "quantile": "regular",
     "ensemble": "regular",
+    "sortino": "regular",
+    "bayes": "regular",
 }

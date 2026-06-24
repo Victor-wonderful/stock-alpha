@@ -20,6 +20,8 @@ const SETUP_LABELS: Record<string, string> = {
   pivot: "피봇 돌파",
   median: "메디안 추세",
   ensemble: "앙상블 합의",
+  sortino: "소르티노 모멘텀",
+  bayes: "베이즈 결합",
 };
 const STYLE_LABELS: Record<string, string> = {
   swing: "스윙",
