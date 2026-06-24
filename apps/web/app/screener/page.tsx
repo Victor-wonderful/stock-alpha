@@ -17,6 +17,8 @@ const SETUP_LABELS: Record<string, string> = {
   factor_composite: "팩터 종합",
   kalman: "칼만 추세",
   flow_accumulation: "수급 동반 매집",
+  pivot: "피봇 돌파",
+  median: "메디안 추세",
 };
 const STYLE_LABELS: Record<string, string> = {
   swing: "스윙",

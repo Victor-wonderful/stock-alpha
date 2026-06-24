@@ -548,9 +548,140 @@ def detect_kalman(
     )
 
 
+def detect_delta(df: pd.DataFrame, win: int = 30, ma: int = 20) -> Candidate | None:
+    """델타(AR1) — 수익률 양의 자기상관(모멘텀 지속 레짐)일 때 추세 진입.
+
+    AR(1) 계수 φ(lag-1 자기상관)가 양이면 추세가 이어지는 국면. φ>0 + 상승추세
+    + 직전 양봉일 때 매수. 평균회귀(φ<0)는 진입 안 함.
+    """
+    if len(df) < win + ma + 2:
+        return None
+    close = df["close"]
+    r = close.pct_change().dropna()
+    if len(r) < win + 1:
+        return None
+    rw = r.iloc[-win:]
+    if float(rw.std()) == 0:          # 무변동(분산 0) — autocorr 정의 안 됨
+        return None
+    phi = float(rw.autocorr(lag=1))
+    if phi != phi:  # NaN
+        return None
+    c, m = _last(close), _last(ind.sma(close, ma))
+    if not (phi > 0.1 and c > m and float(r.iloc[-1]) > 0):
+        return None
+    atr = _last(ind.atr(df))
+    return Candidate(
+        setup="delta", side="buy", style="swing", session="regular",
+        entry_ref=c, atr=atr, support=m, strength=min(1.0, 0.6 + phi),
+        rationale=[f"AR(1) φ={phi:.2f} 모멘텀 지속", "상승추세·양봉"],
+        payload={"phi": phi},
+    )
+
+
+def detect_markov(df: pd.DataFrame, win: int = 40, ma: int = 20) -> Candidate | None:
+    """마르코프 — 상승상태 지속확률 P(상승|상승)이 높은 추세 레짐에서 진입."""
+    if len(df) < win + ma + 2:
+        return None
+    close = df["close"]
+    u = (close.diff() > 0).astype(int).iloc[-win:].to_numpy()
+    n_u = n_uu = 0
+    for i in range(len(u) - 1):
+        if u[i] == 1:
+            n_u += 1
+            n_uu += int(u[i + 1] == 1)
+    if n_u < 5:
+        return None
+    p_uu = n_uu / n_u
+    c, m = _last(close), _last(ind.sma(close, ma))
+    if not (p_uu >= 0.55 and int(u[-1]) == 1 and c > m):
+        return None
+    atr = _last(ind.atr(df))
+    return Candidate(
+        setup="markov", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=m, strength=min(1.0, 0.5 + p_uu),
+        rationale=[f"P(상승|상승)={p_uu:.0%} 추세 레짐", "상승추세 지속"],
+        payload={"p_uu": p_uu},
+    )
+
+
+def detect_pivot(df: pd.DataFrame, lookback: int = 20) -> Candidate | None:
+    """피봇 — 직전 구간 피봇 저항(R1) 상향 돌파(전일은 아래, 당일 상회)."""
+    if len(df) < lookback + 2:
+        return None
+    close = df["close"]
+    w = df.iloc[-(lookback + 1):-1]
+    hh, ll, cc = float(w["high"].max()), float(w["low"].min()), float(close.iloc[-2])
+    pp = (hh + ll + cc) / 3
+    r1 = 2 * pp - ll
+    c, prev = _last(close), float(close.iloc[-2])
+    if not (prev <= r1 < c):
+        return None
+    atr = _last(ind.atr(df))
+    return Candidate(
+        setup="pivot", side="buy", style="swing", session="regular",
+        entry_ref=c, atr=atr, support=pp, strength=0.6,
+        rationale=[f"피봇 R1({r1:,.0f}) 상향 돌파", "지지=피봇 PP"],
+        payload={"pp": pp, "r1": r1},
+    )
+
+
+def detect_median(df: pd.DataFrame, n: int = 20, ma_long: int = 60) -> Candidate | None:
+    """메디안 — 이동중앙값(이상치 강건) 상회·상승 + 장기추세 추종."""
+    if len(df) < ma_long + 12:
+        return None
+    close = df["close"]
+    med = close.rolling(n).median()
+    c, md, md_past = _last(close), _last(med), float(med.iloc[-11])
+    ml = _last(ind.sma(close, ma_long))
+    if not (c > md > md_past and c > ml):
+        return None
+    atr = _last(ind.atr(df))
+    return Candidate(
+        setup="median", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=md, strength=0.6,
+        rationale=["종가>이동중앙값", "중앙값 상승(강건 추세)"],
+        payload={"median": md},
+    )
+
+
+def detect_quantile(
+    df: pd.DataFrame, win: int = 60, q: float = 0.1, ma_long: int = 60,
+) -> Candidate | None:
+    """콴타일 — 60일 하위 분위(q10) 이하 과매도 + 반전 바 + MA60 상승(레짐 필터).
+
+    sigma 교훈 반영: 평균회귀는 레짐 의존 → 장기추세 상승일 때만 진입(칼날 배제).
+    """
+    if len(df) < win + 12:
+        return None
+    close, high, low = df["close"], df["high"], df["low"]
+    ql = float(close.iloc[-win:].quantile(q))
+    c, prev = _last(close), float(close.iloc[-2])
+    if c > ql:
+        return None
+    day_hi, day_lo = float(high.iloc[-1]), float(low.iloc[-1])
+    rng = day_hi - day_lo
+    if not (c > prev and rng > 0 and c >= day_lo + 0.5 * rng):
+        return None
+    ml = ind.sma(close, ma_long)
+    if not (_last(ml) > float(ml.iloc[-11])):
+        return None
+    atr = _last(ind.atr(df))
+    return Candidate(
+        setup="quantile", side="buy", style="swing", session="regular",
+        entry_ref=c, atr=atr, support=day_lo, strength=0.6,
+        rationale=[f"60일 q{int(q * 100)} 이하 과매도", "반전 바", "MA60 상승"],
+        payload={"ql": ql},
+    )
+
+
 ALL_DETECTORS = {
     "sigma": detect_sigma,
     "kalman": detect_kalman,
+    "delta": detect_delta,
+    "markov": detect_markov,
+    "pivot": detect_pivot,
+    "median": detect_median,
+    "quantile": detect_quantile,
     "leader_trend": detect_leader_trend,
     "oversold_bounce": detect_oversold_bounce,
     "breakout": detect_breakout,
@@ -572,6 +703,11 @@ ALL_DETECTORS = {
 ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
     "sigma": ("swing",),                 # 평균회귀 — 단/중기
     "kalman": ("swing", "position"),     # 추세 추종
+    "delta": ("swing",),                 # AR(1) 모멘텀 지속
+    "markov": ("position",),             # 추세 레짐 지속
+    "pivot": ("swing",),                 # 피봇 돌파
+    "median": ("position",),             # 강건 추세
+    "quantile": ("swing",),              # 분위 반등(평균회귀)
     "leader_trend": ("swing", "position"),
     "oversold_bounce": ("swing",),
     "breakout": ("swing", "position"),

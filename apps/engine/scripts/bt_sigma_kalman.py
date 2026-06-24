@@ -13,7 +13,8 @@ from engine.signals.playbooks import ALLOWED_STYLES, DAILY_TESTABLE_STYLES
 
 SAMPLE = 400          # 유동 상위 N종목
 BARS = 320            # 종목당 일봉 수
-SETUPS = ["sigma", "kalman", "leader_trend", "oversold_bounce"]
+# 통계 셋업(luckybot 이식) 전체 + baseline. 칼만은 O(n²)라 단독 검증 권장.
+SETUPS = ["pivot", "median", "delta", "markov", "quantile", "sigma", "leader_trend"]
 
 print(f"OHLCV 로드 (bars={BARS}) ...", flush=True)
 frames = db_direct.load_all_ohlcv_1d(bars=BARS)
