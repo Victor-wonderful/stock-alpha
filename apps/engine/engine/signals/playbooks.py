@@ -472,7 +472,78 @@ def detect_anchor_pullback(
     )
 
 
+def detect_sigma(
+    df: pd.DataFrame, n: int = 20, k: float = 2.0,
+) -> Candidate | None:
+    """시그마(σ) 밴드 평균회귀 — 통계적 과매도 반등(luckybot 'Sigma' 계열).
+
+    종가가 하단 볼린저 밴드(MA−kσ)를 이탈할 만큼 과매도된 뒤, **반전이 시작
+    (당일 종가 > 전일 종가)**될 때만 매수. 목표는 평균(MA) 회귀. 떨어지는 칼날
+    회피 위해 반전 확인을 요구한다. oversold_bounce(투매 기반)와 달리 순수 σ 기반.
+    """
+    if len(df) < n + 2:
+        return None
+    close = df["close"]
+    ma = ind.sma(close, n)
+    sd = ind.rolling_std(close, n)
+    c, m, s = _last(close), _last(ma), _last(sd)
+    if s <= 0 or m <= 0:
+        return None
+    z = (c - m) / s
+    prev = float(close.iloc[-2])
+    if not (z <= -k and c > prev):            # 하단밴드 이탈 + 반전 양봉
+        return None
+    atr = _last(ind.atr(df))
+    lower = m - k * s
+    day_low = float(df["low"].iloc[-1])
+    return Candidate(
+        setup="sigma", side="buy", style="swing", session="regular",
+        entry_ref=c, atr=atr, support=min(lower, day_low),
+        strength=0.6 + (0.1 if z <= -(k + 0.5) else 0.0),
+        rationale=[f"σ밴드 하단 이탈 z={z:.1f}", "반전 양봉 확인",
+                   "평균(MA20) 회귀 기대"],
+        payload={"z": z, "ma": m, "sigma": s},
+    )
+
+
+def detect_kalman(
+    df: pd.DataFrame, slope_bars: int = 3, max_ext: float = 0.15,
+) -> Candidate | None:
+    """칼만 추세 추종 — 동적 추세선 상회(luckybot 'Kalman' 계열).
+
+    칼만필터로 추정한 추세선이 **상승 중**이고 종가가 그 위에 있을 때 매수.
+    추세선 대비 과대 이격(>15%)은 추격 회피로 제외. 손절은 칼만선(support)
+    아래로 — 라이브에선 칼만선을 따라가는 트레일링 스탑으로 확장 가능(차기).
+    """
+    if len(df) < 40:
+        return None
+    close = df["close"]
+    kf = ind.kalman(close)
+    if len(kf) < slope_bars + 1:
+        return None
+    c = _last(close)
+    k = _last(kf)
+    k_prev = float(kf.iloc[-(slope_bars + 1)])
+    if k <= 0 or not (k > k_prev and c > k):  # 추세선 상승 + 종가 상회
+        return None
+    ext = (c - k) / k
+    if ext > max_ext:                          # 과대 이격 추격 배제
+        return None
+    atr = _last(ind.atr(df))
+    slope = (k - k_prev) / k_prev
+    return Candidate(
+        setup="kalman", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=k,
+        strength=min(1.0, 0.6 + (0.1 if slope >= 0.01 else 0.0)),
+        rationale=["칼만 추세선 상승", "종가 > 칼만선",
+                   f"기울기 {slope:+.1%}"],
+        payload={"kalman": k, "slope": slope, "ext": ext},
+    )
+
+
 ALL_DETECTORS = {
+    "sigma": detect_sigma,
+    "kalman": detect_kalman,
     "leader_trend": detect_leader_trend,
     "oversold_bounce": detect_oversold_bounce,
     "breakout": detect_breakout,
@@ -492,6 +563,8 @@ ALL_DETECTORS = {
 # - high_52w·pead 는 장기 드리프트라 position 만.
 # - mean-reversion(oversold_bounce)은 단/중기라 swing 만.
 ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
+    "sigma": ("swing",),                 # 평균회귀 — 단/중기
+    "kalman": ("swing", "position"),     # 추세 추종
     "leader_trend": ("swing", "position"),
     "oversold_bounce": ("swing",),
     "breakout": ("swing", "position"),

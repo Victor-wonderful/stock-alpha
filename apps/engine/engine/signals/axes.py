@@ -19,6 +19,10 @@ TradeSetup = Literal[
     "pead",
     "theme",
     "new_listing",
+    "double_bottom",
+    "anchor_pullback",
+    "kalman",
+    "sigma",
 ]
 TradeSession = Literal["pre", "regular", "close", "after"]
 
@@ -27,6 +31,7 @@ SETUPS: tuple[TradeSetup, ...] = (
     "breakout", "close_betting",
     "flow_accumulation", "pullback", "high_52w", "vol_squeeze", "pead",
     "theme", "new_listing",
+    "double_bottom", "anchor_pullback", "kalman", "sigma",
 )
 SESSIONS: tuple[TradeSession, ...] = ("pre", "regular", "close", "after")
 
@@ -43,6 +48,10 @@ SETUP_LABELS: dict[TradeSetup, str] = {
     "pead": "실적 모멘텀(PEAD)",
     "theme": "테마주",
     "new_listing": "신규주",
+    "double_bottom": "쌍바닥(W)",
+    "anchor_pullback": "기준봉 눌림",
+    "kalman": "칼만 추세",
+    "sigma": "시그마 평균회귀",
 }
 
 # 플레이북별 기본 매핑 (스타일·세션). 시그널 생성 시 기본값으로 사용.
@@ -57,6 +66,10 @@ SETUP_DEFAULT_STYLE = {
     "high_52w": "position",
     "vol_squeeze": "swing",
     "pead": "position",
+    "double_bottom": "swing",
+    "anchor_pullback": "swing",
+    "kalman": "position",
+    "sigma": "swing",
 }
 SETUP_DEFAULT_SESSION = {
     "factor_composite": "regular",
@@ -69,4 +82,8 @@ SETUP_DEFAULT_SESSION = {
     "high_52w": "regular",
     "vol_squeeze": "regular",
     "pead": "regular",
+    "double_bottom": "regular",
+    "anchor_pullback": "regular",
+    "kalman": "regular",
+    "sigma": "regular",
 }
