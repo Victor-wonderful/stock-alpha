@@ -141,9 +141,25 @@ export default async function FocusContent() {
     getMarketState(),
   ]);
 
-  const picks = recs.isSample
+  // 픽 stale 가드 — 픽 선정 후 리포트가 재생성돼 픽 종목이 '거래 부적합'으로 바뀌거나,
+  // 픽 날짜가 최신 리포트보다 과거(픽 재생성 누락)이면 그 픽은 무효. 무효 픽을 행동 가능한
+  // 계획처럼 보여주지 않게 숨기고 안내(freshness-guard 원칙). 근본 수정은 엔진 픽 재생성.
+  const allPicks = recs.isSample
     ? []
     : recs.data.filter((r) => r.basket_type === "daily_focus");
+  const latestRepDay = allReports.data[0]?.as_of ?? null;
+  const repForGuard = new Map<string | null, (typeof allReports.data)[number]>();
+  for (const r of allReports.data) {
+    if (!repForGuard.has(r.symbol)) repForGuard.set(r.symbol, r);
+  }
+  const isStalePick = (p: (typeof allPicks)[number]) => {
+    const rep = repForGuard.get(p.symbol);
+    if (rep?.rating === "거래 부적합") return true;
+    if (p.as_of && latestRepDay && p.as_of < latestRepDay) return true;
+    return false;
+  };
+  const stalePicks = allPicks.filter(isStalePick);
+  const picks = allPicks.filter((p) => !isStalePick(p));
   // 카드용 미니 스노우플레이크 5축 — 픽 종목만 벌크 1회 조회(실패 시 빈 Map).
   const snowMap = await getSnowflakesForSymbols(picks.map((p) => p.symbol));
   // 진입 레벨 알림 — 픽별 현재가(최신 종가) 병렬 조회 → 진입 타이밍/대기/무효 판정.
@@ -355,14 +371,30 @@ export default async function FocusContent() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           {/* 픽 리스트 */}
           <div className="space-y-3">
-            {picks.length === 0 ? (
-              <div className="rounded-[20px] border border-dashed border-border bg-surface p-16 text-center">
-                <p className="text-sm text-text-mute">
-                  {recs.isSample
-                    ? "데이터 연결 후 오늘의 픽이 표시됩니다"
-                    : "오늘은 기준(판정·거래가능 게이트·백테스트)을 통과한 종목이 없습니다. 억지로 채우지 않습니다."}
+            {/* 픽 stale 가드 안내 — 무효(거래 부적합·날짜 과거) 픽을 숨겼을 때 */}
+            {stalePicks.length > 0 && (
+              <div className="mb-3 flex items-start gap-2.5 rounded-[14px] border border-warn/30 bg-warn-soft px-4 py-3">
+                <span className="mt-0.5 shrink-0 text-warn" aria-hidden>
+                  ⏳
+                </span>
+                <p className="text-[12px] leading-relaxed text-text-dim">
+                  <span className="font-bold text-warn">픽 갱신 대기 중</span> — 분석(리포트)은
+                  최신이지만 추천 픽 <span className="font-semibold text-text">{stalePicks.length}건</span>이
+                  최신 리포트와 어긋나(‘거래 부적합’으로 바뀌었거나 날짜가 과거) 숨겼습니다. 다음 일일
+                  배치에서 최신 리포트 기준으로 다시 선정됩니다.
                 </p>
               </div>
+            )}
+            {picks.length === 0 ? (
+              stalePicks.length > 0 ? null : (
+                <div className="rounded-[20px] border border-dashed border-border bg-surface p-16 text-center">
+                  <p className="text-sm text-text-mute">
+                    {recs.isSample
+                      ? "데이터 연결 후 오늘의 픽이 표시됩니다"
+                      : "오늘은 기준(판정·거래가능 게이트·백테스트)을 통과한 종목이 없습니다. 억지로 채우지 않습니다."}
+                  </p>
+                </div>
+              )
             ) : (
               picks.map((p, i) => (
                 <PickCard
