@@ -472,7 +472,85 @@ def detect_anchor_pullback(
     )
 
 
+def detect_sigma(
+    df: pd.DataFrame, n: int = 20, k: float = 2.0, trend_n: int = 60,
+) -> Candidate | None:
+    """시그마(σ) 밴드 평균회귀 — '상승추세 속 눌림'만(luckybot 'Sigma' 계열, v2).
+
+    v1(순수 σ밴드)은 전 구간 +0.689R이나 하락장에서 떨어지는 칼날을 잡아 워크포워드
+    탈락(최근 -0.379R). v2는 **장기추세 필터(MA60 상승)**로 하락추세 종목을 배제하고,
+    **반전 바 품질**(종가가 당일 레인지 상단 절반)을 요구해 칼날을 거른다.
+    조건: ① 하단밴드 이탈(z≤-k) ② 반전 양봉·종가 레인지 상단부 ③ MA60 상승.
+    """
+    if len(df) < trend_n + 12:
+        return None
+    close, high, low = df["close"], df["high"], df["low"]
+    ma = ind.sma(close, n)
+    sd = ind.rolling_std(close, n)
+    ma_t = ind.sma(close, trend_n)
+    c, m, s = _last(close), _last(ma), _last(sd)
+    if s <= 0 or m <= 0:
+        return None
+    z = (c - m) / s
+    if z > -k:                                 # ① 하단밴드 이탈
+        return None
+    prev = float(close.iloc[-2])
+    day_hi, day_lo = float(high.iloc[-1]), float(low.iloc[-1])
+    rng = day_hi - day_lo
+    if not (c > prev and rng > 0 and c >= day_lo + 0.5 * rng):  # ② 반전 바 품질
+        return None
+    if not (_last(ma_t) > float(ma_t.iloc[-11])):  # ③ MA60 상승(하락추세 칼날 배제)
+        return None
+    atr = _last(ind.atr(df))
+    lower = m - k * s
+    return Candidate(
+        setup="sigma", side="buy", style="swing", session="regular",
+        entry_ref=c, atr=atr, support=min(lower, day_lo),
+        strength=0.6 + (0.1 if z <= -(k + 0.5) else 0.0),
+        rationale=[f"σ밴드 하단 이탈 z={z:.1f}", "반전 바(레인지 상단부)",
+                   "MA60 상승(상승추세 눌림)"],
+        payload={"z": z, "ma": m, "sigma": s},
+    )
+
+
+def detect_kalman(
+    df: pd.DataFrame, slope_bars: int = 3, max_ext: float = 0.15,
+) -> Candidate | None:
+    """칼만 추세 추종 — 동적 추세선 상회(luckybot 'Kalman' 계열).
+
+    칼만필터로 추정한 추세선이 **상승 중**이고 종가가 그 위에 있을 때 매수.
+    추세선 대비 과대 이격(>15%)은 추격 회피로 제외. 손절은 칼만선(support)
+    아래로 — 라이브에선 칼만선을 따라가는 트레일링 스탑으로 확장 가능(차기).
+    """
+    if len(df) < 40:
+        return None
+    close = df["close"]
+    kf = ind.kalman(close)
+    if len(kf) < slope_bars + 1:
+        return None
+    c = _last(close)
+    k = _last(kf)
+    k_prev = float(kf.iloc[-(slope_bars + 1)])
+    if k <= 0 or not (k > k_prev and c > k):  # 추세선 상승 + 종가 상회
+        return None
+    ext = (c - k) / k
+    if ext > max_ext:                          # 과대 이격 추격 배제
+        return None
+    atr = _last(ind.atr(df))
+    slope = (k - k_prev) / k_prev
+    return Candidate(
+        setup="kalman", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=k,
+        strength=min(1.0, 0.6 + (0.1 if slope >= 0.01 else 0.0)),
+        rationale=["칼만 추세선 상승", "종가 > 칼만선",
+                   f"기울기 {slope:+.1%}"],
+        payload={"kalman": k, "slope": slope, "ext": ext},
+    )
+
+
 ALL_DETECTORS = {
+    "sigma": detect_sigma,
+    "kalman": detect_kalman,
     "leader_trend": detect_leader_trend,
     "oversold_bounce": detect_oversold_bounce,
     "breakout": detect_breakout,
@@ -492,6 +570,8 @@ ALL_DETECTORS = {
 # - high_52w·pead 는 장기 드리프트라 position 만.
 # - mean-reversion(oversold_bounce)은 단/중기라 swing 만.
 ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
+    "sigma": ("swing",),                 # 평균회귀 — 단/중기
+    "kalman": ("swing", "position"),     # 추세 추종
     "leader_trend": ("swing", "position"),
     "oversold_bounce": ("swing",),
     "breakout": ("swing", "position"),

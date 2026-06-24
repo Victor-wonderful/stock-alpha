@@ -15,6 +15,8 @@ const SETUP_LABELS: Record<string, string> = {
   breakout: "돌파 매수",
   close_betting: "종가 베팅",
   factor_composite: "팩터 종합",
+  kalman: "칼만 추세",
+  flow_accumulation: "수급 동반 매집",
 };
 const STYLE_LABELS: Record<string, string> = {
   swing: "스윙",

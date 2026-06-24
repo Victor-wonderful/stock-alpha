@@ -24,6 +24,8 @@ export type TradeSetup =
   | 'pead'
   | 'double_bottom'
   | 'anchor_pullback'
+  | 'kalman'
+  | 'sigma'
   | 'theme'
   | 'new_listing';
 export type TradeSession = 'pre' | 'regular' | 'close' | 'after';
@@ -50,6 +52,8 @@ export const TRADE_SETUP_LABELS: Record<TradeSetup, string> = {
   pead: '실적 모멘텀(PEAD)',
   double_bottom: '쌍바닥(W) 반등',
   anchor_pullback: '기준봉 눌림',
+  kalman: '칼만 추세',
+  sigma: '시그마 평균회귀',
   theme: '테마주',
   new_listing: '신규주',
 };
