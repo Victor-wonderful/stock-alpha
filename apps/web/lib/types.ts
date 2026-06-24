@@ -98,6 +98,7 @@ export interface RecommendationView {
   tp2_price?: number | null; // 2차 목표 (스케일아웃 잔량 런) — 있으면 분할익절 픽
   stop_loss: number | null;
   as_of?: string | null; // 발행 기준일 (daily_focus 스냅샷)
+  setup?: string | null; // 셋업(플레이북) — 성격 배지용
 }
 
 // ── 전략·백테스트 ──

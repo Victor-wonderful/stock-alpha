@@ -16,27 +16,27 @@ const TABS: Array<{
   match: (path: string, setup: string | null) => boolean;
 }> = [
   {
-    label: "오늘의 포커스",
+    label: "오늘의 추천",
     href: "/focus",
-    hint: "엄선 · 레짐 억제 적용",
+    hint: "AI가 엄선한 오늘의 핵심 — 보통 여기만 봐도 됩니다",
     match: (p) => p === "/focus",
   },
   {
-    label: "수급 포착",
-    href: "/screener?setup=flow_accumulation",
-    hint: "외인·기관 순매수 · 하락장에도 작동",
-    match: (p, s) => p === "/screener" && s === "flow_accumulation",
-  },
-  {
-    label: "진입 임박",
+    label: "지금 살 자리",
     href: "/alpha-zone",
-    hint: "현재가가 진입가 ±3%",
+    hint: "가격이 진입 구간에 도달한 종목",
     match: (p) => p.startsWith("/alpha-zone"),
   },
   {
-    label: "전체",
+    label: "큰손이 사요",
+    href: "/screener?setup=flow_accumulation",
+    hint: "외국인·기관이 담고 있는 종목",
+    match: (p, s) => p === "/screener" && s === "flow_accumulation",
+  },
+  {
+    label: "전체 신호",
     href: "/screener",
-    hint: "발행 중 전체 시그널 · 필터",
+    hint: "발행 중 모든 신호 — 직접 탐색용",
     match: (p, s) => p === "/screener" && s !== "flow_accumulation",
   },
 ];

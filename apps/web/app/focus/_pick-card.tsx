@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { fmtPrice, fmtPct } from "@/lib/format";
 import { MiniSnowflake } from "@/components/MiniSnowflake";
+import { setupCharacter, TONE_CLASS } from "@/lib/setupCharacter";
 import type { SnowflakeAxis } from "@/lib/snowflake";
 import type { RecommendationView, ReportListItem } from "@/lib/types";
 
@@ -80,6 +81,8 @@ export function PickCard({
 
   // 행동 스탠스 — 판정 등급 기반(매수 후보 / 관찰 대기 / 관망).
   const stance = stanceFor(report?.rating ?? null);
+  // 성격 — "왜 떴나"(큰손/추세/반등…). 전 픽이 게이트 통과분이라 검증 배지도 함께.
+  const ch = setupCharacter(pick.setup);
 
   return (
     <div
@@ -110,9 +113,18 @@ export function PickCard({
             <span className="mono text-[10px] text-text-mute">{pick.symbol}</span>
             <RatingBadge rating={report?.rating ?? null} />
           </div>
-          <div className="mt-0.5 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <span className="rounded px-1.5 py-0.5 text-[10px] bg-surface-3 text-text-dim font-medium">
-              {pick.style}
+              {pick.style === "position" ? "포지션 · 수주~수개월" : pick.style === "swing" ? "스윙 · 수일~수주" : pick.style}
+            </span>
+            <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold ${TONE_CLASS[ch.tone]}`}>
+              {ch.icon} {ch.label}
+            </span>
+            <span
+              title="백테스트 게이트(워크포워드·기대값·MDD)를 통과한 셋업만 발행"
+              className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-good-soft text-good"
+            >
+              🛡 검증 통과
             </span>
           </div>
         </div>
