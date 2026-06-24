@@ -5,18 +5,19 @@ import { usePathname } from "next/navigation";
 import { Activity, Bell, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// IA 확정(2026-06-23, docs/PLAN.md '웹/앱 정보구조'): 8개 → 6개로 재편.
-// 같은 signals 데이터를 4중 노출하던 메뉴(오늘의 포커스·알파존·추천 종목·종목 분석)를
-// 통합하고, 각 메뉴가 수익 깔때기(유입→가치→신뢰→전환→락인) 역할을 하나씩 진다.
-//   ② 추천 = /focus(오늘의 포커스 기본 탭, 추후 수급·진입임박·전체 탭 통합)
-//   ③ 종목 = /reports(종목 상세 5축 스노우플레이크로 확장 예정)
-//   ⑤ 내 자산 = /watchlist(보유·진단·알림 통합 예정) · ⑥ 성과 = /picks(트랙레코드)
-// 우측 아이콘: 검색→/screener(전체 탐색), 알림→/alerts.
-// match: 통합 메뉴는 흡수한 구 라우트도 활성으로 표시(② 추천=포커스·알파존·스크리너 탭,
-// ③ 종목=리포트·종목상세, ⑤ 내 자산=관심·진단).
+// IA 확정(2026-06-24, docs/PLAN.md '웹/앱 정보구조'): 8개 → 7개로 재편.
+// 추천(픽)·스크리너(시그널 탐색)·종목(검색·분석)을 본질이 달라 각각 독립 메뉴로 분리.
+//   ② 추천 = /focus(엔진 엄선 픽 큐레이션, 필터 없음)
+//   ③ 스크리너 = /screener(발행 중 전체 시그널 + 필터, 표/리스트)
+//   ④ 종목 = /reports(검색·분석 허브 → 종목 상세 5축 스노우플레이크)
+//   ⑥ 내 자산 = /watchlist(보유·진단·알림 통합 예정) · ⑦ 성과 = /picks(트랙레코드)
+// 우측 아이콘: 검색→/reports(종목 검색 허브), 알림→/alerts.
+// match: 통합 메뉴는 흡수한 구 라우트도 활성으로 표시(③ 종목=리포트·종목상세, ⑥ 내 자산=관심·진단).
+// alpha-zone 은 추천 큐레이션에 흡수돼 더는 탐색 메뉴가 아님 → 추천 match 유지(레거시 라우트).
 const NAV_ITEMS = [
   { href: "/", label: "홈", exact: true },
-  { href: "/focus", label: "추천", match: ["/focus", "/alpha-zone", "/screener"] },
+  { href: "/focus", label: "추천", match: ["/focus", "/alpha-zone"] },
+  { href: "/screener", label: "스크리너" },
   { href: "/reports", label: "종목", match: ["/reports", "/stocks"] },
   { href: "/market", label: "시장" },
   { href: "/watchlist", label: "내 자산", match: ["/watchlist", "/diagnosis", "/alerts"] },
@@ -73,7 +74,7 @@ export function GNB() {
         {/* 우측 영역 — 검색/알림/프로필 아이콘 유틸 (좌측 메뉴와 중복 라벨 제거) */}
         <div className="ml-auto flex shrink-0 items-center gap-2.5">
           <Link
-            href="/screener"
+            href="/reports"
             aria-label="종목 검색"
             className="grid h-9 w-9 place-items-center rounded-full border border-border bg-surface-2 text-text-dim hover:text-text transition-colors"
           >

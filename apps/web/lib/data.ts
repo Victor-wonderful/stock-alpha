@@ -434,7 +434,7 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("recommendations")
-      .select("basket_type,style,weight,conviction,thesis,entry_price,target_price,tp2_price,stop_loss,as_of,setup,instruments(symbol,name)")
+      .select("instrument_id,basket_type,style,weight,conviction,thesis,entry_price,target_price,tp2_price,stop_loss,as_of,setup,instruments(symbol,name)")
       .order("as_of", { ascending: false })
       .order("conviction", { ascending: false })
       .limit(100);
@@ -451,6 +451,7 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
     const rows: RecommendationView[] = current.map((r: Record<string, unknown>) => {
       const inst = (r.instruments ?? {}) as Record<string, unknown>;
       return {
+        instrument_id: (r.instrument_id as number | null) ?? null,
         basket_type: (r.basket_type as string) ?? "",
         style: r.style as RecommendationView["style"],
         symbol: (inst.symbol as string) ?? "",

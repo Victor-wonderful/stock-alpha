@@ -24,29 +24,32 @@ function RatingBadge({ rating }: { rating: string | null }) {
   );
 }
 
-// 행동 스탠스 — 판정 등급에서 도출. 점수로 편입된 '중립'을 매수처럼 보이게 하지 않고
-// 명확히 '관찰 대기'로 구분한다(픽 5개는 그대로 노출, 라벨만 정직하게).
-function stanceFor(rating: string | null): {
-  label: string;
-  cls: string;
-  hint: string;
-} {
-  if (rating === "매수")
+// 진입 레벨 알림 — 현재가 vs 진입/손절가로 '지금 진입 타이밍 / 대기 / 무효' 판정.
+// 추천 = 검증된 매매 계획서 + 레벨 알림(IA 2026-06-24)의 핵심. reports planStatus 와 동일 기준.
+function entryStatus(
+  last: number | null,
+  entry: number | null,
+  stop: number | null,
+): { label: string; cls: string; icon: string; alert: string } {
+  if (last == null || entry == null)
     return {
-      label: "매수 후보",
-      cls: "bg-good-soft text-good",
-      hint: "기준 통과 — 진입 검토 대상",
+      label: "분석 완료",
+      cls: "bg-surface-3 text-text-dim",
+      icon: "",
+      alert: "진입가·목표·손절 도달 시 알림",
     };
-  if (rating === "중립")
-    return {
-      label: "관찰 대기",
-      cls: "bg-warn-soft text-warn",
-      hint: "점수 상위로 편입 · 확신 매수 아님 — 진입 신호 확인 후 대응",
-    };
+  const diff = (last - entry) / entry;
+  if (stop != null && last <= stop)
+    return { label: "무효 · 손절가 하회", cls: "bg-bad-soft text-bad", icon: "⚠", alert: "플랜 무효 — 신규 알림 없음" };
+  if (diff > 0.05)
+    return { label: `무효 · 진입가 +${(diff * 100).toFixed(1)}% 이탈`, cls: "bg-bad-soft text-bad", icon: "⚠", alert: "진입가 이탈 — 되돌림 대기" };
+  if (Math.abs(diff) <= 0.02)
+    return { label: "지금 진입 타이밍", cls: "bg-accent text-[#0B0C10]", icon: "🟢", alert: "지금 진입가 부근 — 목표·손절 도달 시 알림" };
   return {
-    label: "관망",
-    cls: "bg-surface-3 text-text-mute",
-    hint: "보류",
+    label: `진입 대기 · ${diff >= 0 ? "+" : ""}${(diff * 100).toFixed(1)}%`,
+    cls: "bg-warn-soft text-warn",
+    icon: "⏳",
+    alert: `진입가 ${Math.round(entry).toLocaleString()} 도달하면 알림`,
   };
 }
 
@@ -56,12 +59,14 @@ export function PickCard({
   report,
   riskPct,
   mini,
+  lastPrice,
 }: {
   pick: RecommendationView & { as_of?: string | null };
   rank: number;
   report?: ReportListItem | null;
   riskPct: number;
   mini?: SnowflakeAxis[];
+  lastPrice?: number | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -79,8 +84,8 @@ export function PickCard({
         )
       : null;
 
-  // 행동 스탠스 — 판정 등급 기반(매수 후보 / 관찰 대기 / 관망).
-  const stance = stanceFor(report?.rating ?? null);
+  // 진입 레벨 알림 — 현재가 대비 진입 타이밍/대기/무효(레벨 알림 핵심).
+  const es = entryStatus(lastPrice ?? null, pick.entry_price, pick.stop_loss);
   // 성격 — "왜 떴나"(큰손/추세/반등…). 전 픽이 게이트 통과분이라 검증 배지도 함께.
   const ch = setupCharacter(pick.setup);
 
@@ -170,16 +175,16 @@ export function PickCard({
           </div>
         )}
 
-        {/* 우측: 점수 + 행동 스탠스 */}
+        {/* 우측: 점수 + 진입 레벨 알림 상태 */}
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <span className="tnum text-xl font-extrabold text-accent">
             {report?.score != null ? report.score : Math.round(pick.conviction * 100)}
           </span>
           <span
-            title={stance.hint}
-            className={`rounded-[999px] px-2.5 py-1 text-[10px] font-semibold ${stance.cls}`}
+            className={`flex items-center gap-1 rounded-[999px] px-2.5 py-1 text-[10px] font-bold ${es.cls}`}
           >
-            {stance.label}
+            {es.icon && <span aria-hidden>{es.icon}</span>}
+            {es.label}
           </span>
         </div>
       </div>
@@ -204,8 +209,12 @@ export function PickCard({
         ))}
       </div>
 
-      {/* 접이식 근거 */}
+      {/* 🔔 진입 레벨 알림 + 접이식 근거 */}
       <div className="border-t border-border px-5 py-2.5">
+        <div className="mb-2 flex items-center gap-1.5 text-[11px]">
+          <span aria-hidden className="text-accent">🔔</span>
+          <span className="font-medium text-text-dim">{es.alert}</span>
+        </div>
         <button
           onClick={() => setOpen((v) => !v)}
           className="flex w-full items-center justify-between text-left"

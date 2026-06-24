@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Calculator, ListFilter, ScanSearch } from "lucide-react";
 import { GNB } from "@/components/GNB";
 import {
+  getLatestPrice,
   getMarketState,
   getMorningBrief,
   getPickHistory,
@@ -17,7 +18,6 @@ import { RegimeHeader } from "@/components/RegimeHeader";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { PickCard } from "./_pick-card";
-import { RecommendTabs } from "@/components/RecommendTabs";
 
 // 다음 거래일 라벨
 function nextTradingDayLabel(asOf: string): string {
@@ -146,6 +146,17 @@ export default async function FocusContent() {
     : recs.data.filter((r) => r.basket_type === "daily_focus");
   // 카드용 미니 스노우플레이크 5축 — 픽 종목만 벌크 1회 조회(실패 시 빈 Map).
   const snowMap = await getSnowflakesForSymbols(picks.map((p) => p.symbol));
+  // 진입 레벨 알림 — 픽별 현재가(최신 종가) 병렬 조회 → 진입 타이밍/대기/무효 판정.
+  const priceList = await Promise.all(
+    picks.map((p) =>
+      p.instrument_id ? getLatestPrice(p.instrument_id) : Promise.resolve({ data: null }),
+    ),
+  );
+  const priceMap = new Map<string, number>();
+  picks.forEach((p, i) => {
+    const c = priceList[i]?.data?.close;
+    if (c != null) priceMap.set(p.symbol, c);
+  });
   const asOf = picks[0]?.as_of ?? null;
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
   const basisDay = asOf ? tradingDayLabel(asOf) : null;
@@ -239,10 +250,8 @@ export default async function FocusContent() {
           </div>
         </div>
 
-        {/* ── ② 추천 탭바 (포커스·수급·진입임박·전체) ── */}
-        <RecommendTabs />
-
-        {/* ── 국면 헤더 — 지금 시장 상태 → 그래서 이 종류를 추천(알파 노하우 ②) ── */}
+        {/* ── 국면 헤더 — 지금 시장 상태 → 그래서 이 종류를 추천(알파 노하우 ②) ──
+             추천 = 필터 없는 큐레이션(IA 2026-06-24): 4탭(RecommendTabs) 폐지, 탐색은 스크리너로 분리. ── */}
         <RegimeHeader state={marketState} />
 
         {/* ── 모닝 브리프 카드 ── */}
@@ -363,6 +372,7 @@ export default async function FocusContent() {
                   report={reportBySymbol.get(p.symbol)}
                   riskPct={riskPct}
                   mini={snowMap.get(p.symbol)?.axes}
+                  lastPrice={priceMap.get(p.symbol) ?? null}
                 />
               ))
             )}

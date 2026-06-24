@@ -90,6 +90,7 @@ export interface SectorRotationView {
 
 // ── 모델 포트폴리오 / 추천 ──
 export interface RecommendationView {
+  instrument_id?: number | null; // 현재가 조회(진입 레벨 알림)용
   basket_type: string;
   style: TradeStyle;
   symbol: string;
