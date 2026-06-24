@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
-import { getSignals } from "@/lib/data";
+import { getSignals, getAlphaZoneStocks } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
 import type { SignalView } from "@/lib/types";
 
@@ -130,6 +130,7 @@ export default async function ScreenerPage({
   const activeStyle = sp.style ?? null;
   const activeMarket = sp.market ?? null;
   const search = sp.q ?? "";
+  const near = sp.near === "1"; // 진입 가능 — 현재가가 진입가 ±3% (알파존 흡수)
 
   // 셋업 칩 건수·하이라이트 집계가 전체 기준이어야 함 — 오늘만 271건이라 200 한도는 잘림(2026-06-12 점검)
   const { data: allSignals, isSample, total } = await getSignals({}, 1000);
@@ -151,6 +152,12 @@ export default async function ScreenerPage({
       (s) => s.name.toLowerCase().includes(q) || s.symbol.includes(q),
     );
   }
+  // 진입 가능 — 현재가가 진입가 ±3% 인 종목만(알파존 로직 재사용: 대량 OHLCV 일괄 조회).
+  if (near) {
+    const { data: zoneCards } = await getAlphaZoneStocks(500);
+    const zoneSet = new Set(zoneCards.map((c) => c.symbol));
+    filtered = filtered.filter((s) => zoneSet.has(s.symbol));
+  }
 
   const hl = computeHighlights(allSignals);
 
@@ -159,6 +166,7 @@ export default async function ScreenerPage({
     if (activeSetup && key !== "setup") p.set("setup", activeSetup);
     if (activeStyle && key !== "style") p.set("style", activeStyle);
     if (activeMarket && key !== "market") p.set("market", activeMarket);
+    if (near && key !== "near") p.set("near", "1");
     if (search) p.set("q", search);
     if (value) p.set(key, value);
     const qs = p.toString();
@@ -216,11 +224,15 @@ export default async function ScreenerPage({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-bold text-text-mute">빠른 필터</span>
         <Link
-          href="/alpha-zone"
-          className="flex items-center gap-1.5 rounded-[999px] border border-border bg-surface-2 px-3.5 py-1.5 text-xs font-semibold text-text transition-colors hover:border-accent"
+          href={near ? buildHref("near", null) : buildHref("near", "1")}
+          className={`flex items-center gap-1.5 rounded-[999px] border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+            near
+              ? "border-accent bg-accent text-[#0B0C10]"
+              : "border-border bg-surface-2 text-text hover:border-accent"
+          }`}
         >
-          <Crosshair className="h-3.5 w-3.5 text-accent" /> 진입 가능
-          <span className="font-medium text-text-mute">현재가가 진입가 부근</span>
+          <Crosshair className={`h-3.5 w-3.5 ${near ? "text-[#0B0C10]" : "text-accent"}`} /> 진입 가능
+          <span className={`font-medium ${near ? "text-[#0B0C10]/70" : "text-text-mute"}`}>현재가가 진입가 부근</span>
         </Link>
         <Link
           href={buildHref("setup", "flow_accumulation")}
