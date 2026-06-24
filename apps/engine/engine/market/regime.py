@@ -75,14 +75,18 @@ def compute_regime(
     if avg_er is not None:
         structure = "trend" if avg_er >= ER_TREND else "chop"
         drivers.append(f"추세강도 ER {avg_er:.2f}")
-        if score > 0.2:
-            market_state = "uptrend"          # 상승추세 — 추세추종 우호
-        elif score < -0.2:
-            market_state = "downtrend"        # 하락추세 — 역추세·수급·방어
-        elif structure == "chop":
-            market_state = "range"            # 중립+저ER = 횡보 — 평균회귀 우호
-        else:
-            market_state = "transition"       # 중립+추세 = 방향 전환 구간
+    # 방향이 강하면(|score|>0.2) ER 무관하게 추세 국면 — avg_er 가 None 이어도 판정한다.
+    # (강한 하락이 market_state=None 으로 빠져 구 risk_off 폴백·평균회귀 셋업 오허용되던
+    #  2축 라우터 버그 차단, 2026-06-24.)
+    if score > 0.2:
+        market_state = "uptrend"              # 상승추세 — 추세추종 우호
+    elif score < -0.2:
+        market_state = "downtrend"            # 하락추세 — 역추세·수급·방어
+    elif structure == "chop":
+        market_state = "range"                # 중립+저ER = 횡보 — 평균회귀 우호
+    elif structure == "trend":
+        market_state = "transition"           # 중립+추세 = 방향 전환 구간
+    # 중립 + ER 미상(avg_er None) → market_state None: 정보 부족, 구 로직 폴백 유지
 
     return {
         "regime": regime, "score": score, "drivers": drivers,
