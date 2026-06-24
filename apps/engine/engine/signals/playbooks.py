@@ -473,35 +473,42 @@ def detect_anchor_pullback(
 
 
 def detect_sigma(
-    df: pd.DataFrame, n: int = 20, k: float = 2.0,
+    df: pd.DataFrame, n: int = 20, k: float = 2.0, trend_n: int = 60,
 ) -> Candidate | None:
-    """시그마(σ) 밴드 평균회귀 — 통계적 과매도 반등(luckybot 'Sigma' 계열).
+    """시그마(σ) 밴드 평균회귀 — '상승추세 속 눌림'만(luckybot 'Sigma' 계열, v2).
 
-    종가가 하단 볼린저 밴드(MA−kσ)를 이탈할 만큼 과매도된 뒤, **반전이 시작
-    (당일 종가 > 전일 종가)**될 때만 매수. 목표는 평균(MA) 회귀. 떨어지는 칼날
-    회피 위해 반전 확인을 요구한다. oversold_bounce(투매 기반)와 달리 순수 σ 기반.
+    v1(순수 σ밴드)은 전 구간 +0.689R이나 하락장에서 떨어지는 칼날을 잡아 워크포워드
+    탈락(최근 -0.379R). v2는 **장기추세 필터(MA60 상승)**로 하락추세 종목을 배제하고,
+    **반전 바 품질**(종가가 당일 레인지 상단 절반)을 요구해 칼날을 거른다.
+    조건: ① 하단밴드 이탈(z≤-k) ② 반전 양봉·종가 레인지 상단부 ③ MA60 상승.
     """
-    if len(df) < n + 2:
+    if len(df) < trend_n + 12:
         return None
-    close = df["close"]
+    close, high, low = df["close"], df["high"], df["low"]
     ma = ind.sma(close, n)
     sd = ind.rolling_std(close, n)
+    ma_t = ind.sma(close, trend_n)
     c, m, s = _last(close), _last(ma), _last(sd)
     if s <= 0 or m <= 0:
         return None
     z = (c - m) / s
+    if z > -k:                                 # ① 하단밴드 이탈
+        return None
     prev = float(close.iloc[-2])
-    if not (z <= -k and c > prev):            # 하단밴드 이탈 + 반전 양봉
+    day_hi, day_lo = float(high.iloc[-1]), float(low.iloc[-1])
+    rng = day_hi - day_lo
+    if not (c > prev and rng > 0 and c >= day_lo + 0.5 * rng):  # ② 반전 바 품질
+        return None
+    if not (_last(ma_t) > float(ma_t.iloc[-11])):  # ③ MA60 상승(하락추세 칼날 배제)
         return None
     atr = _last(ind.atr(df))
     lower = m - k * s
-    day_low = float(df["low"].iloc[-1])
     return Candidate(
         setup="sigma", side="buy", style="swing", session="regular",
-        entry_ref=c, atr=atr, support=min(lower, day_low),
+        entry_ref=c, atr=atr, support=min(lower, day_lo),
         strength=0.6 + (0.1 if z <= -(k + 0.5) else 0.0),
-        rationale=[f"σ밴드 하단 이탈 z={z:.1f}", "반전 양봉 확인",
-                   "평균(MA20) 회귀 기대"],
+        rationale=[f"σ밴드 하단 이탈 z={z:.1f}", "반전 바(레인지 상단부)",
+                   "MA60 상승(상승추세 눌림)"],
         payload={"z": z, "ma": m, "sigma": s},
     )
 
