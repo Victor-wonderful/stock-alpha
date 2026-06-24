@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
-import { getSignals, getMarketState } from "@/lib/data";
-import { RecommendTabs } from "@/components/RecommendTabs";
-import { RegimeHeader } from "@/components/RegimeHeader";
+import { Crosshair, TrendingUp } from "lucide-react";
+import { getSignals } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
 import type { SignalView } from "@/lib/types";
 
@@ -134,7 +133,6 @@ export default async function ScreenerPage({
 
   // 셋업 칩 건수·하이라이트 집계가 전체 기준이어야 함 — 오늘만 271건이라 200 한도는 잘림(2026-06-12 점검)
   const { data: allSignals, isSample, total } = await getSignals({}, 1000);
-  const marketState = await getMarketState();
 
   // 셋업별 건수 집계 (필터 전 전체 기준)
   const setupCounts = new Map<string, number>();
@@ -167,27 +165,28 @@ export default async function ScreenerPage({
     return qs ? `?${qs}` : "/screener";
   };
 
+  // 게이트 통과·발행 중인 셋업만(유령 필터 금지). ScreenerFilters.ACTIVE_SETUPS 와 동일 기준.
   const ALL_SETUPS: Array<{ key: string; label: string }> = [
     { key: "leader_trend", label: "주도주 추세" },
-    { key: "oversold_bounce", label: "과매도 반등" },
-    { key: "breakout", label: "돌파 매수" },
-    { key: "close_betting", label: "종가 베팅" },
-    { key: "factor_composite", label: "팩터 종합" },
+    { key: "flow_accumulation", label: "수급 매집" },
+    { key: "pullback", label: "눌림목" },
+    { key: "breakout", label: "돌파" },
+    { key: "high_52w", label: "52주 신고가" },
+    { key: "vol_squeeze", label: "변동성 수축" },
+    { key: "pead", label: "실적 서프라이즈" },
   ];
 
   return (
     <AppShell
-      title="추천"
-      subtitle={`발행 중인 전체 시그널 ${total ?? allSignals.length}건 — 백테스트 게이트 통과 셋업만 발행 · 매일 16:30 갱신`}
+      title="스크리너"
+      subtitle={`발행 중 전체 시그널 ${total ?? allSignals.length}건을 조건으로 탐색 — 백테스트 게이트 통과 셋업만 발행 · 클릭하면 종목 상세로 · 매일 16:30 갱신`}
       badge={
         <span className="flex items-center gap-1.5 rounded-[999px] bg-good-soft px-3 py-1 text-[11px] font-bold text-good">
           검증 통과 셋업만 — 미통과 발행 금지
         </span>
       }
     >
-      <RecommendTabs />
-      <RegimeHeader state={marketState} />
-
+      {/* 스크리너 = 독립 시그널 탐색 메뉴(IA 2026-06-24). 추천 탭·국면 헤더 없음 — 순수 탐색 도구. */}
       {isSample && (
         <div className="mb-4">
           <SampleBadge />
@@ -211,6 +210,33 @@ export default async function ScreenerPage({
             {sub && <p className="mt-0.5 text-[10px] text-text-mute">{sub}</p>}
           </div>
         ))}
+      </div>
+
+      {/* 빠른 필터 — 평이한 명사(IA 2026-06-24): 진입 가능(알파존 흡수)·수급 */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-bold text-text-mute">빠른 필터</span>
+        <Link
+          href="/alpha-zone"
+          className="flex items-center gap-1.5 rounded-[999px] border border-border bg-surface-2 px-3.5 py-1.5 text-xs font-semibold text-text transition-colors hover:border-accent"
+        >
+          <Crosshair className="h-3.5 w-3.5 text-accent" /> 진입 가능
+          <span className="font-medium text-text-mute">현재가가 진입가 부근</span>
+        </Link>
+        <Link
+          href={buildHref("setup", "flow_accumulation")}
+          className={`flex items-center gap-1.5 rounded-[999px] border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+            activeSetup === "flow_accumulation"
+              ? "border-accent bg-accent text-[#0B0C10]"
+              : "border-border bg-surface-2 text-text hover:border-accent"
+          }`}
+        >
+          <TrendingUp className="h-3.5 w-3.5 text-accent" /> 수급
+          <span
+            className={`font-medium ${activeSetup === "flow_accumulation" ? "text-[#0B0C10]/70" : "text-text-mute"}`}
+          >
+            외국인·기관 순매수
+          </span>
+        </Link>
       </div>
 
       {/* 셋업 필터 칩 */}

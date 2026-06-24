@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/ui";
@@ -48,6 +48,7 @@ export default async function ReportsPage({
   const includeUnfit = sp.all === "1";
   const ratingFilter = sp.rating ?? null;
   const activeMarket = sp.market ?? null; // KOSPI | KOSDAQ
+  const search = sp.q ?? ""; // 종목 검색(이름·코드)
 
   const FETCH_LIMIT = 400; // 일 발행 상한 100 × 며칠치 — 한도 도달 시 마지막(부분) 그룹은 버림
   const [{ data: fetched }, { data: history }] = await Promise.all([
@@ -79,6 +80,12 @@ export default async function ReportsPage({
   // 필터 적용
   let filtered = reports;
   if (ratingFilter) filtered = filtered.filter((r) => r.rating === ratingFilter);
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(
+      (r) => (r.name ?? "").toLowerCase().includes(q) || (r.symbol ?? "").includes(q),
+    );
+  }
   // 거래소 필터 — 현재 ReportListItem 에 exchange 없음. symbol prefix 휴리스틱.
   // 실데이터에서는 instruments.exchange 가 있지만 리스트 뷰에는 미포함 — UI 칩만 노출
 
@@ -95,6 +102,7 @@ export default async function ReportsPage({
     const p = new URLSearchParams();
     if (activeMarket && key !== "market") p.set("market", activeMarket);
     if (includeUnfit) p.set("all", "1");
+    if (search) p.set("q", search);
     if (val) p.set(key, val);
     const qs = p.toString();
     return qs ? `/reports?${qs}` : "/reports";
@@ -103,8 +111,28 @@ export default async function ReportsPage({
   return (
     <AppShell
       title="종목"
-      subtitle="AI 애널리스트 — 종가 기준 분석, 다음 거래일 장전 플랜 · 수치는 전부 DB 근거(source_refs)"
+      subtitle="종목 검색 · 분석 허브 — 검색하거나 목록에서 클릭하면 종목 상세(5축·알파존·AI 리포트)로 이동"
     >
+      {/* 종목 검색 바 (검색·분석 허브 진입점, IA 2026-06-24) */}
+      <form method="get" action="/reports" className="mb-4">
+        {ratingFilter && <input type="hidden" name="rating" value={ratingFilter} />}
+        {activeMarket && <input type="hidden" name="market" value={activeMarket} />}
+        {includeUnfit && <input type="hidden" name="all" value="1" />}
+        <div className="flex items-center gap-3 rounded-[20px] border border-border bg-surface px-5 py-4 focus-within:border-accent">
+          <Search className="h-5 w-5 shrink-0 text-text-mute" />
+          <input
+            name="q"
+            type="search"
+            defaultValue={search}
+            placeholder="종목명 또는 코드로 검색 — 예: 삼성전자, 005930"
+            className="flex-1 bg-transparent text-[15px] text-text placeholder:text-text-mute focus:outline-none"
+          />
+          <span className="hidden shrink-0 text-[11px] text-text-mute sm:block">
+            클릭 → 종목 상세 (5축·알파존·AI 리포트)
+          </span>
+        </div>
+      </form>
+
       {/* 판정 탭 필 + 거래소 칩 */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">

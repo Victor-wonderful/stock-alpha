@@ -5,7 +5,6 @@ import { StyleChip } from "@/components/AxisChips";
 import { setupCharacter, TONE_CLASS } from "@/lib/setupCharacter";
 import { AlphaZoneMini } from "@/components/AlphaZoneMini";
 import { getAlphaZoneStocks, getMarketState, type AlphaZoneCard } from "@/lib/data";
-import { RecommendTabs } from "@/components/RecommendTabs";
 import { RegimeHeader } from "@/components/RegimeHeader";
 import { fmtPrice, fmtPct } from "@/lib/format";
 
@@ -25,7 +24,7 @@ export default async function AlphaZonePage() {
         </span>
       }
     >
-      <RecommendTabs />
+      {/* 알파존 = 추천 큐레이션·스크리너 '진입 가능' 필터로 흡수(IA 2026-06-24). 레거시 라우트. */}
       <RegimeHeader state={marketState} />
 
       {isSample && (
