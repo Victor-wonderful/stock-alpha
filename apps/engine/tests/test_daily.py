@@ -9,6 +9,7 @@ from engine.reports.context import EOD_STYLES, build_plan
 from engine.reports.daily import (
     PICK_EXPIRE_DAYS,
     PICKS_MIN_SCORE,
+    _pick_suppressed,
     resolve_pick_status,
     select_picks,
 )
@@ -32,6 +33,30 @@ def _report(iid: int, rating: str, score: float, *, tradable: bool = True,
             "narrative": {"thesis": thesis},
         },
     }
+
+
+# ── 4국면 레짐 라우팅 ────────────────────────────────────────────────
+def test_regime_router_by_market_state():
+    # 상승추세 — 추세추종 허용, 평균회귀 억제
+    assert not _pick_suppressed("kalman", "uptrend", False)
+    assert _pick_suppressed("sigma", "uptrend", False)
+    # 하락추세 — 추세·평균회귀 억제, 역추세·수급만
+    assert _pick_suppressed("kalman", "downtrend", True)
+    assert _pick_suppressed("sigma", "downtrend", True)
+    assert not _pick_suppressed("oversold_bounce", "downtrend", True)
+    assert not _pick_suppressed("flow_accumulation", "downtrend", True)
+    # 횡보 — 추세·역추세 억제, 평균회귀 허용(시그마 부활 지점)
+    assert _pick_suppressed("kalman", "range", False)
+    assert not _pick_suppressed("sigma", "range", False)
+    assert _pick_suppressed("oversold_bounce", "range", False)
+    assert not _pick_suppressed("flow_accumulation", "range", False)
+
+
+def test_regime_router_backward_compat():
+    # market_state 미상 → 구 risk_off 로직(TREND 억제만)
+    assert _pick_suppressed("kalman", None, True)
+    assert not _pick_suppressed("kalman", None, False)
+    assert not _pick_suppressed("sigma", None, True)        # 평균회귀는 구 로직서 허용
 
 
 # ── 오늘의 포커스 선정 ────────────────────────────────────────────────

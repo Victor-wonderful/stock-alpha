@@ -58,6 +58,28 @@ TREND_PICK_SETUPS = frozenset(
      "kalman", "median", "pivot", "sortino", "bayes", "ensemble",
      "delta", "markov"}
 )
+# 통계적 평균회귀 — 횡보(range)에서만 통하고 추세장에선 실패(2026-06-24 검증: 하락추세
+# 워크포워드 탈락). 4국면 라우팅으로 range 에서만 픽 허용.
+RANGE_SETUPS = frozenset({"sigma", "quantile"})
+# 투매 반등(역추세) — 하락추세·횡보의 과대낙폭에서 작동.
+COUNTERTREND_SETUPS = frozenset({"oversold_bounce", "double_bottom"})
+
+
+def _pick_suppressed(setup: str | None, market_state: str | None, risk_off: bool) -> bool:
+    """국면별 픽 억제 판정 — 4국면(market_state) 라우팅.
+
+    추세장=추세추종 / 횡보=평균회귀 / 하락추세=역추세·수급. 수급(flow_accumulation)은
+    전 국면 허용(어디서도 억제 안 함). market_state 미상이면 구 risk_off 로직(하위호환).
+    """
+    if market_state is None:
+        return bool(risk_off and setup in TREND_PICK_SETUPS)
+    if market_state == "uptrend":
+        return setup in RANGE_SETUPS                      # 상승추세 — 평균회귀만 제외
+    if market_state == "downtrend":
+        return setup in TREND_PICK_SETUPS or setup in RANGE_SETUPS  # 역추세·수급만
+    if market_state == "range":
+        return setup in TREND_PICK_SETUPS or setup in COUNTERTREND_SETUPS  # 평균회귀·수급
+    return setup in TREND_PICK_SETUPS or setup in RANGE_SETUPS  # transition — 보수적
 
 
 def passed_setups_from_db() -> set[str]:
@@ -180,6 +202,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
                  passed_combos: dict[str, list[str]] | None = None,
                  expectancy_by_combo: dict[tuple[str, str], float] | None = None,
                  regime: str | None = None,
+                 market_state: str | None = None,
                  sector_by_id: dict[int, str | None] | None = None,
                  max_per_sector: int = PICKS_MAX_PER_SECTOR,
                  close_by_id: dict[int, float | None] | None = None,
@@ -215,7 +238,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             row for row in (p.get("plan") or [])
             if row.get("style") in EOD_STYLES
             and row.get("setup") not in PICK_EXCLUDED_SETUPS
-            and not (risk_off and row.get("setup") in TREND_PICK_SETUPS)
+            and not _pick_suppressed(row.get("setup"), market_state, risk_off)
             and _plan_gate_ok(row, passed_combos)
             and _entry_actionable(row, close, max_entry_drift)
         ]
@@ -440,12 +463,13 @@ def select_and_store_picks(as_of: str) -> int:
     ).data or []
     from engine.backtest.runner import passed_combos_from_db
 
-    # 발행일 시점 시장 국면(<=as_of 최신) — risk_off 면 추세·돌파 픽 억제.
+    # 발행일 시점 시장 국면(<=as_of 최신) — 4국면(market_state)으로 셋업 라우팅.
     reg_row = (
-        client.table("market_regime").select("regime")
+        client.table("market_regime").select("regime,market_state")
         .lte("date", as_of).order("date", desc=True).limit(1).execute()
     ).data
     regime = reg_row[0]["regime"] if reg_row else None
+    market_state = reg_row[0].get("market_state") if reg_row else None
 
     # 섹터 맵 — 픽 집중 분산용. 섹터 미수집(null)이면 자연히 무제약으로 동작.
     sector_by_id = {
@@ -461,10 +485,12 @@ def select_and_store_picks(as_of: str) -> int:
         passed_combos=passed_combos_from_db(),
         expectancy_by_combo=gate_expectancy_from_db(),
         regime=regime,
+        market_state=market_state,
         sector_by_id=sector_by_id,
         close_by_id=close_by_id,
     )
-    log.info("reports.daily.picks.regime", as_of=as_of, regime=regime)
+    log.info("reports.daily.picks.regime", as_of=as_of, regime=regime,
+             market_state=market_state)
     rebalance_id = int(as_of.replace("-", ""))
     for p in picks:
         p["rebalance_id"] = rebalance_id
