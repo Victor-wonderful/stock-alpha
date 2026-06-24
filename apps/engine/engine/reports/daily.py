@@ -51,8 +51,12 @@ PICK_EXCLUDED_SETUPS = frozenset({"factor_composite"})
 # 검증(2026-06-19): 닫힌 픽 11건 전량이 risk_off(시장 20일 -7.9%)에서 발행돼 평균 -2.85%.
 # 하락장에선 이 계열 픽을 억제(빈 날 허용)해 드로다운을 막는다. 수급(flow_accumulation)은
 # 덜 추세추종적이라 전 국면 허용. (pick-track-quality)
+# 통계 셋업(luckybot 이식, 2026-06-24)도 분류: 추세·모멘텀형은 억제,
+# 평균회귀(sigma·quantile)는 역추세라 oversold_bounce 처럼 risk_off 허용(목록 제외).
 TREND_PICK_SETUPS = frozenset(
-    {"high_52w", "breakout", "vol_squeeze", "leader_trend", "pullback"}
+    {"high_52w", "breakout", "vol_squeeze", "leader_trend", "pullback",
+     "kalman", "median", "pivot", "sortino", "bayes", "ensemble",
+     "delta", "markov"}
 )
 
 
