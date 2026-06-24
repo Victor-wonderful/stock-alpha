@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
-import { SetupChip, StyleChip } from "@/components/AxisChips";
+import { StyleChip } from "@/components/AxisChips";
+import { setupCharacter, TONE_CLASS } from "@/lib/setupCharacter";
 import { AlphaZoneMini } from "@/components/AlphaZoneMini";
 import { getAlphaZoneStocks, type AlphaZoneCard } from "@/lib/data";
 import { RecommendTabs } from "@/components/RecommendTabs";
@@ -82,9 +83,22 @@ function ZoneCard({ c }: { c: AlphaZoneCard }) {
             </span>
             <span className="mono shrink-0 text-[10px] text-text-mute">{c.symbol}</span>
           </div>
-          <div className="mt-1 flex items-center gap-1">
-            <SetupChip setup={c.setup} />
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {(() => {
+              const ch = setupCharacter(c.setup);
+              return (
+                <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold ${TONE_CLASS[ch.tone]}`}>
+                  {ch.icon} {ch.label}
+                </span>
+              );
+            })()}
             <StyleChip style={c.style} />
+            <span
+              title="백테스트 게이트 통과 셋업만"
+              className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-good-soft text-good"
+            >
+              🛡 검증
+            </span>
           </div>
         </div>
         <div className="shrink-0 text-right">
