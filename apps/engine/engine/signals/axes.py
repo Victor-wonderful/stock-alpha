@@ -23,6 +23,11 @@ TradeSetup = Literal[
     "anchor_pullback",
     "kalman",
     "sigma",
+    "pivot",
+    "median",
+    "delta",
+    "markov",
+    "quantile",
 ]
 TradeSession = Literal["pre", "regular", "close", "after"]
 
@@ -32,6 +37,7 @@ SETUPS: tuple[TradeSetup, ...] = (
     "flow_accumulation", "pullback", "high_52w", "vol_squeeze", "pead",
     "theme", "new_listing",
     "double_bottom", "anchor_pullback", "kalman", "sigma",
+    "pivot", "median", "delta", "markov", "quantile",
 )
 SESSIONS: tuple[TradeSession, ...] = ("pre", "regular", "close", "after")
 
@@ -52,6 +58,11 @@ SETUP_LABELS: dict[TradeSetup, str] = {
     "anchor_pullback": "기준봉 눌림",
     "kalman": "칼만 추세",
     "sigma": "시그마 평균회귀",
+    "pivot": "피봇 돌파",
+    "median": "메디안 추세",
+    "delta": "델타(AR1) 모멘텀",
+    "markov": "마르코프 레짐",
+    "quantile": "콴타일 반등",
 }
 
 # 플레이북별 기본 매핑 (스타일·세션). 시그널 생성 시 기본값으로 사용.
@@ -70,6 +81,11 @@ SETUP_DEFAULT_STYLE = {
     "anchor_pullback": "swing",
     "kalman": "position",
     "sigma": "swing",
+    "pivot": "swing",
+    "median": "position",
+    "delta": "swing",
+    "markov": "position",
+    "quantile": "swing",
 }
 SETUP_DEFAULT_SESSION = {
     "factor_composite": "regular",
@@ -86,4 +102,9 @@ SETUP_DEFAULT_SESSION = {
     "anchor_pullback": "regular",
     "kalman": "regular",
     "sigma": "regular",
+    "pivot": "regular",
+    "median": "regular",
+    "delta": "regular",
+    "markov": "regular",
+    "quantile": "regular",
 }

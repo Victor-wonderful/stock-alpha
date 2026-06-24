@@ -26,6 +26,11 @@ export type TradeSetup =
   | 'anchor_pullback'
   | 'kalman'
   | 'sigma'
+  | 'pivot'
+  | 'median'
+  | 'delta'
+  | 'markov'
+  | 'quantile'
   | 'theme'
   | 'new_listing';
 export type TradeSession = 'pre' | 'regular' | 'close' | 'after';
@@ -54,6 +59,11 @@ export const TRADE_SETUP_LABELS: Record<TradeSetup, string> = {
   anchor_pullback: '기준봉 눌림',
   kalman: '칼만 추세',
   sigma: '시그마 평균회귀',
+  pivot: '피봇 돌파',
+  median: '메디안 추세',
+  delta: '델타(AR1) 모멘텀',
+  markov: '마르코프 레짐',
+  quantile: '콴타일 반등',
   theme: '테마주',
   new_listing: '신규주',
 };
