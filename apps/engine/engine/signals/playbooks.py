@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -674,6 +675,73 @@ def detect_quantile(
     )
 
 
+def detect_sortino(
+    df: pd.DataFrame, win: int = 60, ma: int = 20, min_sortino: float = 1.5,
+) -> Candidate | None:
+    """소르티노 — 하방위험 조정 수익(소르티노 비율)이 높은 추세 종목 진입.
+
+    표준편차 대신 **하방 변동성**만 페널티 → '꾸준히 오르되 깊은 하락이 적은'
+    종목을 선별. 높은 소르티노 + 상승추세(종가>MA20)일 때 매수. 변동성 대비
+    상방이 우월한 질 높은 모멘텀.
+    """
+    if len(df) < win + ma + 2:
+        return None
+    close = df["close"]
+    r = close.pct_change().dropna().iloc[-win:]
+    if len(r) < win:
+        return None
+    mean = float(r.mean())
+    downside = r[r < 0]
+    dd = float((downside ** 2).mean()) ** 0.5 if len(downside) > 0 else 0.0
+    if dd == 0 or mean <= 0:
+        return None
+    sortino = mean / dd * (252 ** 0.5)
+    c, m = _last(close), _last(ind.sma(close, ma))
+    if not (sortino >= min_sortino and c > m):
+        return None
+    atr = _last(ind.atr(df))
+    return Candidate(
+        setup="sortino", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=m,
+        strength=min(1.0, 0.55 + sortino * 0.05),
+        rationale=[f"소르티노 {sortino:.1f}(하방조정 수익 우위)", "상승추세"],
+        payload={"sortino": sortino},
+    )
+
+
+def detect_bayes(df: pd.DataFrame, ma_s: int = 20, ma_l: int = 60) -> Candidate | None:
+    """베이즈 — OHLCV 다중 증거를 베이지안 결합한 상승 사후확률이 높을 때 진입.
+
+    factor_scores 이력이 짧아(15일) 팩터 기반 검증 불가 → OHLCV 파생 증거(정배열·
+    20일 모멘텀·RSI 구간·MA60 기울기)를 독립 가정 하에 로그오즈로 합산, 사후확률
+    P(up)≥0.8 + 추세일 때 매수. 앙상블(투표)과 달리 증거별 가중(우도비) 결합.
+    팩터 이력이 쌓이면 factor 주입판으로 확장 가능.
+    """
+    if len(df) < ma_l + 25:
+        return None
+    close = df["close"]
+    c = _last(close)
+    ms, ml = _last(ind.sma(close, ma_s)), _last(ind.sma(close, ma_l))
+    ml_past = float(ind.sma(close, ma_l).iloc[-11])
+    rsi = _last(ind.rsi(close, 14))
+    mom = c / float(close.iloc[-21]) - 1.0
+    log_odds = 0.0                                  # 사전 P=0.5
+    log_odds += 0.6 if (c > ms > ml) else (-0.4 if c < ms else 0.0)   # 정배열
+    log_odds += 0.5 if mom > 0.05 else (-0.5 if mom < -0.05 else 0.0)  # 모멘텀
+    log_odds += 0.3 if 50 <= rsi <= 70 else (-0.4 if (rsi > 75 or rsi < 35) else 0.0)  # RSI
+    log_odds += 0.4 if ml > ml_past else -0.4        # MA60 기울기
+    post = 1.0 / (1.0 + math.exp(-log_odds))
+    if not (post >= 0.80 and c > ms):
+        return None
+    atr = _last(ind.atr(df))
+    return Candidate(
+        setup="bayes", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=ms, strength=min(1.0, post),
+        rationale=[f"베이지안 상승확률 {post:.0%}", "다중 증거 결합"],
+        payload={"posterior": post},
+    )
+
+
 # 앙상블 멤버 — df 단일 인자로 호출 가능한 추세·돌파 셋업(검증 통과 위주).
 _ENSEMBLE_MEMBERS = (
     "kalman", "median", "pivot", "leader_trend", "breakout",
@@ -719,6 +787,8 @@ ALL_DETECTORS = {
     "sigma": detect_sigma,
     "kalman": detect_kalman,
     "ensemble": detect_ensemble,
+    "sortino": detect_sortino,
+    "bayes": detect_bayes,
     "delta": detect_delta,
     "markov": detect_markov,
     "pivot": detect_pivot,
@@ -751,6 +821,8 @@ ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
     "median": ("position",),             # 강건 추세
     "quantile": ("swing",),              # 분위 반등(평균회귀)
     "ensemble": ("position",),           # 다중 셋업 합의(고확신)
+    "sortino": ("position",),            # 하방조정 모멘텀
+    "bayes": ("position",),              # 베이지안 증거 결합
     "leader_trend": ("swing", "position"),
     "oversold_bounce": ("swing",),
     "breakout": ("swing", "position"),

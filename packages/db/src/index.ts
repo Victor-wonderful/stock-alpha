@@ -32,6 +32,8 @@ export type TradeSetup =
   | 'markov'
   | 'quantile'
   | 'ensemble'
+  | 'sortino'
+  | 'bayes'
   | 'theme'
   | 'new_listing';
 export type TradeSession = 'pre' | 'regular' | 'close' | 'after';
@@ -66,6 +68,8 @@ export const TRADE_SETUP_LABELS: Record<TradeSetup, string> = {
   markov: '마르코프 레짐',
   quantile: '콴타일 반등',
   ensemble: '앙상블 합의',
+  sortino: '소르티노 모멘텀',
+  bayes: '베이즈 결합',
   theme: '테마주',
   new_listing: '신규주',
 };
