@@ -152,14 +152,16 @@ export default async function FocusContent() {
   for (const r of allReports.data) {
     if (!repForGuard.has(r.symbol)) repForGuard.set(r.symbol, r);
   }
-  const isStalePick = (p: (typeof allPicks)[number]) => {
-    const rep = repForGuard.get(p.symbol);
-    if (rep?.rating === "거래 부적합") return true;
-    if (p.as_of && latestRepDay && p.as_of < latestRepDay) return true;
-    return false;
-  };
-  const stalePicks = allPicks.filter(isStalePick);
-  const picks = allPicks.filter((p) => !isStalePick(p));
+  // 픽은 '최신 리포트 날짜'의 것만 — 그 날짜에 daily_focus 가 없으면 빈 날(과거 픽 폴백 금지).
+  // (risk_off 빈 날에 옛 픽이 stale 로 뜨던 것 차단 — 2026-06-24.)
+  const picksToday = latestRepDay
+    ? allPicks.filter((p) => p.as_of === latestRepDay)
+    : allPicks;
+  // 같은 날 픽이라도 최신 리포트가 '거래 부적합'이면 무효(리포트 재생성 후 픽 미갱신) → 숨김.
+  const isInvalid = (p: (typeof allPicks)[number]) =>
+    repForGuard.get(p.symbol)?.rating === "거래 부적합";
+  const stalePicks = picksToday.filter(isInvalid);
+  const picks = picksToday.filter((p) => !isInvalid(p));
   // 카드용 미니 스노우플레이크 5축 — 픽 종목만 벌크 1회 조회(실패 시 빈 Map).
   const snowMap = await getSnowflakesForSymbols(picks.map((p) => p.symbol));
   // 진입 레벨 알림 — 픽별 현재가(최신 종가) 병렬 조회 → 진입 타이밍/대기/무효 판정.
