@@ -17,6 +17,7 @@ import {
 import { RegimeHeader } from "@/components/RegimeHeader";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
+import { fmtPrice } from "@/lib/format";
 import { PickCard } from "./_pick-card";
 
 // 다음 거래일 라벨
@@ -197,6 +198,21 @@ export default async function FocusContent() {
     if (!reportBySymbol.has(r.symbol)) reportBySymbol.set(r.symbol, r);
   }
 
+  // ── 반등 대기 리스트 (빈 날 surface) ──
+  // 폭락장 억제로 픽이 비어도, 거래가능·점수 상위 종목을 "반등 시 1순위 후보"로 제시.
+  // "지금 사라"가 아니라 "지켜보라" — 알림/관심으로 참여·락인(위험한 추천 없이).
+  const pickSyms = new Set(picks.map((p) => p.symbol));
+  const waitlist = todayReports
+    .filter(
+      (r) =>
+        r.rating !== "거래 부적합" &&
+        r.score != null &&
+        r.symbol != null &&
+        !pickSyms.has(r.symbol),
+    )
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, 6);
+
   // 픽 기록 상태
   const activePicks = history.data.filter((h) => h.status === "진행중");
 
@@ -353,8 +369,8 @@ export default async function FocusContent() {
         {/* ── 선정 과정 3단계 ── */}
         <HowItWorks analyzed={gradeBoard.total} />
 
-        {/* ── 하락장 경고 — risk_off 에선 추세 매수픽이 손실 위험이 크다(분석=픽 노출하되 고지) ── */}
-        {regime?.regime === "risk_off" && (
+        {/* ── 하락장 경고 — 픽이 있을 때만(빈 날은 아래 방어 surface 가 대신 설명) ── */}
+        {regime?.regime === "risk_off" && picks.length > 0 && (
           <div className="mb-4 flex items-start gap-2.5 rounded-[14px] border border-bad/30 bg-bad-soft px-4 py-3">
             <span className="mt-0.5 shrink-0 text-bad" aria-hidden>
               ⚠
@@ -388,13 +404,94 @@ export default async function FocusContent() {
               </div>
             )}
             {picks.length === 0 ? (
-              stalePicks.length > 0 ? null : (
+              recs.isSample ? (
                 <div className="rounded-[20px] border border-dashed border-border bg-surface p-16 text-center">
-                  <p className="text-sm text-text-mute">
-                    {recs.isSample
-                      ? "데이터 연결 후 오늘의 픽이 표시됩니다"
-                      : "오늘은 기준(판정·거래가능 게이트·백테스트)을 통과한 종목이 없습니다. 억지로 채우지 않습니다."}
-                  </p>
+                  <p className="text-sm text-text-mute">데이터 연결 후 오늘의 픽이 표시됩니다</p>
+                </div>
+              ) : stalePicks.length > 0 ? null : (
+                <div className="space-y-4">
+                  {/* B — 방어가 오늘의 알파 (빈 날을 정직함·신뢰로 전환) */}
+                  <div className="rounded-[20px] border border-border bg-surface p-6">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl" aria-hidden>
+                        🛡️
+                      </span>
+                      <div>
+                        <p className="text-base font-bold text-text">
+                          {regime?.regime === "risk_off"
+                            ? "오늘 살 종목은 없습니다 — 그게 오늘의 알파입니다"
+                            : "오늘은 기준을 통과한 픽이 없습니다"}
+                        </p>
+                        <p className="mt-1.5 text-[13px] leading-relaxed text-text-dim">
+                          {regime?.regime === "risk_off"
+                            ? "하락 방어 구간이라 추세·돌파 매수를 자동으로 비웁니다(검증: 하락장 추세픽 평균 −2.85%). 억지로 추천해 물리지 않는 것 — 빈 날을 빈 날이라 말하는 게 우리 원칙입니다. 대신 반등 시 1순위 후보를 지켜보세요."
+                            : "조건을 채우는 종목이 없으면 억지로 채우지 않습니다. 대신 반등 시 1순위 후보를 아래에서 지켜보세요."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* A — 반등 대기 리스트 (지금 진입 X · 신호 시 알림 → 참여·락인) */}
+                  {waitlist.length > 0 && (
+                    <div className="rounded-[20px] border border-border bg-surface p-5">
+                      <div className="mb-1 flex items-center justify-between">
+                        <h2 className="flex items-center gap-2 text-sm font-bold text-text">
+                          <span aria-hidden>👀</span> 반등 대기 리스트
+                        </h2>
+                        <span className="text-[11px] text-text-mute">
+                          지금 진입 X · 신호 도달 시 알림
+                        </span>
+                      </div>
+                      <p className="mb-3 text-[12px] text-text-mute">
+                        품질·점수는 좋지만 국면상 지금은 대기 — 시장이 돌면 가장 먼저 진입할 후보입니다.
+                      </p>
+                      <div className="divide-y divide-border">
+                        {waitlist.map((r) => (
+                          <div key={r.id} className="flex items-center gap-3 py-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Link
+                                  href={`/stocks/${r.symbol}`}
+                                  className="text-sm font-bold text-text hover:text-accent"
+                                >
+                                  {r.name}
+                                </Link>
+                                <span className="mono text-[10px] text-text-mute">{r.symbol}</span>
+                                {r.rating && (
+                                  <Badge variant={r.rating === "매수" ? "bull" : "warn"} size="sm">
+                                    {r.rating}
+                                  </Badge>
+                                )}
+                                <span className="rounded-[999px] bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn">
+                                  ⏳ 진입 대기
+                                </span>
+                              </div>
+                              {r.summary && (
+                                <p className="mt-1 line-clamp-1 text-[11px] text-text-mute">
+                                  {r.summary}
+                                </p>
+                              )}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="tnum text-lg font-extrabold text-accent">{r.score}</p>
+                              {r.target_price != null && (
+                                <p className="text-[10px] text-text-mute">목표 {fmtPrice(r.target_price)}</p>
+                              )}
+                            </div>
+                            <Link
+                              href={`/reports/${r.id}`}
+                              className="shrink-0 rounded-[8px] border border-border px-2.5 py-1.5 text-[11px] font-semibold text-accent hover:border-accent"
+                            >
+                              🔔 알림·분석
+                            </Link>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-[11px] leading-relaxed text-text-mute">
+                        * 매수 추천이 아닌 <span className="font-semibold text-text-dim">관찰 후보</span> — 진입가·반등 신호 도달 시 알림(관심 추가). 진입 판단은 투자자 본인.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )
             ) : (
