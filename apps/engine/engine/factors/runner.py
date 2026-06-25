@@ -6,6 +6,7 @@ from datetime import date
 import pandas as pd
 
 from engine.db import get_client, select_all, upsert
+from engine.timeutil import kst_today
 from engine.factors.compose import composite_alpha, regime_weights, zscore_factors
 from engine.factors.factors import compute_raw_factors
 from engine.logging import get_logger
@@ -27,7 +28,7 @@ def build_factor_scores(
     """
     if cross.empty:
         return []
-    asof = asof or date.today().isoformat()
+    asof = asof or kst_today().isoformat()
     sectors = cross["sector"] if "sector" in cross else None
 
     # None 혼합 컬럼(object dtype)은 concat/mean 경로에서 pd.NA 를 만들어

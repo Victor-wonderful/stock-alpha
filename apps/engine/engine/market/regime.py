@@ -13,6 +13,7 @@ from datetime import date
 import pandas as pd
 
 from engine.db import get_client, select_all, upsert
+from engine.timeutil import kst_today
 from engine.liquidity import filter_liquid_frames
 from engine.logging import get_logger
 
@@ -142,7 +143,7 @@ def run(frames: dict[int, pd.DataFrame] | None = None) -> dict:
 
     out = compute_regime(rets, fn, avg_er)
     row = {
-        "date": date.today().isoformat(),
+        "date": kst_today().isoformat(),
         **out,
         "source_version": SOURCE_VERSION,
     }
