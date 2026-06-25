@@ -161,21 +161,33 @@ export default async function DashboardPage() {
         : { text: "시장 레짐 · 중립", cls: "bg-warn-soft text-warn" }
     : null;
 
-  const picks = recs.isSample
-    ? []
-    : recs.data.filter((r) => r.basket_type === "daily_focus");
-  const asOf = picks[0]?.as_of ?? null;
-
-  // 심볼별 최신 판정 — 픽 배지를 실제 판정으로(매수 하드코딩 버그 수정). reports.data 는
-  // as_of 내림차순이라 첫 등장이 최신. /focus 와 동일한 판정이 표시되게 한다.
+  // 심볼별 최신 판정 — 픽 배지·가드용. reports.data 는 as_of 내림차순이라 첫 등장이 최신.
   const ratingBySymbol = new Map<string | null, string | null>();
   for (const r of reports.data) {
     if (!ratingBySymbol.has(r.symbol)) ratingBySymbol.set(r.symbol, r.rating);
   }
-
-  // 판정 분포 (리포트 기반)
   const latestDay = reports.data[0]?.as_of ?? null;
   const todayReps = reports.data.filter((r) => r.as_of === latestDay);
+
+  // 오늘의 포커스 픽 — 추천(/focus) 페이지와 동일 가드: 최신 리포트 날짜의 픽만 +
+  // 최신 판정이 '거래 부적합'인 stale 픽 제외 → 홈 미리보기 = 추천 페이지 일치.
+  const picks = (
+    recs.isSample
+      ? []
+      : recs.data.filter((r) => r.basket_type === "daily_focus")
+  ).filter(
+    (p) =>
+      (!latestDay || p.as_of === latestDay) &&
+      ratingBySymbol.get(p.symbol) !== "거래 부적합",
+  );
+  const asOf = picks[0]?.as_of ?? null;
+
+  // 최신 분석 리포트 미리보기 — 종목(/reports) 페이지와 동일: 최신일 + 점수순 상위 6.
+  const topReports = [...todayReps]
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    .slice(0, 6);
+
+  // 판정 분포 (리포트 기반)
   const dist = {
     매수: todayReps.filter((r) => r.rating === "매수").length,
     중립: todayReps.filter((r) => r.rating === "중립").length,
@@ -361,12 +373,12 @@ export default async function DashboardPage() {
                 </Link>
               </div>
               <div className="divide-y divide-border">
-                {reports.data.length === 0 ? (
+                {topReports.length === 0 ? (
                   <div className="px-5 py-8 text-center text-sm text-text-mute">
                     발행된 리포트가 없습니다
                   </div>
                 ) : (
-                  reports.data.slice(0, 6).map((r) => (
+                  topReports.map((r) => (
                     <Link
                       key={r.id}
                       href={`/reports/${r.id}`}
