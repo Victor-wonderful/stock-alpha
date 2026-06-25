@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import date
 
 from engine.db import get_client, select_all, upsert
+from engine.timeutil import kst_today
 from engine.fundamental import dcf, ratios
 from engine.logging import get_logger
 
@@ -69,7 +70,7 @@ def build_valuation_row(
 ) -> dict | None:
     """단일 종목 valuations 행 산출 (순수 조립).
 
-    as_of: 적재 일자. 미지정 시 date.today(). daily 배치의 as_of 와 정렬용.
+    as_of: 적재 일자. 미지정 시 kst_today(). daily 배치의 as_of 와 정렬용.
     """
     shares = fin.get("shares")
     r = ratios.compute_ratios(fin, price=price, shares=shares)
@@ -105,7 +106,7 @@ def build_valuation_row(
 
     row = {
         "instrument_id": instrument_id,
-        "date": (as_of or date.today()).isoformat(),
+        "date": (as_of or kst_today()).isoformat(),
         "per": per,
         "pbr": r["pbr"],
         "ev_ebitda": r["ev_ebitda"],
@@ -124,7 +125,7 @@ def run(instrument_ids: list[int] | None = None, *, as_of: str | None = None) ->
 
     instrument_ids=None(전체)일 때는 직접 PG 벌크 읽기로 financials/close 를 각 1쿼리에
     가져와 종목별 왕복(수천 회)을 제거한다(가용 시). 특정 종목 지정 시는 기존 N+1 경로.
-    as_of: 적재 일자(YYYY-MM-DD). 미지정 시 date.today().
+    as_of: 적재 일자(YYYY-MM-DD). 미지정 시 kst_today().
     """
     as_of_date = date.fromisoformat(as_of) if as_of else None
 

@@ -11,6 +11,7 @@ import json
 from datetime import date
 
 from engine.db import get_client
+from engine.timeutil import kst_today
 from engine.logging import get_logger
 from engine.reports.llm import generate_json
 
@@ -56,7 +57,7 @@ def _macro_summary() -> list[dict]:
 
 def build_context(as_of: str | None = None) -> dict:
     client = get_client()
-    today = as_of or date.today().isoformat()
+    today = as_of or kst_today().isoformat()
     regime = (
         client.table("market_regime").select("*")
         .lte("date", today)

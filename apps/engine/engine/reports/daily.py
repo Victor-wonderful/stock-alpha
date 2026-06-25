@@ -18,6 +18,7 @@ from datetime import date
 
 from engine.backtest.event_backtest import _TIMEOUT_BARS
 from engine.db import get_client, select_all, upsert
+from engine.timeutil import kst_today
 from engine.logging import get_logger
 from engine.reports.context import EOD_STYLES, backtest_passed
 from engine.reports.runner import publish_indepth
@@ -394,7 +395,7 @@ def resolve_pick_status(
 def manage_picks(today: str | None = None) -> dict[str, int]:
     """열린 픽 전체의 상태를 종가로 확정 — 일일 배치에서 호출 (갭 프레임 [관리])."""
     client = get_client()
-    d = date.fromisoformat(today) if today else date.today()
+    d = date.fromisoformat(today) if today else kst_today()
     open_picks = (
         client.table("recommendations")
         .select("id,as_of,entry_price,target_price,tp2_price,stop_loss,"
@@ -509,10 +510,10 @@ def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
               coverage_top: int = COVERAGE_TOP, as_of: str | None = None) -> dict:
     """일일 발행 실행 — 트랙 A/B 리포트 + 오늘의 포커스. 결과 요약 반환.
 
-    as_of: 발행 일자(거래일, YYYY-MM-DD) 명시. 미지정 시 date.today().
+    as_of: 발행 일자(거래일, YYYY-MM-DD) 명시. 미지정 시 kst_today().
     자정을 넘겨 재실행할 때 대상 거래일로 정확히 라벨링하기 위함.
     """
-    today = as_of or date.today().isoformat()
+    today = as_of or kst_today().isoformat()
     today_date = date.fromisoformat(today)
     # [관리] 어제까지의 열린 픽을 오늘 종가로 먼저 확정(목표/손절/만료)
     pick_status = manage_picks(today)

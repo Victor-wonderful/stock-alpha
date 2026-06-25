@@ -7,6 +7,7 @@ from __future__ import annotations
 import typer
 
 from engine.logging import configure_logging, get_logger
+from engine.timeutil import kst_today
 from engine.signals.levels import compute_levels
 from engine.signals.styles import STYLES
 
@@ -263,7 +264,7 @@ def daily(
     # 신선도 가드 — 인제스트가 목표 거래일(target) 봉을 못 채웠으면(장중·휴장·인제스트
     # 실패) 낡은 가격으로 '종가 분석' 픽을 발행하는 사고(2026-06-19)를 차단하고 중단한다.
     from datetime import date as _date
-    target = as_of or _date.today().isoformat()
+    target = as_of or kst_today().isoformat()
     from engine import db_direct, freshness
     if db_direct.available():
         fr_check = freshness.assess_dates(db_direct.latest_bar_date_by_iid(), target)

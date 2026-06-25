@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from engine.db import select_all, upsert
+from engine.timeutil import kst_today
 from engine.ingest import dart, krx, naver
 from engine.ingest.instruments import KR_EXCHANGES, load_kr_instrument_map
 from engine.logging import get_logger
@@ -52,7 +53,7 @@ def ingest_krx_prices(days: int = 30, workers: int = 12, retries: int = 2) -> in
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     imap = load_kr_instrument_map()
-    todate = date.today()
+    todate = kst_today()
     fromdate = todate - timedelta(days=days)
     f, t = _yyyymmdd(fromdate), _yyyymmdd(todate)
 

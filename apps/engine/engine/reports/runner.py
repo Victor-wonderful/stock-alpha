@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import date
 
 from engine.config import get_settings
+from engine.timeutil import kst_today
 from engine.db import get_client, upsert
 from engine.logging import get_logger
 from engine.reports.context import load_context
@@ -85,7 +86,7 @@ def publish_indepth(
     - 모델 분담 — '매수' 판정은 claude_report_model(Opus), 그 외 claude_summary_model.
     - skip_unchanged_days>0 (커버리지 트랙): 판정 동일 + 기존 발행이 해당 일수
       이내면 재발행 생략.
-    - as_of: 발행 일자(거래일) 명시. 미지정 시 date.today(). 자정을 넘겨 재실행해도
+    - as_of: 발행 일자(거래일) 명시. 미지정 시 kst_today(). 자정을 넘겨 재실행해도
       대상 거래일로 정확히 라벨링하기 위함(midnight-rollover 방어).
     """
     ctx = load_context(symbol)
@@ -95,7 +96,7 @@ def publish_indepth(
 
     s = get_settings()
     rating = ctx["verdict"]["rating"]
-    today = as_of or date.today()
+    today = as_of or kst_today()
 
     if skip_unchanged_days > 0 and should_skip_unchanged(
         _latest_report(ctx["instrument"]["id"]), rating, today, skip_unchanged_days
