@@ -26,7 +26,7 @@ export default function RootLayout() {
           <Stack.Screen name="report/[id]" />
           <Stack.Screen name="diagnose" />
           <Stack.Screen name="market" />
-          <Stack.Screen name="assets" />
+          <Stack.Screen name="portfolio" />
           <Stack.Screen name="performance" />
           <Stack.Screen name="watchlist" />
         </Stack>

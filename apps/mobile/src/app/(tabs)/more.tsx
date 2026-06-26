@@ -20,7 +20,7 @@ const GROUPS: { label: string; items: MenuItem[] }[] = [
   {
     label: '내 활동',
     items: [
-      { icon: 'account-balance-wallet', name: '내 자산', sub: '보유 종목·평가손익', href: '/assets' },
+      { icon: 'account-balance-wallet', name: '내 자산', sub: '보유 종목·평가손익', href: '/portfolio' },
       { icon: 'leaderboard', name: '성과', sub: '픽 트래커·검증 통과', href: '/performance' },
       { icon: 'bookmark', name: '워치리스트', sub: '관심 종목 모음', href: '/watchlist' },
     ],
