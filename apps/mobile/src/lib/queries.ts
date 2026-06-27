@@ -6,7 +6,13 @@ import { changePct, fmtPrice, riskReward, fmtPct } from '@/lib/format';
 import type { Loaded } from '@/lib/use-query';
 import type { PickData, PickBadge } from '@/components/pick-card';
 import { picks as SAMPLE_PICKS } from '@/data/recommend';
-import { focusPicks as SAMPLE_FOCUS, type FocusPick } from '@/data/home';
+import {
+  focusPicks as SAMPLE_FOCUS,
+  heroStat as SAMPLE_HERO,
+  reports as SAMPLE_REPORTS,
+  type FocusPick,
+  type ReportRow,
+} from '@/data/home';
 import { signals as SAMPLE_SIGNALS, type Signal } from '@/data/screener';
 
 // trade_style enum → 한국어 라벨 (signals/recommendations.style)
@@ -260,5 +266,146 @@ export async function getScreenerSignals(): Promise<Loaded<Signal[]>> {
     return { data: rows.map((r) => mapSignalRow(r, factors.get(r.instrument_id))), isSample: false };
   } catch {
     return { data: SAMPLE_SIGNALS, isSample: true };
+  }
+}
+
+// ── 홈 대시보드 히어로 KPI (웹 getDashboardKpi 모바일판) ──
+// 오늘의 픽 수 · 오늘 발행 리포트 수 · 백테스트 통과/전체 + 진행중 픽 평균수익률.
+export async function getDashboardKpi(): Promise<Loaded<typeof SAMPLE_HERO>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_HERO, isSample: true };
+  try {
+    // 최신 as_of 의 daily_focus 픽(+진입가·종목)
+    const { data: lf } = await supabase
+      .from('recommendations')
+      .select('as_of')
+      .eq('basket_type', 'daily_focus')
+      .order('as_of', { ascending: false })
+      .limit(1);
+    const latest = lf?.[0]?.as_of as string | undefined;
+    if (!latest) throw new Error('no picks');
+    const { data: picks } = await supabase
+      .from('recommendations')
+      .select('instrument_id,entry_price')
+      .eq('basket_type', 'daily_focus')
+      .eq('as_of', latest);
+    const picksToday = picks?.length ?? 0;
+
+    // 오늘 발행 리포트 수(최신 발행일 기준)
+    const { data: lr } = await supabase
+      .from('reports')
+      .select('as_of')
+      .eq('status', 'published')
+      .eq('report_type', 'indepth')
+      .order('as_of', { ascending: false })
+      .limit(1);
+    let reportsToday = 0;
+    const latestRep = lr?.[0]?.as_of as string | undefined;
+    if (latestRep) {
+      const { count } = await supabase
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'published')
+        .eq('report_type', 'indepth')
+        .eq('as_of', latestRep);
+      reportsToday = count ?? 0;
+    }
+
+    // 백테스트 통과 현황(셋업|스타일 최신 1건씩)
+    const { data: bts } = await supabase
+      .from('backtests')
+      .select('setup,style,passed,created_at')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    const seen = new Set<string>();
+    let passed = 0;
+    let total = 0;
+    for (const r of (bts ?? []) as { setup: string; style: string | null; passed: boolean }[]) {
+      const k = `${r.setup}|${r.style ?? ''}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      total++;
+      if (r.passed === true) passed++;
+    }
+
+    // 진행중 픽 평균 수익률 — 최신 종가/진입가 − 1.
+    const ids = (picks ?? []).map((p) => p.instrument_id as number);
+    let activeReturn: number | null = null;
+    if (ids.length > 0) {
+      const { data: bars } = await supabase
+        .from('ohlcv')
+        .select('instrument_id,close,ts')
+        .eq('interval', '1d')
+        .in('instrument_id', ids)
+        .order('ts', { ascending: false });
+      const lastClose = new Map<number, number>();
+      for (const b of (bars ?? []) as { instrument_id: number; close: number }[]) {
+        if (!lastClose.has(b.instrument_id)) lastClose.set(b.instrument_id, Number(b.close));
+      }
+      const rets: number[] = [];
+      for (const p of picks ?? []) {
+        const c = lastClose.get(p.instrument_id as number);
+        const e = p.entry_price as number | null;
+        if (c != null && e != null && e > 0) rets.push(c / e - 1);
+      }
+      if (rets.length > 0) activeReturn = rets.reduce((a, b) => a + b, 0) / rets.length;
+    }
+
+    return {
+      data: {
+        label: '진행중 픽 수익률',
+        value: activeReturn != null ? fmtPct(activeReturn, { unit: 'ratio' }) : '—',
+        positive: (activeReturn ?? 0) >= 0,
+        sub: '전체 발행 기준 · 삭제 없음',
+        kpis: [
+          { label: '오늘의 픽', value: `${picksToday}종목`, accent: false },
+          { label: '발행 리포트', value: `${reportsToday}건`, accent: false },
+          { label: '검증 통과 전략', value: `${passed} / ${total}`, accent: true },
+        ],
+      },
+      isSample: false,
+    };
+  } catch {
+    return { data: SAMPLE_HERO, isSample: true };
+  }
+}
+
+// ── 홈 최신 분석 리포트(상위 3) — 발행된 인뎁스 리포트(거래 부적합 제외) ──
+type RepRow = {
+  id: number;
+  title: string | null;
+  summary: string | null;
+  rating: string | null;
+  score: number | string | null;
+  instruments: { symbol: string; name: string } | null;
+};
+
+export async function getHomeReports(): Promise<Loaded<ReportRow[]>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_REPORTS, isSample: true };
+  try {
+    const { data, error } = await supabase
+      .from('reports')
+      .select('id,title,summary,rating,score:payload->verdict->>score,instruments(symbol,name)')
+      .eq('status', 'published')
+      .eq('report_type', 'indepth')
+      .neq('rating', '거래 부적합')
+      .order('as_of', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(3);
+    if (error || !data || data.length === 0) throw error ?? new Error('empty');
+    const rows = data as unknown as RepRow[];
+    return {
+      data: rows.map((r) => {
+        const sc = r.score != null ? Math.round(Number(r.score)) : null;
+        return {
+          name: r.instruments?.name ?? r.title ?? '',
+          line: r.summary ?? r.title ?? '',
+          score: sc != null ? String(sc) : '—',
+          tone: sc != null && sc >= 80 ? 'good' : 'warn',
+        } as ReportRow;
+      }),
+      isSample: false,
+    };
+  } catch {
+    return { data: SAMPLE_REPORTS, isSample: true };
   }
 }

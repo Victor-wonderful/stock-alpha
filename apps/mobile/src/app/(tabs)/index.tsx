@@ -7,13 +7,13 @@ import { Card, Dot, IconButton, Pill, SectionHeader } from '@/components/ui';
 import {
   focusPicks as SAMPLE_FOCUS,
   gates,
-  heroStat,
+  heroStat as SAMPLE_HERO,
   markets,
-  reports,
+  reports as SAMPLE_REPORTS,
   trackRecord,
   verdictDist,
 } from '@/data/home';
-import { getFocusPicks } from '@/lib/queries';
+import { getDashboardKpi, getFocusPicks, getHomeReports } from '@/lib/queries';
 import { useQuery } from '@/lib/use-query';
 import { color, radius } from '@/theme/tokens';
 
@@ -26,6 +26,8 @@ const STYLE_COLOR: Record<string, string> = {
 export default function HomeScreen() {
   const router = useRouter();
   const { data: focusPicks } = useQuery(getFocusPicks, SAMPLE_FOCUS);
+  const { data: heroStat } = useQuery(getDashboardKpi, SAMPLE_HERO);
+  const { data: reports } = useQuery(getHomeReports, SAMPLE_REPORTS);
 
   return (
     <Screen gap={24}>
