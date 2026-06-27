@@ -8,7 +8,7 @@ import {
   focusPicks as SAMPLE_FOCUS,
   gates,
   heroStat as SAMPLE_HERO,
-  markets,
+  markets as SAMPLE_MARKETS,
   reports as SAMPLE_REPORTS,
   verdictDist,
 } from '@/data/home';
@@ -16,6 +16,7 @@ import {
   getDashboardKpi,
   getFocusPicks,
   getHomeReports,
+  getMarketIndices,
   getPickTrack,
   SAMPLE_PICK_TRACK,
 } from '@/lib/queries';
@@ -33,6 +34,7 @@ export default function HomeScreen() {
   const { data: focusPicks } = useQuery(getFocusPicks, SAMPLE_FOCUS);
   const { data: heroStat } = useQuery(getDashboardKpi, SAMPLE_HERO);
   const { data: reports } = useQuery(getHomeReports, SAMPLE_REPORTS);
+  const { data: markets } = useQuery(getMarketIndices, SAMPLE_MARKETS);
   const { data: track } = useQuery(getPickTrack, SAMPLE_PICK_TRACK);
   const trackRecord = {
     sub: '전체 발행 기준 · 삭제 없음',

@@ -3,13 +3,21 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { NavHeader, Screen } from '@/components/screen';
 import { Card, Pill } from '@/components/ui';
+import { getMarketRegime, SAMPLE_REGIME, type RegimeView } from '@/lib/queries';
+import { useQuery } from '@/lib/use-query';
 import { color, radius } from '@/theme/tokens';
 
-const drivers = [
-  { icon: 'trending-down' as const, text: '시장 20일 추세 −15.9%', c: color.bad },
-  { icon: 'bar-chart' as const, text: '상승종목 비중 14%', c: color.bad },
-  { icon: 'trending-up' as const, text: '외국인 5일 순매수', c: color.good },
-];
+// 레짐 톤 → 색
+const PILL_TONE: Record<RegimeView['pillKind'], { bg: string; fg: string }> = {
+  bad: { bg: color.badSoft, fg: color.bad },
+  good: { bg: color.goodSoft, fg: color.good },
+  warn: { bg: color.warnSoft, fg: color.warn },
+};
+const DRIVER_TONE: Record<RegimeView['drivers'][number]['kind'], { icon: 'trending-up' | 'trending-down' | 'bar-chart'; c: string }> = {
+  good: { icon: 'trending-up', c: color.good },
+  bad: { icon: 'trending-down', c: color.bad },
+  neutral: { icon: 'bar-chart', c: color.textSecondary },
+};
 const macro = [
   { l: '미국 10년물', v: '4.12%', d: '+3bp', c: color.bad },
   { l: '달러인덱스', v: '103.2', d: '−0.2', c: color.good },
@@ -34,13 +42,17 @@ const sectors = [
 const SMAX = 2.8;
 
 export default function MarketScreen() {
+  const { data: regime } = useQuery(getMarketRegime, SAMPLE_REGIME);
+  const pill = PILL_TONE[regime.pillKind];
   return (
     <Screen gap={16} header={<NavHeader title="시장" />}>
       {/* 레짐 히어로 */}
       <Card accent style={{ gap: 14 }}>
         <View style={styles.spread}>
-          <Pill label="방어 구간 · Risk-off" bg={color.badSoft} fg={color.bad} left={<MaterialIcons name="shield" size={14} color={color.bad} />} />
-          <Text style={{ color: color.textPrimary, fontSize: 12, fontWeight: '700' }}>레짐 점수 −0.5</Text>
+          <Pill label={regime.label} bg={pill.bg} fg={pill.fg} left={<MaterialIcons name="shield" size={14} color={pill.fg} />} />
+          <Text style={{ color: color.textPrimary, fontSize: 12, fontWeight: '700' }}>
+            레짐 점수 {regime.score > 0 ? '+' : ''}{regime.score}
+          </Text>
         </View>
         <View style={styles.gauge}>
           <View style={styles.gaugeBar}>
@@ -48,7 +60,7 @@ export default function MarketScreen() {
             <View style={[styles.seg, { backgroundColor: color.warn }]} />
             <View style={[styles.seg, { backgroundColor: color.good, borderTopRightRadius: 999, borderBottomRightRadius: 999 }]} />
           </View>
-          <View style={[styles.marker, { left: '12%' }]} />
+          <View style={[styles.marker, { left: `${regime.markerPct}%` }]} />
         </View>
         <View style={styles.spread}>
           {['약세장 · 방어', '중립', '강세장 · 공격'].map((t) => (
@@ -63,12 +75,15 @@ export default function MarketScreen() {
       {/* 레짐 드라이버 */}
       <View style={{ gap: 8 }}>
         <Text style={styles.smallLabel}>레짐 드라이버</Text>
-        {drivers.map((d) => (
-          <View key={d.text} style={styles.driverRow}>
-            <MaterialIcons name={d.icon} size={14} color={d.c} />
-            <Text style={{ color: d.c, fontSize: 12, fontWeight: '600' }}>{d.text}</Text>
-          </View>
-        ))}
+        {regime.drivers.map((d) => {
+          const t = DRIVER_TONE[d.kind];
+          return (
+            <View key={d.text} style={styles.driverRow}>
+              <MaterialIcons name={t.icon} size={14} color={t.c} />
+              <Text style={{ color: t.c, fontSize: 12, fontWeight: '600' }}>{d.text}</Text>
+            </View>
+          );
+        })}
       </View>
 
       {/* 매크로 */}

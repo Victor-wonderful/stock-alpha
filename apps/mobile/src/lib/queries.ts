@@ -9,6 +9,7 @@ import { picks as SAMPLE_PICKS } from '@/data/recommend';
 import {
   focusPicks as SAMPLE_FOCUS,
   heroStat as SAMPLE_HERO,
+  markets as SAMPLE_MARKETS,
   reports as SAMPLE_REPORTS,
   type FocusPick,
   type ReportRow,
@@ -591,5 +592,104 @@ export async function getPickTrack(limit = 60): Promise<Loaded<PickTrack>> {
     };
   } catch {
     return { data: SAMPLE_PICK_TRACK, isSample: true };
+  }
+}
+
+// ── 시장 한눈에 (홈 지수 4종) — macro 테이블 최신·전일대비 ──
+const INDEX_META = [
+  { id: 'KOSPI', name: 'KOSPI', digits: 2 },
+  { id: 'SP500', name: 'S&P 500', digits: 2 },
+  { id: 'NASDAQCOM', name: 'NASDAQ', digits: 2 },
+  { id: 'VIXCLS', name: 'VIX', digits: 2 },
+];
+
+export async function getMarketIndices(): Promise<Loaded<typeof SAMPLE_MARKETS>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_MARKETS, isSample: true };
+  try {
+    const ids = INDEX_META.map((m) => m.id);
+    const { data, error } = await supabase
+      .from('macro')
+      .select('series_id,date,value')
+      .in('series_id', ids)
+      .order('date', { ascending: false });
+    if (error || !data || data.length === 0) throw error ?? new Error('empty');
+    // series 별 최신→과거 값 배열(최신이 [0])
+    const bySeries = new Map<string, number[]>();
+    for (const r of data as { series_id: string; value: number }[]) {
+      const a = bySeries.get(r.series_id) ?? [];
+      a.push(Number(r.value));
+      bySeries.set(r.series_id, a);
+    }
+    const cards = INDEX_META.flatMap((m) => {
+      const vals = bySeries.get(m.id);
+      if (!vals || vals.length === 0) return [];
+      const v = vals[0];
+      const prev = vals.length > 1 ? vals[1] : v;
+      const pct = prev !== 0 ? (v - prev) / prev : 0;
+      return [{
+        name: m.name,
+        value: new Intl.NumberFormat('ko-KR', { maximumFractionDigits: m.digits }).format(v),
+        change: fmtPct(pct, { unit: 'ratio', digits: 2 }),
+        up: pct >= 0,
+      }];
+    });
+    if (cards.length === 0) throw new Error('none');
+    return { data: cards, isSample: false };
+  } catch {
+    return { data: SAMPLE_MARKETS, isSample: true };
+  }
+}
+
+// ── 시장 레짐 (시장 화면 히어로 + 드라이버) — market_regime 최신행 ──
+export type RegimeView = {
+  label: string;
+  score: number;
+  markerPct: number; // 게이지 마커 위치(%) — score(-1..1) → 0..100
+  pillKind: 'bad' | 'good' | 'warn';
+  drivers: { text: string; kind: 'good' | 'bad' | 'neutral' }[];
+};
+
+export const SAMPLE_REGIME: RegimeView = {
+  label: '방어 구간 · Risk-off',
+  score: -0.5,
+  markerPct: 25,
+  pillKind: 'bad',
+  drivers: [
+    { text: '시장 20일 추세 −15.9%', kind: 'bad' },
+    { text: '상승종목 비중 14%', kind: 'neutral' },
+    { text: '외국인 5일 순매수', kind: 'good' },
+  ],
+};
+
+export async function getMarketRegime(): Promise<Loaded<RegimeView>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_REGIME, isSample: true };
+  try {
+    const { data } = await supabase
+      .from('market_regime')
+      .select('regime,score,drivers,date')
+      .order('date', { ascending: false })
+      .limit(1);
+    const r = data?.[0] as { regime: string; score: number; drivers: string[] } | undefined;
+    if (!r) throw new Error('none');
+    const regime = r.regime ?? 'neutral';
+    const score = Number(r.score ?? 0);
+    const label =
+      regime === 'risk_off' ? '방어 구간 · Risk-off'
+      : regime === 'risk_on' ? '공격 구간 · Risk-on'
+      : '중립 구간';
+    const pillKind: RegimeView['pillKind'] =
+      regime === 'risk_off' ? 'bad' : regime === 'risk_on' ? 'good' : 'warn';
+    const markerPct = Math.max(2, Math.min(98, Math.round(((score + 1) / 2) * 100)));
+    const drivers = ((r.drivers as string[]) ?? []).map((text) => {
+      // 부호/키워드로 톤 추정 — 순매수=호재, '-'/순매도=악재, 그 외 중립.
+      const kind: RegimeView['drivers'][number]['kind'] =
+        /순매수/.test(text) && !/순매도/.test(text) ? 'good'
+        : /[-−]/.test(text) || /순매도|하락|약세/.test(text) ? 'bad'
+        : 'neutral';
+      return { text, kind };
+    });
+    return { data: { label, score, markerPct, pillKind, drivers }, isSample: false };
+  } catch {
+    return { data: SAMPLE_REGIME, isSample: true };
   }
 }
