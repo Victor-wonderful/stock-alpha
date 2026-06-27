@@ -10,10 +10,15 @@ import {
   heroStat as SAMPLE_HERO,
   markets,
   reports as SAMPLE_REPORTS,
-  trackRecord,
   verdictDist,
 } from '@/data/home';
-import { getDashboardKpi, getFocusPicks, getHomeReports } from '@/lib/queries';
+import {
+  getDashboardKpi,
+  getFocusPicks,
+  getHomeReports,
+  getPickTrack,
+  SAMPLE_PICK_TRACK,
+} from '@/lib/queries';
 import { useQuery } from '@/lib/use-query';
 import { color, radius } from '@/theme/tokens';
 
@@ -28,6 +33,17 @@ export default function HomeScreen() {
   const { data: focusPicks } = useQuery(getFocusPicks, SAMPLE_FOCUS);
   const { data: heroStat } = useQuery(getDashboardKpi, SAMPLE_HERO);
   const { data: reports } = useQuery(getHomeReports, SAMPLE_REPORTS);
+  const { data: track } = useQuery(getPickTrack, SAMPLE_PICK_TRACK);
+  const trackRecord = {
+    sub: '전체 발행 기준 · 삭제 없음',
+    avg: track.avgClosed,
+    cells: [
+      { label: '누적 발행', value: `${track.total}건`, tone: 'plain' as const },
+      { label: '목표 달성', value: `${track.target}건`, tone: 'good' as const },
+      { label: '손절', value: `${track.stopped}건`, tone: 'bad' as const },
+      { label: '진행중', value: `${track.open}건`, tone: 'plain' as const },
+    ],
+  };
 
   return (
     <Screen gap={24}>
@@ -76,7 +92,7 @@ export default function HomeScreen() {
           />
         </View>
         <View style={styles.heroValRow}>
-          <Text style={styles.heroVal}>{heroStat.value}</Text>
+          <Text style={[styles.heroVal, !heroStat.positive && { color: color.bad }]}>{heroStat.value}</Text>
           <Text style={styles.heroSub}>{heroStat.sub}</Text>
         </View>
         <View style={styles.kpiRow}>

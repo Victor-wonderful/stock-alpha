@@ -2,29 +2,33 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { NavHeader, Screen } from '@/components/screen';
 import { Card, Pill } from '@/components/ui';
+import { getPickTrack, SAMPLE_PICK_TRACK, type PerfState, type PickRec } from '@/lib/queries';
+import { useQuery } from '@/lib/use-query';
 import { color, radius } from '@/theme/tokens';
 
-const minis = [
-  { l: '누적 발행', v: '47건', c: color.textPrimary, align: 'flex-start' as const },
-  { l: '목표 달성', v: '18건', c: color.good, align: 'center' as const },
-  { l: '손절', v: '9건', c: color.bad, align: 'flex-end' as const },
-];
 const filters = ['전체', '진행중', '목표 달성', '손절'];
-const STATE: Record<string, { bg: string; fg: string }> = {
+const STATE: Record<PerfState, { bg: string; fg: string }> = {
   진행중: { bg: color.warnSoft, fg: color.warn },
   '목표 달성': { bg: color.goodSoft, fg: color.good },
+  '1차 익절': { bg: color.goodSoft, fg: color.good },
   손절: { bg: color.badSoft, fg: color.bad },
+  만료: { bg: color.surface3, fg: color.textTertiary },
+  '—': { bg: color.surface3, fg: color.textTertiary },
 };
-type Rec = { name: string; code: string; state: keyof typeof STATE; date: string; setup: string; entry: string; target: string; stop: string; ret: string; retColor: string };
-const records: Rec[] = [
-  { name: 'SK스퀘어', code: '402340', state: '진행중', date: '6/12', setup: '52주 신고가', entry: '158,000', target: '171,000', stop: '151,800', ret: '진행 중', retColor: color.textTertiary },
-  { name: '한미반도체', code: '042700', state: '목표 달성', date: '6/05', setup: '눌림목', entry: '105,000', target: '118,000', stop: '99,000', ret: '+12.4%', retColor: color.good },
-  { name: '티에스이', code: '131290', state: '진행중', date: '6/10', setup: '수급 매집', entry: '88,000', target: '99,000', stop: '83,000', ret: '진행 중', retColor: color.textTertiary },
-  { name: '포스코퓨처엠', code: '003670', state: '손절', date: '5/28', setup: '주도주 추세', entry: '248,000', target: '278,000', stop: '228,000', ret: '−8.1%', retColor: color.bad },
-  { name: '롯데쇼핑', code: '023530', state: '손절', date: '6/03', setup: '돌파', entry: '71,000', target: '79,000', stop: '67,000', ret: '−7.8%', retColor: color.bad },
-];
+const RET_COLOR: Record<PickRec['retKind'], string> = {
+  good: color.good,
+  bad: color.bad,
+  muted: color.textTertiary,
+};
 
 export default function PerformanceScreen() {
+  const { data: track } = useQuery(getPickTrack, SAMPLE_PICK_TRACK);
+  const records = track.records;
+  const minis = [
+    { l: '누적 발행', v: `${track.total}건`, c: color.textPrimary, align: 'flex-start' as const },
+    { l: '목표 달성', v: `${track.target}건`, c: color.good, align: 'center' as const },
+    { l: '손절', v: `${track.stopped}건`, c: color.bad, align: 'flex-end' as const },
+  ];
   return (
     <Screen gap={16} header={<NavHeader title="성과" />}>
       {/* 히어로 */}
@@ -34,8 +38,10 @@ export default function PerformanceScreen() {
           <Pill label="전체 발행 기준 · 삭제 없음" bg={color.surface3} fg={color.textTertiary} size={10} />
         </View>
         <View style={styles.rowEnd}>
-          <Text style={styles.heroVal}>+4.1%</Text>
-          <Text style={styles.heroSub}>만료 13건 포함</Text>
+          <Text style={[styles.heroVal, track.avgClosed.startsWith('-') && { color: color.bad }]}>
+            {track.avgClosed}
+          </Text>
+          <Text style={styles.heroSub}>만료 {track.expired}건 포함</Text>
         </View>
         <View style={styles.miniRow}>
           {minis.map((m) => (
@@ -82,7 +88,7 @@ export default function PerformanceScreen() {
                 <Price label="손절" value={r.stop} />
                 <View style={{ alignItems: 'flex-end', gap: 3 }}>
                   <Text style={styles.muted10}>수익률</Text>
-                  <Text style={{ color: r.retColor, fontSize: 15, fontWeight: '700' }}>{r.ret}</Text>
+                  <Text style={{ color: RET_COLOR[r.retKind], fontSize: 15, fontWeight: '700' }}>{r.ret}</Text>
                 </View>
               </View>
             </View>

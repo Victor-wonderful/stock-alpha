@@ -409,3 +409,187 @@ export async function getHomeReports(): Promise<Loaded<ReportRow[]>> {
     return { data: SAMPLE_REPORTS, isSample: true };
   }
 }
+
+// ── 픽 트랙레코드 (웹 getPickHistory 모바일판) ──
+// 발행한 daily_focus 픽을 '포지션' 단위로 합산(연속 재선정 흡수) → 진행중·목표·손절 집계.
+// 종가 기반 추정(장중 터치 미반영). 열린 픽은 최신 종가를 일괄 조회(웹 N+1 개선).
+export type PerfState = '진행중' | '목표 달성' | '손절' | '만료' | '1차 익절' | '—';
+export type PickRec = {
+  name: string;
+  code: string;
+  state: PerfState;
+  date: string;
+  setup: string;
+  entry: string;
+  target: string;
+  stop: string;
+  ret: string;
+  retKind: 'good' | 'bad' | 'muted';
+};
+export type PickTrack = {
+  records: PickRec[];
+  total: number;
+  target: number;
+  stopped: number;
+  open: number;
+  expired: number;
+  avgClosed: string; // 확정(종결) 픽 평균 수익률
+};
+
+const PICK_STATUS_LABELS: Record<string, PerfState> = {
+  target: '목표 달성',
+  stopped: '손절',
+  expired: '만료',
+  partial: '1차 익절',
+};
+
+// 목업 폴백 (성과 화면·홈 트랙레코드 공통)
+export const SAMPLE_PICK_TRACK: PickTrack = {
+  records: [
+    { name: 'SK스퀘어', code: '402340', state: '진행중', date: '6/12', setup: '52주 신고가', entry: '158,000', target: '171,000', stop: '151,800', ret: '진행 중', retKind: 'muted' },
+    { name: '한미반도체', code: '042700', state: '목표 달성', date: '6/05', setup: '눌림목', entry: '105,000', target: '118,000', stop: '99,000', ret: '+12.4%', retKind: 'good' },
+    { name: '포스코퓨처엠', code: '003670', state: '손절', date: '5/28', setup: '주도주 추세', entry: '248,000', target: '278,000', stop: '228,000', ret: '−8.1%', retKind: 'bad' },
+  ],
+  total: 47,
+  target: 18,
+  stopped: 9,
+  open: 7,
+  expired: 13,
+  avgClosed: '+4.1%',
+};
+
+type PickHistRow = {
+  as_of: string;
+  entry_price: number | null;
+  target_price: number | null;
+  tp2_price: number | null;
+  stop_loss: number | null;
+  tp1_hit: boolean | null;
+  instrument_id: number;
+  status: string | null;
+  closed_at: string | null;
+  exit_price: number | null;
+  close_return_pct: number | null;
+  setup: string | null;
+  instruments: { symbol: string; name: string } | null;
+};
+
+function mmdd(iso: string): string {
+  const d = new Date(iso.slice(0, 10) + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) return iso.slice(5).replace('-', '/');
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+}
+
+export async function getPickTrack(limit = 60): Promise<Loaded<PickTrack>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_PICK_TRACK, isSample: true };
+  try {
+    const { data, error } = await supabase
+      .from('recommendations')
+      .select(
+        'as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,instrument_id,status,closed_at,exit_price,close_return_pct,setup,instruments(symbol,name)',
+      )
+      .eq('basket_type', 'daily_focus')
+      .order('as_of', { ascending: false })
+      .limit(limit);
+    if (error || !data || data.length === 0) throw error ?? new Error('empty');
+    const rows = data as unknown as PickHistRow[];
+
+    // 열린 픽의 최신 종가 일괄 조회 (웹은 픽마다 1쿼리 → 여기선 in() 1쿼리)
+    const openIds = rows.filter((r) => !r.status || r.status === 'open').map((r) => r.instrument_id);
+    const lastClose = new Map<number, number>();
+    if (openIds.length > 0) {
+      const { data: bars } = await supabase
+        .from('ohlcv')
+        .select('instrument_id,close,ts')
+        .eq('interval', '1d')
+        .in('instrument_id', openIds)
+        .order('ts', { ascending: false });
+      for (const b of (bars ?? []) as { instrument_id: number; close: number }[]) {
+        if (!lastClose.has(b.instrument_id)) lastClose.set(b.instrument_id, Number(b.close));
+      }
+    }
+
+    type Internal = {
+      as_of: string; symbol: string; name: string;
+      entry: number | null; target: number | null; stop: number | null;
+      setup: string; state: PerfState; ret: number | null; closed: boolean; closed_at: string | null;
+    };
+    const recs: Internal[] = rows.map((r) => {
+      const inst = r.instruments ?? { symbol: '', name: '' };
+      const base = {
+        as_of: r.as_of, symbol: inst.symbol, name: inst.name,
+        entry: r.entry_price, target: r.target_price, stop: r.stop_loss,
+        setup: r.setup ?? '', closed_at: r.closed_at,
+      };
+      // 엔진이 확정(0017)한 픽 — 기록된 청산 결과 그대로
+      if (r.status && r.status !== 'open') {
+        return { ...base, state: PICK_STATUS_LABELS[r.status] ?? '—', ret: r.close_return_pct, closed: true };
+      }
+      // 열린 픽 — 최신 종가로 추정. 1차 익절(0022) 후엔 본전 스톱·tp2 기준.
+      const tp1Hit = Boolean(r.tp1_hit);
+      const last = lastClose.get(r.instrument_id) ?? null;
+      const ret = r.entry_price != null && r.entry_price > 0 && last != null ? last / r.entry_price - 1 : null;
+      const effStop = tp1Hit && r.entry_price != null ? r.entry_price : r.stop_loss;
+      const effTarget = tp1Hit && r.tp2_price != null ? r.tp2_price : r.target_price;
+      let state: PerfState = '—';
+      if (last != null && r.entry_price != null) {
+        if (effStop != null && last <= effStop) state = tp1Hit ? '1차 익절' : '손절';
+        else if (effTarget != null && last >= effTarget) state = '목표 달성';
+        else state = '진행중';
+      }
+      return { ...base, state, ret, closed: false };
+    });
+
+    // 포지션 단위 dedup — 보유 창 내 재선정은 첫 픽으로 흡수(웹 동일).
+    const bySymbol = new Map<string, Internal[]>();
+    for (const r of recs) {
+      const arr = bySymbol.get(r.symbol);
+      if (arr) arr.push(r);
+      else bySymbol.set(r.symbol, [r]);
+    }
+    const positions: Internal[] = [];
+    for (const picks of bySymbol.values()) {
+      picks.sort((a, b) => a.as_of.localeCompare(b.as_of));
+      let cur: Internal | null = null;
+      for (const p of picks) {
+        const within = cur != null && (cur.closed_at == null || p.as_of <= cur.closed_at);
+        if (!(within && cur)) {
+          cur = p;
+          positions.push(cur);
+        }
+      }
+    }
+    positions.sort((a, b) => b.as_of.localeCompare(a.as_of));
+
+    const records: PickRec[] = positions.map((p) => {
+      let ret = '진행 중';
+      let retKind: PickRec['retKind'] = 'muted';
+      if (p.state !== '진행중' && p.ret != null) {
+        ret = fmtPct(p.ret, { unit: 'ratio' });
+        retKind = p.ret >= 0 ? 'good' : 'bad';
+      }
+      return {
+        name: p.name, code: p.symbol, state: p.state, date: mmdd(p.as_of),
+        setup: SETUP_LABEL[p.setup] ?? p.setup,
+        entry: fmtPrice(p.entry), target: fmtPrice(p.target), stop: fmtPrice(p.stop),
+        ret, retKind,
+      };
+    });
+    const closedRets = positions.filter((p) => p.closed && p.ret != null).map((p) => p.ret as number);
+    const avg = closedRets.length > 0 ? closedRets.reduce((a, b) => a + b, 0) / closedRets.length : null;
+    return {
+      data: {
+        records,
+        total: positions.length,
+        target: positions.filter((p) => p.state === '목표 달성').length,
+        stopped: positions.filter((p) => p.state === '손절').length,
+        open: positions.filter((p) => p.state === '진행중').length,
+        expired: positions.filter((p) => p.state === '만료').length,
+        avgClosed: avg != null ? fmtPct(avg, { unit: 'ratio' }) : '—',
+      },
+      isSample: false,
+    };
+  } catch {
+    return { data: SAMPLE_PICK_TRACK, isSample: true };
+  }
+}
