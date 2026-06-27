@@ -15,6 +15,7 @@ import {
   type ReportRow,
 } from '@/data/home';
 import { signals as SAMPLE_SIGNALS, type Signal } from '@/data/screener';
+import { report as SAMPLE_REPORT, type ReportDetail } from '@/data/report';
 
 // trade_style enum → 한국어 라벨 (signals/recommendations.style)
 const STYLE_LABEL: Record<string, string> = {
@@ -398,6 +399,7 @@ export async function getHomeReports(): Promise<Loaded<ReportRow[]>> {
       data: rows.map((r) => {
         const sc = r.score != null ? Math.round(Number(r.score)) : null;
         return {
+          id: r.id,
           name: r.instruments?.name ?? r.title ?? '',
           line: r.summary ?? r.title ?? '',
           score: sc != null ? String(sc) : '—',
@@ -691,5 +693,114 @@ export async function getMarketRegime(): Promise<Loaded<RegimeView>> {
     return { data: { label, score, markerPct, pillKind, drivers }, isSample: false };
   } catch {
     return { data: SAMPLE_REGIME, isSample: true };
+  }
+}
+
+// ── 리포트 상세 (웹 getReportById 모바일판) — reports.payload 매핑 ──
+type RepPayload = {
+  plan?: {
+    tp1?: number; stop_loss?: number; entry_price?: number; risk_reward?: number;
+    style?: string; setup?: string; valid_until?: string;
+  }[];
+  verdict?: { score?: number; rating?: string };
+  factor?: Record<string, number | null>;
+  flows?: { foreign_net?: number; inst_net?: number; window_days?: number };
+  narrative?: { thesis?: string; trader_view?: string; quant_view?: string; risks?: string[] };
+  tradability?: { checks?: { key: string; label: string; passed: boolean }[] };
+};
+
+// 트레이드당 기본 리스크 1% → 권장 비중(=리스크÷손절거리비율, 0~25% 캡)
+function positionWeightPct(entry: number | null, stop: number | null): string {
+  if (entry == null || stop == null || entry <= 0) return '—';
+  const dist = Math.abs(entry - stop) / entry;
+  if (dist <= 0) return '—';
+  return `${Math.max(0, Math.min(25, 1.0 / dist)).toFixed(1)}%`;
+}
+
+// 순매수 주수 → 부호 문자열 + 톤
+function signedShares(n: number | null | undefined): { value: string; tone: 'good' | 'bad' } {
+  const v = n ?? 0;
+  const s = new Intl.NumberFormat('ko-KR').format(Math.abs(v));
+  return { value: `${v >= 0 ? '+' : '−'}${s}주`, tone: v >= 0 ? 'good' : 'bad' };
+}
+
+const GATE_NAME: Record<string, string> = {
+  active: '거래 활성',
+  liquidity: '유동성',
+  volatility: '변동성',
+  backtest_gate: '백테스트 게이트',
+};
+const FACTOR_AXES: [string, string][] = [
+  ['모멘텀', 'momentum_z'], ['가치', 'value_z'], ['성장', 'growth_z'],
+  ['품질', 'quality_z'], ['저변동', 'lowvol_z'], ['사이즈', 'size_z'],
+];
+
+export async function getReportById(id: number): Promise<Loaded<ReportDetail>> {
+  if (!hasSupabaseConfig || !Number.isFinite(id)) return { data: SAMPLE_REPORT, isSample: true };
+  try {
+    const { data, error } = await supabase
+      .from('reports')
+      .select('id,as_of,rating,summary,payload,instruments(symbol,name,exchange)')
+      .eq('id', id)
+      .limit(1)
+      .single();
+    if (error || !data) throw error ?? new Error('not found');
+    const inst = (data.instruments ?? {}) as unknown as { symbol?: string; name?: string; exchange?: string };
+    const p = (data.payload ?? {}) as RepPayload;
+    const plan0 = p.plan?.[0] ?? {};
+    const entry = plan0.entry_price ?? null;
+    const tp1 = plan0.tp1 ?? null;
+    const stop = plan0.stop_loss ?? null;
+    const styleLabel = STYLE_LABEL[plan0.style ?? ''] ?? plan0.style ?? '';
+    const factor = p.factor ?? {};
+    const narrative = p.narrative ?? {};
+    const validUntil = plan0.valid_until ? String(plan0.valid_until).slice(0, 10) : null;
+
+    const fn = signedShares(p.flows?.foreign_net);
+    const inn = signedShares(p.flows?.inst_net);
+
+    return {
+      data: {
+        meta: `발행 ${String(data.as_of).slice(0, 10)} · 인뎁스 리포트 · 수치는 전부 DB 근거(source_refs) — LLM은 서술만`,
+        name: inst.name ?? '',
+        code: inst.symbol ?? '',
+        sub: `${inst.symbol ?? ''} · ${inst.exchange ?? ''}${styleLabel ? ` · ${styleLabel} 셋업` : ''}`,
+        verdict: data.rating ?? p.verdict?.rating ?? '중립',
+        score: p.verdict?.score != null ? Math.round(Number(p.verdict.score)) : 0,
+        conclusion: narrative.thesis ?? data.summary ?? '',
+        risk: Array.isArray(narrative.risks) ? narrative.risks.join(' ') : '',
+        plan: {
+          entry: fmtPrice(entry),
+          target: fmtPrice(tp1),
+          targetPct: changePct(entry, tp1),
+          stop: fmtPrice(stop),
+          stopPct: changePct(entry, stop),
+          rr: plan0.risk_reward != null ? Number(plan0.risk_reward).toFixed(1) : riskReward(entry, tp1, stop),
+          weight: positionWeightPct(entry, stop),
+        },
+        planNote: validUntil
+          ? `플랜 유효: ${validUntil}까지 — 진입가 ±1% 이탈 시 무효. 비중은 회원 리스크 설정(트레이드당 1%)으로 재계산됩니다.`
+          : '비중은 회원 리스크 설정(트레이드당 1%)으로 읽는 시점에 재계산됩니다.',
+        gates: (p.tradability?.checks ?? []).map((c) => ({
+          name: GATE_NAME[c.key] ?? c.key,
+          sub: c.label,
+          pass: c.passed,
+        })),
+        evidence: narrative.trader_view ?? narrative.quant_view ?? '',
+        factors: FACTOR_AXES.flatMap(([name, k]) => {
+          const z = factor[k];
+          return z == null ? [] : [{ name, z: Math.round(Number(z) * 10) / 10 }];
+        }),
+        flow: [
+          { label: '외국인', value: fn.value, tone: fn.tone },
+          { label: '기관', value: inn.value, tone: inn.tone },
+        ],
+        source: `수치 출처: ohlcv · financials · flows · backtests — source_version 기록${p.flows?.window_days ? ` · 수급 ${p.flows.window_days}일` : ''}`,
+        disclaimer: SAMPLE_REPORT.disclaimer,
+      },
+      isSample: false,
+    };
+  } catch {
+    return { data: SAMPLE_REPORT, isSample: true };
   }
 }

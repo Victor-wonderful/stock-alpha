@@ -1,15 +1,22 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
+import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { NavHeader, Screen } from '@/components/screen';
 import { Card, Dot, IconButton, Pill } from '@/components/ui';
-import { report } from '@/data/report';
+import { report as SAMPLE_REPORT } from '@/data/report';
+import { getReportById } from '@/lib/queries';
+import { useQuery } from '@/lib/use-query';
 import { color, radius } from '@/theme/tokens';
 
 const ZMAX = 2.4;
 
 export default function ReportScreen() {
-  const r = report;
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const load = useCallback(() => getReportById(Number(id)), [id]);
+  const { data: r } = useQuery(load, SAMPLE_REPORT);
+  const allGatesPass = r.gates.every((g) => g.pass);
   return (
     <Screen
       gap={14}
@@ -76,11 +83,19 @@ export default function ReportScreen() {
       <Card style={{ gap: 12 }}>
         <View style={styles.spread}>
           <Text style={styles.cardTitle}>거래 가능 게이트</Text>
-          <Pill label="전체 통과" bg={color.goodSoft} fg={color.good} />
+          <Pill
+            label={allGatesPass ? '전체 통과' : '일부 미달'}
+            bg={allGatesPass ? color.goodSoft : color.warnSoft}
+            fg={allGatesPass ? color.good : color.warn}
+          />
         </View>
         {r.gates.map((g) => (
           <View key={g.name} style={styles.gateRow}>
-            <MaterialIcons name="check-circle" size={16} color={color.good} />
+            <MaterialIcons
+              name={g.pass ? 'check-circle' : 'cancel'}
+              size={16}
+              color={g.pass ? color.good : color.bad}
+            />
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={styles.gateName}>{g.name}</Text>
               <Text style={styles.muted11}>{g.sub}</Text>

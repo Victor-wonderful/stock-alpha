@@ -37,7 +37,7 @@ export const focusPicks: FocusPick[] = [
   { name: '신세계', code: '004170', style: '포지션', entry: '진입 152,000', tp: '+6.0%', score: '52' },
 ];
 
-export type ReportRow = { name: string; line: string; score: string; tone: 'good' | 'warn' };
+export type ReportRow = { id?: number; name: string; line: string; score: string; tone: 'good' | 'warn' };
 
 export const reports: ReportRow[] = [
   { name: 'SK하이닉스', line: 'HBM 수주 모멘텀 지속 — 눌림목 진입 구간', score: '91', tone: 'good' },

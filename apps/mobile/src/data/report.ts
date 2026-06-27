@@ -1,12 +1,24 @@
-export type Gate = { name: string; sub: string };
+export type Gate = { name: string; sub: string; pass: boolean };
 export type Factor = { name: string; z: number };
+export type ReportFlow = { label: string; value: string; tone: 'good' | 'bad' };
+export type ReportPlan = {
+  entry: string; target: string; targetPct: string;
+  stop: string; stopPct: string; rr: string; weight: string;
+};
+export type ReportDetail = {
+  meta: string; name: string; code: string; sub: string;
+  verdict: string; score: number; conclusion: string; risk: string;
+  plan: ReportPlan; planNote: string;
+  gates: Gate[]; evidence: string; factors: Factor[];
+  flow: ReportFlow[]; source: string; disclaimer: string;
+};
 
-export const report = {
+export const report: ReportDetail = {
   meta: '발행 2026-06-25 16:30 KST · 인뎁스 리포트 · 수치는 전부 DB 근거(source_refs) — LLM은 서술만',
   name: '한성크린텍',
   code: '066980',
   sub: '066980 · KOSPI · 포지션 셋업',
-  verdict: '매수' as const,
+  verdict: '매수',
   score: 71,
   conclusion:
     '52주 신고가를 거래대금 동반으로 경신했고 외국인·기관이 9일째 동반 순매수 중입니다. 검증된 셋업(기대값 +0.249R) 트리거가 살아 있어 계획된 가격에서의 진입은 유효합니다 — 다만 시장이 위험 회피 국면이므로 권장 비중을 넘기지 않는 것이 전제입니다.',
@@ -15,11 +27,11 @@ export const report = {
   planNote:
     '플랜 유효: 6/26(금) 장중 — 진입가 ±1% 이탈 시 무효. 비중은 회원 리스크 설정(트레이드당 1%)으로 읽는 시점에 재계산됩니다.',
   gates: [
-    { name: '거래 활성', sub: '정상 거래 종목 · 관리종목 아님' },
-    { name: '유동성', sub: '20일 평균 거래대금 기준 충족' },
-    { name: '변동성', sub: 'ATR 적정 범위 · 갭 리스크 낮음' },
-    { name: '백테스트 게이트', sub: '52주 신고가 셋업 검증 통과 · 기대값 +0.249R' },
-  ] as Gate[],
+    { name: '거래 활성', sub: '정상 거래 종목 · 관리종목 아님', pass: true },
+    { name: '유동성', sub: '20일 평균 거래대금 기준 충족', pass: true },
+    { name: '변동성', sub: 'ATR 적정 범위 · 갭 리스크 낮음', pass: true },
+    { name: '백테스트 게이트', sub: '52주 신고가 셋업 검증 통과 · 기대값 +0.249R', pass: true },
+  ],
   evidence:
     '6/25 종가 기준 52주 신고가(11,120원)를 거래대금 동반으로 돌파했으며, 돌파일 거래대금은 20일 평균 대비 2.4배입니다. 직전 6주간 변동성 수축(밴드 폭 백분위 8%) 후의 확장 국면으로, 돌파 실패 시 되돌림 목표는 손절선과 정합합니다.',
   factors: [

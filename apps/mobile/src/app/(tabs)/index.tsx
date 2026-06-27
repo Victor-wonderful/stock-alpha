@@ -190,7 +190,7 @@ export default function HomeScreen() {
           {reports.map((r, i) => (
             <Pressable
               key={r.name}
-              onPress={() => router.push({ pathname: '/report/[id]', params: { id: r.name } })}
+              onPress={() => router.push({ pathname: '/report/[id]', params: { id: String(r.id ?? r.name) } })}
               style={[styles.reportRow, i > 0 && styles.topBorder]}>
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={styles.reportName}>{r.name}</Text>
