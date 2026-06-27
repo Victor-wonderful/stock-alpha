@@ -7,6 +7,7 @@ import type { Loaded } from '@/lib/use-query';
 import type { PickData, PickBadge } from '@/components/pick-card';
 import { picks as SAMPLE_PICKS } from '@/data/recommend';
 import { focusPicks as SAMPLE_FOCUS, type FocusPick } from '@/data/home';
+import { signals as SAMPLE_SIGNALS, type Signal } from '@/data/screener';
 
 // trade_style enum → 한국어 라벨 (signals/recommendations.style)
 const STYLE_LABEL: Record<string, string> = {
@@ -14,6 +15,34 @@ const STYLE_LABEL: Record<string, string> = {
   day: '데이',
   swing: '스윙',
   position: '포지션',
+};
+
+// trade_setup enum → 한국어 라벨 (packages/db TRADE_SETUP_LABELS 미러 — Metro 값 import 회피).
+const SETUP_LABEL: Record<string, string> = {
+  factor_composite: '멀티팩터 종합',
+  leader_trend: '주도주 추세',
+  oversold_bounce: '과대낙폭 반등',
+  breakout: '돌파',
+  close_betting: '종가베팅',
+  flow_accumulation: '수급 동반 매집',
+  pullback: '눌림목',
+  high_52w: '52주 신고가',
+  vol_squeeze: '변동성 수축 돌파',
+  pead: '실적 모멘텀(PEAD)',
+  double_bottom: '쌍바닥(W) 반등',
+  anchor_pullback: '기준봉 눌림',
+  kalman: '칼만 추세',
+  sigma: '시그마 평균회귀',
+  pivot: '피봇 돌파',
+  median: '메디안 추세',
+  delta: '델타(AR1) 모멘텀',
+  markov: '마르코프 레짐',
+  quantile: '콴타일 반등',
+  ensemble: '앙상블 합의',
+  sortino: '소르티노 모멘텀',
+  bayes: '베이즈 결합',
+  theme: '테마주',
+  new_listing: '신규주',
 };
 // 보유기간 라벨 — holding_horizon 또는 style 기반 보조 문구.
 const STYLE_HORIZON: Record<string, string> = {
@@ -165,5 +194,71 @@ export async function getFocusPicks(): Promise<Loaded<FocusPick[]>> {
     return { data: focus, isSample: false };
   } catch {
     return { data: SAMPLE_FOCUS, isSample: true };
+  }
+}
+
+// ── 스크리너 (시그널 = 셋업 트리거 기록) ──
+type SigRow = {
+  instrument_id: number;
+  style: string;
+  setup: string;
+  strength: number | null;
+  entry_price: number | null;
+  stop_loss: number | null;
+  tp1: number | null;
+  risk_reward: number | null;
+  instruments: { symbol: string; name: string } | null;
+};
+
+// 강도(0~1) → 매수/중립/관망 (시그널은 추천 아님 — 강도 구간으로 표기)
+function verdictOf(strength: number): Signal['verdict'] {
+  if (strength >= 0.7) return '매수';
+  if (strength >= 0.5) return '중립';
+  return '관망';
+}
+// 합성알파(σ) 표기 — factor_scores.composite_alpha
+function fmtSigma(a: number | null | undefined): string {
+  if (a == null) return '—';
+  return `${a >= 0 ? '+' : ''}${a.toFixed(1)}σ`;
+}
+
+function mapSignalRow(r: SigRow, factor: FactorRow | undefined): Signal {
+  const inst = r.instruments ?? { symbol: '', name: '' };
+  const strength = r.strength ?? 0;
+  return {
+    name: inst.name,
+    code: inst.symbol,
+    init: inst.name.slice(0, 2),
+    setup: SETUP_LABEL[r.setup] ?? r.setup,
+    style: STYLE_LABEL[r.style] ?? r.style,
+    entry: fmtPrice(r.entry_price),
+    target: fmtPrice(r.tp1),
+    targetPct: changePct(r.entry_price, r.tp1),
+    stop: fmtPrice(r.stop_loss),
+    stopPct: changePct(r.entry_price, r.stop_loss),
+    rr: r.risk_reward != null ? r.risk_reward.toFixed(1) : riskReward(r.entry_price, r.tp1, r.stop_loss),
+    alpha: fmtSigma(factor?.composite_alpha),
+    verdict: verdictOf(strength),
+    score: Math.round(strength * 100),
+  };
+}
+
+// 스크리너 화면 — 시그널 강도순 상위. (웹 getSignals 모바일판, 강도 내림차순)
+export async function getScreenerSignals(): Promise<Loaded<Signal[]>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_SIGNALS, isSample: true };
+  try {
+    const { data, error } = await supabase
+      .from('signals')
+      .select(
+        'instrument_id,style,setup,strength,entry_price,stop_loss,tp1,risk_reward,instruments!inner(symbol,name)',
+      )
+      .order('strength', { ascending: false })
+      .limit(30);
+    if (error || !data || data.length === 0) throw error ?? new Error('empty');
+    const rows = data as unknown as SigRow[];
+    const factors = await factorMap(rows.map((r) => r.instrument_id));
+    return { data: rows.map((r) => mapSignalRow(r, factors.get(r.instrument_id))), isSample: false };
+  } catch {
+    return { data: SAMPLE_SIGNALS, isSample: true };
   }
 }

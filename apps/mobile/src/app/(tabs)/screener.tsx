@@ -4,18 +4,30 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { IconButton } from '@/components/ui';
-import { highlights, quickFilters, setupChips, signals, styleTabs, type Signal } from '@/data/screener';
+import {
+  highlights,
+  quickFilters,
+  setupChips,
+  signals as SAMPLE_SIGNALS,
+  styleTabs,
+  type Signal,
+} from '@/data/screener';
+import { getScreenerSignals } from '@/lib/queries';
+import { useQuery } from '@/lib/use-query';
 import { color, radius, verdictColors } from '@/theme/tokens';
 
 export default function ScreenerScreen() {
   const router = useRouter();
+  const { data: signals, isSample } = useQuery(getScreenerSignals, SAMPLE_SIGNALS);
   return (
     <Screen gap={18}>
       {/* 헤더 */}
       <View style={styles.headerRow}>
         <View style={{ gap: 3 }}>
           <Text style={styles.title}>스크리너</Text>
-          <Text style={styles.subtitle}>셋업 트리거 기록 · 매수 추천 아님</Text>
+          <Text style={styles.subtitle}>
+            셋업 트리거 기록 · 매수 추천 아님{isSample ? ' · 샘플' : ''}
+          </Text>
         </View>
         <IconButton icon="swap-vert" />
       </View>
