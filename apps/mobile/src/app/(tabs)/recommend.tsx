@@ -5,7 +5,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { PickCard } from '@/components/pick-card';
 import { Screen } from '@/components/screen';
 import { Card } from '@/components/ui';
-import { picks, pipeline, recommendMeta } from '@/data/recommend';
+import { pipeline, recommendMeta } from '@/data/recommend';
+import { getRecommendedPicks } from '@/lib/queries';
+import { useQuery } from '@/lib/use-query';
+import { picks as SAMPLE_PICKS } from '@/data/recommend';
 import { color, radius } from '@/theme/tokens';
 
 const TAG: Record<string, { bg: string; fg: string }> = {
@@ -16,11 +19,19 @@ const TAG: Record<string, { bg: string; fg: string }> = {
 
 export default function RecommendScreen() {
   const router = useRouter();
+  const { data: picks, loading, isSample } = useQuery(getRecommendedPicks, SAMPLE_PICKS);
 
   return (
     <Screen gap={20}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>추천</Text>
+        <View style={styles.rowCenter}>
+          <Text style={styles.title}>추천</Text>
+          {isSample ? (
+            <View style={styles.sampleTag}>
+              <Text style={styles.sampleTxt}>샘플</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.regimePill}>
           <MaterialIcons name="trending-down" size={15} color={color.bad} />
           <Text style={{ color: color.bad, fontSize: 12, fontWeight: '700' }}>{recommendMeta.regimePill}</Text>
@@ -64,14 +75,23 @@ export default function RecommendScreen() {
         ))}
       </View>
 
-      {/* 픽 카드 */}
-      {picks.map((p) => (
-        <PickCard
-          key={p.code}
-          pick={p}
-          onReport={() => router.push({ pathname: '/report/[id]', params: { id: p.code } })}
-        />
-      ))}
+      {/* 픽 카드 — 검증 미달이면 빈 날 */}
+      {!loading && !isSample && picks.length === 0 ? (
+        <Card style={{ gap: 6 }} padding={20}>
+          <Text style={styles.sectionTitle}>오늘은 발행된 픽이 없습니다</Text>
+          <Text style={styles.bandDetail}>
+            검증 게이트를 통과한 셋업이 없어 픽을 발행하지 않았습니다 — 무리한 진입보다 현금이 알파입니다.
+          </Text>
+        </Card>
+      ) : (
+        picks.map((p) => (
+          <PickCard
+            key={p.code}
+            pick={p}
+            onReport={() => router.push({ pathname: '/report/[id]', params: { id: p.code } })}
+          />
+        ))
+      )}
 
       {/* 푸시 미리보기 */}
       <Card accent style={{ gap: 9 }} padding={16}>
@@ -92,6 +112,13 @@ const styles = StyleSheet.create({
 
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: color.textPrimary, fontSize: 26, fontWeight: '700' },
+  sampleTag: {
+    backgroundColor: color.surface3,
+    borderRadius: radius.pill,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  sampleTxt: { color: color.textTertiary, fontSize: 10, fontWeight: '700' },
   regimePill: {
     flexDirection: 'row',
     alignItems: 'center',
