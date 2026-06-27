@@ -1,17 +1,21 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { NavHeader, Screen } from '@/components/screen';
 import { Snowflake5 } from '@/components/snowflake';
 import { Card, Dot, IconButton } from '@/components/ui';
 import { getStock, type StockDetail } from '@/data/stock';
+import { getStockDetail } from '@/lib/queries';
+import { useQuery } from '@/lib/use-query';
 import { color, radius } from '@/theme/tokens';
 
 export default function StockDetailScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
-  const s = getStock(code);
+  const load = useCallback(() => getStockDetail(code), [code]);
+  const { data: s } = useQuery(load, getStock(code));
 
   return (
     <Screen
@@ -86,7 +90,7 @@ export default function StockDetailScreen() {
       </Card>
 
       {/* AI 리포트 요약 */}
-      <Pressable onPress={() => router.push({ pathname: '/report/[id]', params: { id: s.code } })}>
+      <Pressable onPress={() => router.push({ pathname: '/report/[id]', params: { id: String(s.reportId ?? s.code) } })}>
         <Card style={{ gap: 10 }}>
           <View style={styles.spread}>
             <View style={styles.rowTiny}>

@@ -15,6 +15,7 @@ export type StockDetail = {
   flow: { label: string; value: string; tone: 'good' | 'bad' }[];
   plan: { entry: string; target: string; targetPct: string; stop: string; stopPct: string; rr: string; weight: string };
   reportSummary: string;
+  reportId?: number;
 };
 
 /** 코드별 상세. 데모용으로 한성크린텍만 채우고 기본값 fallback. */

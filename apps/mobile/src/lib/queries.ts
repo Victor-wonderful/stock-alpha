@@ -16,6 +16,7 @@ import {
 } from '@/data/home';
 import { signals as SAMPLE_SIGNALS, type Signal } from '@/data/screener';
 import { report as SAMPLE_REPORT, type ReportDetail } from '@/data/report';
+import { getStock, type StockDetail } from '@/data/stock';
 
 // trade_style enum → 한국어 라벨 (signals/recommendations.style)
 const STYLE_LABEL: Record<string, string> = {
@@ -802,5 +803,131 @@ export async function getReportById(id: number): Promise<Loaded<ReportDetail>> {
     };
   } catch {
     return { data: SAMPLE_REPORT, isSample: true };
+  }
+}
+
+// ── 종목 상세 (instrument + 가격 + 5축 + 밸류 + 수급 + 플랜 + 리포트 요약) ──
+// 종목 1개에 여러 테이블을 묶는 화면 — 종목 해석 후 병렬 조회.
+function netStreak(vals: (number | null)[]): { days: number; dir: 1 | -1 | 0 } {
+  let days = 0;
+  let dir: 1 | -1 | 0 = 0;
+  for (const v of vals) {
+    if (v == null) break;
+    const s: 1 | -1 | 0 = v > 0 ? 1 : v < 0 ? -1 : 0;
+    if (s === 0) break;
+    if (dir === 0) dir = s;
+    if (s !== dir) break;
+    days++;
+  }
+  return { days, dir };
+}
+function streakCell(label: string, vals: (number | null)[]): { label: string; value: string; tone: 'good' | 'bad' } {
+  const { days, dir } = netStreak(vals);
+  if (dir === 0 || days === 0) return { label, value: '—', tone: 'bad' };
+  return { label, value: `${dir > 0 ? '+' : '−'}${days}일`, tone: dir > 0 ? 'good' : 'bad' };
+}
+
+export async function getStockDetail(code: string): Promise<Loaded<StockDetail>> {
+  if (!hasSupabaseConfig) return { data: getStock(code), isSample: true };
+  try {
+    const { data: inst } = await supabase
+      .from('instruments')
+      .select('id,symbol,name,exchange,sector')
+      .eq('symbol', code)
+      .limit(1)
+      .single();
+    if (!inst) throw new Error('no instrument');
+    const iid = inst.id as number;
+
+    const [priceRes, facRes, valRes, flowRes, sigRes, repRes] = await Promise.all([
+      supabase.from('ohlcv').select('ts,close').eq('instrument_id', iid).eq('interval', '1d').order('ts', { ascending: false }).limit(2),
+      supabase.from('factor_scores').select('value_z,momentum_z,growth_z,lowvol_z,composite_alpha').eq('instrument_id', iid).order('date', { ascending: false }).limit(1),
+      supabase.from('valuations').select('per,pbr,roe,dcf_value,upside_pct').eq('instrument_id', iid).order('date', { ascending: false }).limit(1),
+      supabase.from('flows').select('foreign_net,inst_net,date').eq('instrument_id', iid).order('date', { ascending: false }).limit(15),
+      supabase.from('signals').select('style,setup,entry_price,stop_loss,tp1,risk_reward,strength').eq('instrument_id', iid).order('strength', { ascending: false }).limit(1),
+      supabase.from('reports').select('id,rating,summary,payload').eq('instrument_id', iid).eq('report_type', 'indepth').eq('status', 'published').order('as_of', { ascending: false }).limit(1),
+    ]);
+
+    const priceRows = (priceRes.data ?? []) as { close: number }[];
+    const close = priceRows[0]?.close != null ? Number(priceRows[0].close) : null;
+    const prev = priceRows[1]?.close != null ? Number(priceRows[1].close) : null;
+    const chg = close != null && prev != null && prev !== 0 ? (close - prev) / prev : null;
+
+    const f = facRes.data?.[0] as FactorRow | undefined;
+    const val = valRes.data?.[0] as Record<string, number | null> | undefined;
+    const flows = (flowRes.data ?? []) as { foreign_net: number | null; inst_net: number | null }[];
+    const sig = sigRes.data?.[0] as {
+      style: string; setup: string; entry_price: number | null; stop_loss: number | null;
+      tp1: number | null; risk_reward: number | null;
+    } | undefined;
+    const rep = repRes.data?.[0] as { id: number; rating: string | null; summary: string | null; payload: RepPayload | null } | undefined;
+    const repScore = rep?.payload?.verdict?.score;
+
+    const styleLabel = sig ? STYLE_LABEL[sig.style] ?? sig.style : '';
+    const rating = rep?.rating ?? null;
+    const verdict: StockDetail['verdict'] =
+      rating === '매수' ? '매수'
+      : rating === '거래 부적합' ? '관망'
+      : rating === '중립' ? '중립'
+      : (f?.composite_alpha ?? 0) > 0.3 ? '매수' : '중립';
+    const score = repScore != null ? Math.round(Number(repScore)) : Math.round(50 + (f?.composite_alpha ?? 0) * 16.67);
+
+    const valuation: StockDetail['valuation'] = [];
+    if (val?.per != null) valuation.push({ label: 'PER', value: `${Number(val.per).toFixed(1)}배` });
+    if (val?.pbr != null) valuation.push({ label: 'PBR', value: `${Number(val.pbr).toFixed(1)}배` });
+    if (val?.dcf_value != null) valuation.push({ label: 'DCF 적정가', value: fmtPrice(Number(val.dcf_value)) });
+    if (val?.upside_pct != null) {
+      const u = Number(val.upside_pct);
+      valuation.push({ label: '업사이드', value: fmtPct(u, { unit: 'ratio' }), tone: u >= 0 ? 'good' : 'bad' });
+    }
+    if (valuation.length === 0) valuation.push({ label: '밸류에이션', value: '데이터 없음' });
+
+    const fStreak = streakCell('외국인', flows.map((x) => x.foreign_net));
+    const iStreak = streakCell('기관', flows.map((x) => x.inst_net));
+    const both = fStreak.tone === 'good' && iStreak.tone === 'good';
+    const bothSell = fStreak.tone === 'bad' && iStreak.tone === 'bad' && fStreak.value !== '—' && iStreak.value !== '—';
+    const flow: StockDetail['flow'] = [
+      fStreak,
+      iStreak,
+      { label: '판정', value: both ? '동반 매집' : bothSell ? '동반 이탈' : '혼조', tone: both ? 'good' : 'bad' },
+    ];
+
+    const entry = sig?.entry_price ?? null;
+    const tp1 = sig?.tp1 ?? null;
+    const stop = sig?.stop_loss ?? null;
+    const plan = {
+      entry: fmtPrice(entry),
+      target: fmtPrice(tp1),
+      targetPct: changePct(entry, tp1),
+      stop: fmtPrice(stop),
+      stopPct: changePct(entry, stop),
+      rr: sig?.risk_reward != null ? Number(sig.risk_reward).toFixed(1) : riskReward(entry, tp1, stop),
+      weight: positionWeightPct(entry, stop),
+    };
+
+    return {
+      data: {
+        name: (inst.name as string) ?? code,
+        code: (inst.symbol as string) ?? code,
+        meta: `${inst.symbol} · ${inst.exchange}${styleLabel ? ` · ${styleLabel} 셋업` : ''}`,
+        price: fmtPrice(close),
+        change: chg != null ? `${chg >= 0 ? '▲' : '▼'} ${Math.abs(chg * 100).toFixed(1)}% 오늘` : '—',
+        changeUp: (chg ?? 0) >= 0,
+        verdict,
+        score,
+        note: 'EOD 분석 · 팩터40 · 밸류30 · 시그널30',
+        snowflake: snowflakeFromFactor(
+          f ? { instrument_id: iid, value_z: f.value_z, momentum_z: f.momentum_z, growth_z: f.growth_z, lowvol_z: f.lowvol_z, composite_alpha: f.composite_alpha } : undefined,
+        ),
+        valuation,
+        flow,
+        plan,
+        reportSummary: rep?.summary ?? rep?.payload?.narrative?.thesis ?? '발행된 리포트가 아직 없습니다.',
+        reportId: rep?.id,
+      },
+      isSample: false,
+    };
+  } catch {
+    return { data: getStock(code), isSample: true };
   }
 }
