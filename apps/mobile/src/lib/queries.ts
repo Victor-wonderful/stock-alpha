@@ -814,6 +814,95 @@ export async function getMarketBoard(): Promise<Loaded<MarketBoard>> {
   }
 }
 
+// ── 종목 분석 목록 (종목 화면) — reports(indepth, published)를 거래일별로 그룹 ──
+// rating = 매수|중립|관망|거래 부적합. '거래 부적합'은 제외. pick = 현재 추천 종목 배지.
+export type StockVerdict = '매수' | '중립' | '관망';
+export type StockRow = {
+  name: string;
+  code: string;
+  pick: boolean;
+  verdict: StockVerdict;
+  score: number;
+  line: string;
+};
+export type StockGroup = { date: string; rows: StockRow[] };
+
+export const SAMPLE_STOCK_GROUPS: StockGroup[] = [
+  {
+    date: '6/25',
+    rows: [
+      { name: 'SK스퀘어', code: '402340', pick: true, verdict: '매수', score: 72, line: '신고가 경신 + 외국인·기관 동반 순매수 — 플랜 내 진입 유효' },
+      { name: 'SK하이닉스', code: '000660', pick: false, verdict: '매수', score: 81, line: 'HBM 수주 모멘텀 지속 · 주도주 추세 강화' },
+      { name: '티에스이', code: '131290', pick: false, verdict: '중립', score: 64, line: '수급 매집 초기 — 거래량 확인 후 대응' },
+      { name: '한미반도체', code: '042700', pick: false, verdict: '중립', score: 61, line: '눌림목 구간 · 밸류 부담 일부' },
+    ],
+  },
+  {
+    date: '6/24',
+    rows: [
+      { name: '삼성전자', code: '005930', pick: false, verdict: '중립', score: 58, line: '업황 회복 신호, 밸류 부담 — 분할 접근' },
+      { name: '신세계', code: '004170', pick: false, verdict: '관망', score: 52, line: '수급 약세 지속 — 추세 전환 확인 필요' },
+    ],
+  },
+];
+
+type StockRepRow = RepRow & { as_of: string };
+
+export async function getStockAnalyses(): Promise<Loaded<StockGroup[]>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_STOCK_GROUPS, isSample: true };
+  try {
+    // 현재 추천 종목코드 집합 — '오늘의 픽' 배지용 (recommendations 는 소수 행).
+    const { data: recs } = await supabase
+      .from('recommendations')
+      .select('instruments(symbol)')
+      .order('created_at', { ascending: false })
+      .limit(60);
+    const pickSet = new Set(
+      ((recs ?? []) as unknown as { instruments: { symbol: string } | null }[])
+        .map((r) => r.instruments?.symbol)
+        .filter((x): x is string => Boolean(x)),
+    );
+
+    const { data, error } = await supabase
+      .from('reports')
+      .select('id,title,summary,rating,as_of,score:payload->verdict->>score,instruments(symbol,name)')
+      .eq('status', 'published')
+      .eq('report_type', 'indepth')
+      .neq('rating', '거래 부적합')
+      .order('as_of', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(40);
+    if (error || !data || data.length === 0) throw error ?? new Error('empty');
+
+    const rows = data as unknown as StockRepRow[];
+    const byDate = new Map<string, StockRow[]>();
+    for (const r of rows) {
+      const code = r.instruments?.symbol ?? '';
+      const verdict: StockVerdict =
+        r.rating === '매수' || r.rating === '관망' ? r.rating : '중립';
+      const sc = r.score != null ? Math.round(Number(r.score)) : 0;
+      const arr = byDate.get(r.as_of) ?? [];
+      arr.push({
+        name: r.instruments?.name ?? r.title ?? '',
+        code,
+        pick: pickSet.has(code),
+        verdict,
+        score: sc,
+        line: r.summary ?? r.title ?? '',
+      });
+      byDate.set(r.as_of, arr);
+    }
+    const groups: StockGroup[] = [...byDate.entries()].map(([date, rs]) => ({
+      date: mmdd(date),
+      rows: rs.sort((a, b) => b.score - a.score),
+    }));
+    if (groups.length === 0) throw new Error('none');
+    return { data: groups, isSample: false };
+  } catch {
+    return { data: SAMPLE_STOCK_GROUPS, isSample: true };
+  }
+}
+
 // ── 리포트 상세 (웹 getReportById 모바일판) — reports.payload 매핑 ──
 type RepPayload = {
   plan?: {
