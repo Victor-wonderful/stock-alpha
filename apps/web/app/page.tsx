@@ -222,7 +222,7 @@ export default async function DashboardPage() {
           <div>
             <h1 className="text-xl font-bold text-text">홈</h1>
             <p className="mt-0.5 text-xs text-text-mute">
-              {asOf ? `${asOf} 마감 데이터 기준 · 실시간 갱신` : "실시간 갱신"}
+              {asOf ? `${asOf} 장마감 데이터 기준` : "장마감 데이터 기준"}
               {quotes.isSample && " · "}
               {quotes.isSample && <SampleBadge />}
             </p>
