@@ -3,7 +3,17 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { NavHeader, Screen } from '@/components/screen';
 import { Card, Pill } from '@/components/ui';
-import { getMarketRegime, SAMPLE_REGIME, type RegimeView } from '@/lib/queries';
+import {
+  getMarketBoard,
+  getMarketMacro,
+  getMarketRegime,
+  SAMPLE_MARKET_BOARD,
+  SAMPLE_MARKET_MACRO,
+  SAMPLE_REGIME,
+  type MacroIndicator,
+  type RegimeView,
+} from '@/lib/queries';
+import { fmtDate } from '@/lib/format';
 import { useQuery } from '@/lib/use-query';
 import { color, radius } from '@/theme/tokens';
 
@@ -18,32 +28,36 @@ const DRIVER_TONE: Record<RegimeView['drivers'][number]['kind'], { icon: 'trendi
   bad: { icon: 'trending-down', c: color.bad },
   neutral: { icon: 'bar-chart', c: color.textSecondary },
 };
-const macro = [
-  { l: '미국 10년물', v: '4.12%', d: '+3bp', c: color.bad },
-  { l: '달러인덱스', v: '103.2', d: '−0.2', c: color.good },
-  { l: 'WTI', v: '$71.4', d: '+1.1%', c: color.bad },
-  { l: '한국 기준금리', v: '2.50%', d: '동결', c: color.textSecondary },
-  { l: '미국 CPI', v: '2.6%', d: '둔화 지속', c: color.good },
-  { l: '하이일드', v: '3.1%p', d: '+0.2p', c: color.warn },
-];
-const flows = [
-  { l: '외국인 순매수', v: '+8,420억', c: color.good },
-  { l: '기관 순매수', v: '+1,950억', c: color.good },
-  { l: '개인 순매수', v: '−1조 380억', c: color.bad },
-];
-const sectors = [
-  { n: '방산', p: 2.4 },
-  { n: '조선', p: 1.6 },
-  { n: '통신', p: 0.4 },
-  { n: '반도체', p: -1.2 },
-  { n: '바이오', p: -1.9 },
-  { n: '2차전지', p: -2.8 },
-];
-const SMAX = 2.8;
+const MACRO_TONE_C: Record<MacroIndicator['tone'], string> = {
+  good: color.good,
+  bad: color.bad,
+  neutral: color.textSecondary,
+};
+
+// 억원 → 부호 포함 문자열. 1조(=10,000억) 이상은 조 단위로 축약.
+const fmtEok = (n: number) => {
+  const sign = n > 0 ? '+' : n < 0 ? '−' : '';
+  const abs = Math.abs(n);
+  if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(1)}조`;
+  return `${sign}${new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 }).format(abs)}억`;
+};
 
 export default function MarketScreen() {
   const { data: regime } = useQuery(getMarketRegime, SAMPLE_REGIME);
+  const { data: macro, isSample: macroSample } = useQuery(getMarketMacro, SAMPLE_MARKET_MACRO);
+  const { data: board, isSample: boardSample } = useQuery(getMarketBoard, SAMPLE_MARKET_BOARD);
   const pill = PILL_TONE[regime.pillKind];
+
+  // 섹터: 모멘텀(상대강도 z) 내림차순 상위/하위, 막대는 |모멘텀| 최대값 기준 정규화.
+  const sectors = [...board.sectors].sort((a, b) => b.momentum - a.momentum);
+  const topSectors = [...sectors.slice(0, 3), ...sectors.slice(-3)].filter(
+    (s, i, arr) => arr.findIndex((x) => x.name === s.name) === i,
+  );
+  const maxAbsMom = Math.max(0.1, ...sectors.map((s) => Math.abs(s.momentum)));
+  // 수급: 섹터 flow(외인+기관 5일 순매수, 억원) 기준 순유입/순유출 상위.
+  const inflow = [...board.sectors].sort((a, b) => b.flow - a.flow).slice(0, 3);
+  const outflow = [...board.sectors].sort((a, b) => a.flow - b.flow).slice(0, 3);
+
   return (
     <Screen gap={16} header={<NavHeader title="시장" />}>
       {/* 레짐 히어로 */}
@@ -90,16 +104,16 @@ export default function MarketScreen() {
       <Card style={{ gap: 12 }}>
         <View style={styles.spread}>
           <Text style={styles.cardTitle}>매크로 지표</Text>
-          <Text style={styles.muted11}>FRED · 일배치</Text>
+          <Text style={styles.muted11}>{macroSample ? '예시' : 'FRED · 1~2일 지연'}</Text>
         </View>
         <View style={{ gap: 8 }}>
-          {[0, 2, 4].map((start) => (
+          {[0, 2].map((start) => (
             <View key={start} style={styles.row8}>
               {macro.slice(start, start + 2).map((m) => (
-                <View key={m.l} style={styles.macroCell}>
-                  <Text style={styles.muted10}>{m.l}</Text>
-                  <Text style={styles.macroValue}>{m.v}</Text>
-                  <Text style={{ color: m.c, fontSize: 10, fontWeight: '600' }}>{m.d}</Text>
+                <View key={m.label} style={styles.macroCell}>
+                  <Text style={styles.muted10}>{m.label}</Text>
+                  <Text style={styles.macroValue}>{m.value}</Text>
+                  <Text style={{ color: MACRO_TONE_C[m.tone], fontSize: 10, fontWeight: '600' }}>{m.delta}</Text>
                 </View>
               ))}
             </View>
@@ -107,48 +121,60 @@ export default function MarketScreen() {
         </View>
       </Card>
 
-      {/* 수급 · 브레드스 */}
+      {/* 수급 (외국인+기관 5거래일 순매수, 섹터 합산 억원) */}
       <Card style={{ gap: 12 }}>
         <View style={styles.spread}>
-          <Text style={styles.cardTitle}>수급 · 브레드스</Text>
-          <Text style={styles.muted11}>5일 누적</Text>
+          <Text style={styles.cardTitle}>수급 · 섹터 자금</Text>
+          <Text style={styles.muted11}>
+            {boardSample ? '예시' : `외인+기관 5일 · ${fmtDate(board.asOf)} 기준`}
+          </Text>
         </View>
-        {flows.map((f) => (
-          <View key={f.l} style={styles.spread}>
-            <Text style={styles.kvLabel}>{f.l}</Text>
-            <Text style={{ color: f.c, fontSize: 13, fontWeight: '700' }}>{f.v}</Text>
+        <View style={styles.netBox}>
+          <Text style={styles.muted11}>외국인+기관 순매수 (5거래일)</Text>
+          <Text style={{ color: board.netFlow >= 0 ? color.good : color.bad, fontSize: 22, fontWeight: '800' }}>
+            {fmtEok(board.netFlow)}
+          </Text>
+        </View>
+        <View style={styles.row8}>
+          <View style={styles.flowCol}>
+            <Text style={[styles.muted10, { color: color.good }]}>순유입 상위</Text>
+            {inflow.map((s) => (
+              <View key={s.name} style={styles.spread}>
+                <Text style={styles.kvLabel}>{s.name}</Text>
+                <Text style={{ color: color.good, fontSize: 12, fontWeight: '700' }}>{fmtEok(s.flow)}</Text>
+              </View>
+            ))}
           </View>
-        ))}
-        <View style={styles.breadthBox}>
-          <View style={styles.spread}>
-            <Text style={styles.muted11}>상승종목 비중 (20일)</Text>
-            <Text style={{ color: color.bad, fontSize: 15, fontWeight: '700' }}>14%</Text>
+          <View style={styles.flowCol}>
+            <Text style={[styles.muted10, { color: color.bad }]}>순유출 상위</Text>
+            {outflow.map((s) => (
+              <View key={s.name} style={styles.spread}>
+                <Text style={styles.kvLabel}>{s.name}</Text>
+                <Text style={{ color: color.bad, fontSize: 12, fontWeight: '700' }}>{fmtEok(s.flow)}</Text>
+              </View>
+            ))}
           </View>
-          <View style={styles.track}>
-            <View style={{ width: '14%', height: 8, borderRadius: 999, backgroundColor: color.bad }} />
-          </View>
-          <Text style={styles.muted10}>역사적 하위 8% — 극단적 약세 브레드스</Text>
         </View>
       </Card>
 
-      {/* 섹터 로테이션 */}
+      {/* 섹터 로테이션 (상대강도 = 섹터 모멘텀 z) */}
       <Card style={{ gap: 12 }}>
         <View style={styles.spread}>
           <Text style={styles.cardTitle}>섹터 로테이션</Text>
-          <Text style={styles.muted11}>전체</Text>
+          <Text style={styles.muted11}>{boardSample ? '예시' : '상대강도'}</Text>
         </View>
-        {sectors.map((s) => {
-          const c = s.p >= 0 ? color.good : color.bad;
-          const w = Math.round((Math.abs(s.p) / SMAX) * 100);
+        {topSectors.map((s) => {
+          const c = s.momentum >= 0 ? color.good : color.bad;
+          const w = Math.round((Math.abs(s.momentum) / maxAbsMom) * 100);
           return (
-            <View key={s.n} style={styles.sectorRow}>
-              <Text style={styles.sectorName}>{s.n}</Text>
+            <View key={s.name} style={styles.sectorRow}>
+              <Text style={styles.sectorName}>{s.name}</Text>
               <View style={styles.track}>
                 <View style={{ width: `${w}%`, height: 8, borderRadius: 999, backgroundColor: c }} />
               </View>
               <Text style={[styles.sectorPct, { color: c }]}>
-                {s.p >= 0 ? '+' : '−'}
-                {Math.abs(s.p)}%
+                {s.momentum >= 0 ? '+' : '−'}
+                {Math.abs(s.momentum).toFixed(1)}
               </Text>
             </View>
           );
@@ -196,7 +222,9 @@ const styles = StyleSheet.create({
   macroCell: { flex: 1, gap: 4, paddingVertical: 11, paddingHorizontal: 13, borderRadius: radius.inner, backgroundColor: color.surface2 },
   macroValue: { color: color.textPrimary, fontSize: 17, fontWeight: '700' },
 
-  breadthBox: { gap: 7, padding: 12, paddingHorizontal: 14, borderRadius: radius.inner, backgroundColor: color.surface2 },
+  netBox: { gap: 4, padding: 12, paddingHorizontal: 14, borderRadius: radius.inner, backgroundColor: color.surface2 },
+  flowCol: { flex: 1, gap: 6, padding: 12, borderRadius: radius.inner, backgroundColor: color.surface2 },
+
   track: { flex: 1, height: 8, borderRadius: 999, backgroundColor: color.surface3, overflow: 'hidden' },
 
   sectorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
