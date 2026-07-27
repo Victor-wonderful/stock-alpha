@@ -20,3 +20,21 @@ def kst_now() -> datetime:
 def kst_today() -> date:
     """KST 기준 오늘 날짜 — date.today()(PC 로컬) 대체."""
     return datetime.now(KST).date()
+
+
+# 한국 정규장 마감(15:30) + 거래소/KIS·네이버 종가 확정 버퍼.
+KR_CLOSE_HHMM = (15, 40)
+
+
+def kr_session_closed(now: datetime | None = None) -> bool:
+    """KST 기준 한국 정규장 종가가 확정됐는지(마감+버퍼 경과 또는 주말).
+
+    장중·장전에 지수 일봉을 조회하면 거래소가 '오늘' 날짜로 직전 종가를 그대로
+    내려주는 미확정 행이 섞인다(2026-06-29: morning 08:30 배치가 금 종가를
+    월요일 행으로 적재 → 장중 내내 '오늘 보합'처럼 보이는 사고). 종가가 확정되기
+    전엔 오늘 날짜 행을 적재하지 않도록 인제스트가 이 가드를 쓴다.
+    """
+    n = now or kst_now()
+    if n.weekday() >= 5:  # 주말은 당일 신규 봉이 없음
+        return True
+    return (n.hour, n.minute) >= KR_CLOSE_HHMM

@@ -26,6 +26,9 @@ apps/web/build/
 .env
 .env.local
 .env.*.local
+# 백업본도 실키가 들어 있다 (.env.*.local 패턴은 .env.local.bak 을 못 잡음)
+.env*.bak
+.env*.backup
 *.pem
 *.key
 

@@ -163,12 +163,20 @@ def fetch_index(code: str, pages: int = 2) -> pd.DataFrame:
 
 
 def ingest_kr_indices(pages: int = 2) -> int:
-    """코스피·코스닥 지수 → macro 적재. 모닝/일일 배치에서 호출(업서트 멱등)."""
-    from engine.db import upsert
+    """코스피·코스닥 지수 → macro 적재. 모닝/일일 배치에서 호출(업서트 멱등).
 
+    장 마감(종가 확정) 전엔 '오늘' 날짜 행을 적재하지 않는다 — 직전 종가를 오늘
+    행으로 적재해 '오늘 보합'처럼 보이는 사고(2026-06-29) 차단(kis.py 와 동일 가드).
+    """
+    from engine.db import upsert
+    from engine.timeutil import kr_session_closed, kst_today
+
+    drop_today = None if kr_session_closed() else kst_today().isoformat()
     total = 0
     for code in INDEX_CODES:
         rows = normalize_index(fetch_index(code, pages=pages), code)
+        if drop_today:
+            rows = [r for r in rows if r["date"] < drop_today]
         if rows:
             total += upsert("macro", rows, on_conflict="series_id,date")
     log.info("naver.index.done", rows=total)

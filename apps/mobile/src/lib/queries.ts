@@ -697,6 +697,212 @@ export async function getMarketRegime(): Promise<Loaded<RegimeView>> {
   }
 }
 
+// ── 시장 매크로 지표 (macro 테이블 — 미국채10Y·원/달러·VIX·WTI) ──
+// FRED/네이버 1~2일 지연 → asOf 표시. 상승=위험(금리·VIX·유가↑, 원화약세)으로 단순 톤.
+type MacroMeta = { id: string; fallbackId?: string; label: string; digits: number; unit: string };
+const MARKET_MACRO_META: MacroMeta[] = [
+  { id: 'DGS10', label: '미 국채 10Y', digits: 2, unit: '%' },
+  { id: 'USDKRW', fallbackId: 'DEXKOUS', label: '원/달러', digits: 1, unit: '원' },
+  { id: 'VIXCLS', label: 'VIX', digits: 2, unit: '' },
+  { id: 'DCOILWTICO', label: 'WTI 유가', digits: 1, unit: '$' },
+];
+
+export type MacroIndicator = {
+  label: string;
+  value: string;
+  delta: string;
+  tone: 'good' | 'bad' | 'neutral';
+};
+
+export const SAMPLE_MARKET_MACRO: MacroIndicator[] = [
+  { label: '미 국채 10Y', value: '4.12%', delta: '+0.03', tone: 'bad' },
+  { label: '원/달러', value: '1,348원', delta: '−2.3', tone: 'good' },
+  { label: 'VIX', value: '13.82', delta: '−0.41', tone: 'good' },
+  { label: 'WTI 유가', value: '$71.4', delta: '+0.8', tone: 'bad' },
+];
+
+const numFmt = (v: number, digits: number) =>
+  new Intl.NumberFormat('ko-KR', { maximumFractionDigits: digits }).format(v);
+
+export async function getMarketMacro(): Promise<Loaded<MacroIndicator[]>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_MARKET_MACRO, isSample: true };
+  try {
+    const ids = MARKET_MACRO_META.flatMap((m) => (m.fallbackId ? [m.id, m.fallbackId] : [m.id]));
+    const { data, error } = await supabase
+      .from('macro')
+      .select('series_id,value,date')
+      .in('series_id', ids)
+      .order('date', { ascending: true });
+    if (error || !data || data.length === 0) throw error ?? new Error('empty');
+    const bySeries = new Map<string, number[]>();
+    for (const r of data as { series_id: string; value: number }[]) {
+      const a = bySeries.get(r.series_id) ?? [];
+      a.push(Number(r.value));
+      bySeries.set(r.series_id, a);
+    }
+    const out = MARKET_MACRO_META.flatMap((m) => {
+      const useId = bySeries.has(m.id)
+        ? m.id
+        : m.fallbackId && bySeries.has(m.fallbackId)
+          ? m.fallbackId
+          : m.id;
+      const vals = bySeries.get(useId);
+      if (!vals || vals.length === 0) return [];
+      const v = vals[vals.length - 1];
+      const prev = vals.length > 1 ? vals[vals.length - 2] : v;
+      const diff = v - prev;
+      const tone: MacroIndicator['tone'] =
+        Math.abs(diff) < 1e-9 ? 'neutral' : diff > 0 ? 'bad' : 'good';
+      const sign = diff > 0 ? '+' : diff < 0 ? '−' : '';
+      return [{
+        label: m.label,
+        value: `${numFmt(v, m.digits)}${m.unit}`,
+        delta: `${sign}${numFmt(Math.abs(diff), 2)}`,
+        tone,
+      }];
+    });
+    if (out.length === 0) throw new Error('none');
+    return { data: out, isSample: false };
+  } catch {
+    return { data: SAMPLE_MARKET_MACRO, isSample: true };
+  }
+}
+
+// ── 섹터 로테이션 + 수급 (sector_rotation: momentum z·flow=외인+기관 5일 순매수 억원) ──
+// flow 합 = 시장 전체 외인+기관 5일 순매수(억원). 개인/외국인 분리는 미보유(주수만) → 합산만 노출.
+export type SectorRow = { name: string; momentum: number; flow: number };
+export type MarketBoard = { asOf: string | null; netFlow: number; sectors: SectorRow[] };
+
+export const SAMPLE_MARKET_BOARD: MarketBoard = {
+  asOf: null,
+  netFlow: -312,
+  sectors: [
+    { name: '방산', momentum: 2.4, flow: 420 },
+    { name: '조선', momentum: 1.6, flow: 180 },
+    { name: '통신', momentum: 0.4, flow: 30 },
+    { name: '반도체', momentum: -1.2, flow: -740 },
+    { name: '바이오', momentum: -1.9, flow: -210 },
+    { name: '2차전지', momentum: -2.8, flow: -390 },
+  ],
+};
+
+export async function getMarketBoard(): Promise<Loaded<MarketBoard>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_MARKET_BOARD, isSample: true };
+  try {
+    const { data: latest } = await supabase
+      .from('sector_rotation')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1);
+    const d = (latest?.[0] as { date: string } | undefined)?.date;
+    if (!d) throw new Error('no date');
+    const { data, error } = await supabase
+      .from('sector_rotation')
+      .select('sector,momentum,flow')
+      .eq('date', d)
+      .order('momentum', { ascending: false });
+    if (error || !data || data.length === 0) throw error ?? new Error('empty');
+    const sectors = (data as { sector: string; momentum: number; flow: number }[]).map((r) => ({
+      name: r.sector,
+      momentum: Number(r.momentum ?? 0),
+      flow: Number(r.flow ?? 0),
+    }));
+    const netFlow = sectors.reduce((s, x) => s + x.flow, 0);
+    return { data: { asOf: d, netFlow, sectors }, isSample: false };
+  } catch {
+    return { data: SAMPLE_MARKET_BOARD, isSample: true };
+  }
+}
+
+// ── 종목 분석 목록 (종목 화면) — reports(indepth, published)를 거래일별로 그룹 ──
+// rating = 매수|중립|관망|거래 부적합. '거래 부적합'은 제외. pick = 현재 추천 종목 배지.
+export type StockVerdict = '매수' | '중립' | '관망';
+export type StockRow = {
+  name: string;
+  code: string;
+  pick: boolean;
+  verdict: StockVerdict;
+  score: number;
+  line: string;
+};
+export type StockGroup = { date: string; rows: StockRow[] };
+
+export const SAMPLE_STOCK_GROUPS: StockGroup[] = [
+  {
+    date: '6/25',
+    rows: [
+      { name: 'SK스퀘어', code: '402340', pick: true, verdict: '매수', score: 72, line: '신고가 경신 + 외국인·기관 동반 순매수 — 플랜 내 진입 유효' },
+      { name: 'SK하이닉스', code: '000660', pick: false, verdict: '매수', score: 81, line: 'HBM 수주 모멘텀 지속 · 주도주 추세 강화' },
+      { name: '티에스이', code: '131290', pick: false, verdict: '중립', score: 64, line: '수급 매집 초기 — 거래량 확인 후 대응' },
+      { name: '한미반도체', code: '042700', pick: false, verdict: '중립', score: 61, line: '눌림목 구간 · 밸류 부담 일부' },
+    ],
+  },
+  {
+    date: '6/24',
+    rows: [
+      { name: '삼성전자', code: '005930', pick: false, verdict: '중립', score: 58, line: '업황 회복 신호, 밸류 부담 — 분할 접근' },
+      { name: '신세계', code: '004170', pick: false, verdict: '관망', score: 52, line: '수급 약세 지속 — 추세 전환 확인 필요' },
+    ],
+  },
+];
+
+type StockRepRow = RepRow & { as_of: string };
+
+export async function getStockAnalyses(): Promise<Loaded<StockGroup[]>> {
+  if (!hasSupabaseConfig) return { data: SAMPLE_STOCK_GROUPS, isSample: true };
+  try {
+    // 현재 추천 종목코드 집합 — '오늘의 픽' 배지용 (recommendations 는 소수 행).
+    const { data: recs } = await supabase
+      .from('recommendations')
+      .select('instruments(symbol)')
+      .order('created_at', { ascending: false })
+      .limit(60);
+    const pickSet = new Set(
+      ((recs ?? []) as unknown as { instruments: { symbol: string } | null }[])
+        .map((r) => r.instruments?.symbol)
+        .filter((x): x is string => Boolean(x)),
+    );
+
+    const { data, error } = await supabase
+      .from('reports')
+      .select('id,title,summary,rating,as_of,score:payload->verdict->>score,instruments(symbol,name)')
+      .eq('status', 'published')
+      .eq('report_type', 'indepth')
+      .neq('rating', '거래 부적합')
+      .order('as_of', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(40);
+    if (error || !data || data.length === 0) throw error ?? new Error('empty');
+
+    const rows = data as unknown as StockRepRow[];
+    const byDate = new Map<string, StockRow[]>();
+    for (const r of rows) {
+      const code = r.instruments?.symbol ?? '';
+      const verdict: StockVerdict =
+        r.rating === '매수' || r.rating === '관망' ? r.rating : '중립';
+      const sc = r.score != null ? Math.round(Number(r.score)) : 0;
+      const arr = byDate.get(r.as_of) ?? [];
+      arr.push({
+        name: r.instruments?.name ?? r.title ?? '',
+        code,
+        pick: pickSet.has(code),
+        verdict,
+        score: sc,
+        line: r.summary ?? r.title ?? '',
+      });
+      byDate.set(r.as_of, arr);
+    }
+    const groups: StockGroup[] = [...byDate.entries()].map(([date, rs]) => ({
+      date: mmdd(date),
+      rows: rs.sort((a, b) => b.score - a.score),
+    }));
+    if (groups.length === 0) throw new Error('none');
+    return { data: groups, isSample: false };
+  } catch {
+    return { data: SAMPLE_STOCK_GROUPS, isSample: true };
+  }
+}
+
 // ── 리포트 상세 (웹 getReportById 모바일판) — reports.payload 매핑 ──
 type RepPayload = {
   plan?: {

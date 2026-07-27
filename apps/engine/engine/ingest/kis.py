@@ -145,13 +145,21 @@ def to_macro_rows(series_id: str, rows: list[dict]) -> list[dict]:
 
 
 def ingest_kr_indices(days: int = 30) -> int:
-    """코스피·코스닥 지수 → macro. KIS 실패 시 네이버 파싱 폴백."""
-    from engine.db import upsert
+    """코스피·코스닥 지수 → macro. KIS 실패 시 네이버 파싱 폴백.
 
+    장 마감(종가 확정) 전엔 '오늘' 날짜 행을 적재하지 않는다 — 거래소가 장중/장전에
+    직전 종가를 오늘 행으로 내려줘 '오늘 보합'처럼 보이는 사고(2026-06-29) 차단.
+    """
+    from engine.db import upsert
+    from engine.timeutil import kr_session_closed, kst_today
+
+    drop_today = None if kr_session_closed() else kst_today().isoformat()
     total = 0
     try:
         for series in _INDEX_CODES:
             rows = to_macro_rows(series, fetch_index_daily(series, days=days))
+            if drop_today:
+                rows = [r for r in rows if r["date"] < drop_today]
             if rows:
                 total += upsert("macro", rows, on_conflict="series_id,date")
         log.info("kis.index.done", rows=total)

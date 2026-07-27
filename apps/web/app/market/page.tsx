@@ -190,6 +190,11 @@ export default async function MarketPage() {
                 </div>
               ))}
             </div>
+            {quotes[0]?.asOf && (
+              <p className="mt-2 text-[10px] text-text-mute">
+                지수는 {quotes[0].asOf.slice(5).replace("-", "/")} 장마감 기준 · 장중 실시간 미반영
+              </p>
+            )}
           </div>
         </div>
 

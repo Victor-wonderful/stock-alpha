@@ -205,9 +205,11 @@ export default async function DashboardPage() {
       ? activePicks.reduce((s, h) => s + (h.return_pct ?? 0), 0) / activePicks.length
       : null;
 
-  // KPI 오버라이드
+  // KPI 오버라이드 — '오늘의 픽'은 아래 포커스 목록(picks)과 반드시 일치해야 한다.
+  // 과거: picks.length || kpi.picksToday → picks 0건(하락장)일 때 0이 falsy 라
+  // kpi.picksToday(픽 있던 과거 as_of 건수)로 폴백해 KPI(3) vs 포커스(0)가 어긋났다.
   const kpiDisplay = {
-    picksToday: picks.length || kpi.picksToday,
+    picksToday: recs.isSample ? kpi.picksToday : picks.length,
     reportsTotal: kpi.reportsTotal || reports.data.length,
     backtestPassed: kpi.backtestPassed,
     backtestTotal: kpi.backtestTotal,
@@ -222,7 +224,7 @@ export default async function DashboardPage() {
           <div>
             <h1 className="text-xl font-bold text-text">홈</h1>
             <p className="mt-0.5 text-xs text-text-mute">
-              {asOf ? `${asOf} 마감 데이터 기준 · 실시간 갱신` : "실시간 갱신"}
+              {asOf ? `${asOf} 장마감 데이터 기준` : "장마감 데이터 기준"}
               {quotes.isSample && " · "}
               {quotes.isSample && <SampleBadge />}
             </p>
