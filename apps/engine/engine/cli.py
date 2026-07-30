@@ -128,13 +128,13 @@ def classify_universe() -> None:
 
 @app.command()
 def analyze(
-    target: str = typer.Argument(..., help="valuation|factors|regime"),
+    target: str = typer.Argument(..., help="valuation|factors|regime|risk"),
 ) -> None:
-    """분석 엔진 실행. valuation(M3)·factors(M4)·regime 구현.
+    """분석 엔진 실행. valuation(M3)·factors(M4)·regime·risk 구현.
 
     미구현 타깃은 exit 1 로 실패한다. 예전엔 조용히 exit 0 으로 끝나서, 도움말에만
     있고 실제로는 없는 risk 를 '돌렸다'고 착각한 채 risk_metrics 가 2026-06-09 에
-    멈춘 걸 7주간 아무도 눈치채지 못했다(리스크 엔진은 master 에 미병합 상태).
+    멈춘 걸 7주간 아무도 눈치채지 못했다.
     """
     if target == "valuation":
         from engine.fundamental import runner as fr
@@ -146,11 +146,14 @@ def analyze(
         from engine.market import regime
         r = regime.run()
         typer.echo(f"regime: {r['regime']} (score {r['score']}) — {' · '.join(r['drivers'])}")
+    elif target == "risk":
+        from engine.risk import runner as rr
+        typer.echo(f"risk_metrics rows: {rr.run()}")
     else:
         log.error("analyze.unknown_target", target=target,
-                  implemented=["valuation", "factors", "regime"])
+                  implemented=["valuation", "factors", "regime", "risk"])
         typer.echo(
-            f"[STOP] 미구현 타깃: {target!r} — 사용 가능: valuation|factors|regime",
+            f"[STOP] 미구현 타깃: {target!r} — 사용 가능: valuation|factors|regime|risk",
             err=True,
         )
         raise typer.Exit(1)
@@ -259,6 +262,7 @@ def daily(
     from engine.fundamental import runner as fdr
     from engine.ingest import runner as ir
     from engine.reports import daily as rd
+    from engine.risk import runner as rrisk
     from engine.signals import runner as sr
 
     if not skip_ingest:
@@ -302,6 +306,10 @@ def daily(
         f"      factors: {fr.run(regime=r0['regime'])} rows · "
         f"valuations: {fdr.run(as_of=as_of)} rows"
     )
+    # 리스크 파생(베타·변동성·VaR·MDD). 배치에 연결돼 있지 않아 2026-06-09 이후
+    # 갱신이 끊긴 채 웹 종목상세가 낡은 값을 현재 리스크로 렌더했다. 계산 코드
+    # 자체가 master 에 병합되지 않았던 게 원인 — 코드 복원과 함께 배치에 잇는다.
+    typer.echo(f"      risk: {rrisk.run()} rows")
 
     # br.run() 은 (셋업×스타일) 매트릭스 → {(setup, style): passed}. 튜플 키를
     # setup 문자열로 풀어야 한다(시그널 발행 필터는 셋업 단위, 스타일 게이팅은 내부 처리).
