@@ -138,6 +138,7 @@ export interface RiskView {
   var_95: number | null; // 1일 95% VaR(%)
   max_drawdown: number | null;
   factor_exposure: { label: string; value: number }[];
+  as_of: string | null; // risk_metrics 기준일. 낡은 값을 현재값으로 오해하지 않도록 노출.
 }
 
 // ── AI 애널리스트 리포트 ──

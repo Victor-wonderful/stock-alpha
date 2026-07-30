@@ -153,6 +153,7 @@ export function sampleRiskFor(symbol: string): RiskView {
       { label: "밸류", value: Math.round(rnd(s, 27) * 100) / 100 },
       { label: "모멘텀", value: Math.round(rnd(s, 28) * 100) / 100 },
     ],
+    as_of: null, // 샘플은 기준일 없음 — 화면에도 표시하지 않는다.
   };
 }
 
@@ -231,6 +232,7 @@ export const SAMPLE_RISK: RiskView = {
     { label: "밸류", value: 0.3 },
     { label: "모멘텀", value: 0.1 },
   ],
+  as_of: null,
 };
 
 function rec(

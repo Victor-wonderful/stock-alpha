@@ -1237,7 +1237,7 @@ export async function getRisk(
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("risk_metrics")
-      .select("beta,vol_annual,var_95,max_drawdown")
+      .select("date,beta,vol_annual,var_95,max_drawdown")
       .eq("instrument_id", instrumentId)
       .order("date", { ascending: false })
       .limit(1)
@@ -1265,6 +1265,7 @@ export async function getRisk(
         var_95: data.var_95 as number | null,
         max_drawdown: data.max_drawdown as number | null,
         factor_exposure,
+        as_of: (data.date as string | null) ?? null,
       },
       isSample: false,
     };

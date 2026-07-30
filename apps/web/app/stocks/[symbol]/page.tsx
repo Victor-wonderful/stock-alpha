@@ -68,6 +68,16 @@ export default async function StockDetailPage({
       ? (target - lead.entry_price) / (lead.entry_price - lead.stop_loss)
       : null;
 
+  // 리스크 지표 신선도 — risk_metrics 는 daily 배치에 편입돼 있지 않아 갱신이 멈출 수
+  // 있다(2026-06-09 이후 7주간 정지). 기준일 없이 최신값 자리에 앉으면 묵은 수치를
+  // 현재 리스크로 읽게 되므로, 기준일을 항상 적고 오래된 값은 경고한다.
+  const RISK_STALE_DAYS = 7;
+  const riskAsOf = risk.data.as_of;
+  const riskAgeDays = riskAsOf
+    ? Math.floor((Date.now() - new Date(`${riskAsOf}T00:00:00Z`).getTime()) / 86_400_000)
+    : null;
+  const riskStale = riskAgeDays != null && riskAgeDays > RISK_STALE_DAYS;
+
   // ③ 스노우플레이크 5축 — 이미 로드한 밸류·팩터·수급·리스크를 0~100 점수화.
   const snow = computeSnowflake({
     val: val.data,
@@ -316,6 +326,13 @@ export default async function StockDetailPage({
             <Stat label="VaR 95% (1일)" value={fmtPct(risk.data.var_95)} tone="bear" />
             <Stat label="최대낙폭" value={fmtPct(risk.data.max_drawdown)} tone="bear" />
           </div>
+          {riskAsOf && (
+            <p className={`mt-2 text-2xs ${riskStale ? "text-bear" : "text-text-mute"}`}>
+              {riskStale
+                ? `${riskAsOf} 기준 · ${riskAgeDays}일 지난 값 — 현재 리스크와 다를 수 있다.`
+                : `${riskAsOf} 기준`}
+            </p>
+          )}
           <p className="mb-2 mt-4 text-2xs uppercase tracking-wide text-text-mute">팩터 노출</p>
           <div className="space-y-2">
             {risk.data.factor_exposure.map((e) => (
