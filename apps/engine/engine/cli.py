@@ -128,9 +128,14 @@ def classify_universe() -> None:
 
 @app.command()
 def analyze(
-    target: str = typer.Argument(..., help="valuation|factors|flow|macro|micro|risk"),
+    target: str = typer.Argument(..., help="valuation|factors|regime"),
 ) -> None:
-    """분석 엔진 실행. valuation(M3)·factors(M4) 구현."""
+    """분석 엔진 실행. valuation(M3)·factors(M4)·regime 구현.
+
+    미구현 타깃은 exit 1 로 실패한다. 예전엔 조용히 exit 0 으로 끝나서, 도움말에만
+    있고 실제로는 없는 risk 를 '돌렸다'고 착각한 채 risk_metrics 가 2026-06-09 에
+    멈춘 걸 7주간 아무도 눈치채지 못했다(리스크 엔진은 master 에 미병합 상태).
+    """
     if target == "valuation":
         from engine.fundamental import runner as fr
         typer.echo(f"valuations rows: {fr.run()}")
@@ -142,7 +147,13 @@ def analyze(
         r = regime.run()
         typer.echo(f"regime: {r['regime']} (score {r['score']}) — {' · '.join(r['drivers'])}")
     else:
-        log.info("analyze", target=target, status="not_implemented")
+        log.error("analyze.unknown_target", target=target,
+                  implemented=["valuation", "factors", "regime"])
+        typer.echo(
+            f"[STOP] 미구현 타깃: {target!r} — 사용 가능: valuation|factors|regime",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -380,17 +391,29 @@ def worker(
 
     MAX_RETRIES = 3  # 실패 시 같은 날 재시도 상한 — LLM 비용/폭주 가드레일
 
-    def run_job(job: dict, now: datetime) -> bool:
+    def run_job(job: dict, now: datetime, state: dict) -> bool:
         """작업 실행. 모든 하위 명령이 exit=0 이면 True. 하나라도 실패하면 즉시 False.
 
         실패한 명령 이후 명령은 돌리지 않는다(예: daily 본체 실패 시 분봉/공시 생략).
+
+        명령 하나가 끝날 때마다 진행 상황을 state 에 즉시 기록한다. 이 프로세스가
+        중간에 강제 종료돼도(작업스케줄러 ExecutionTimeLimit·절전 등) 다음 틱이
+        끝난 명령을 건너뛰므로, 3시간짜리 daily 를 처음부터 다시 도는 일이 없다.
         """
         logfile = log_dir / f"{job['logbase']}-{now.strftime('%Y%m%d')}.log"
+        today_str = now.strftime("%Y-%m-%d")
+        prog = state.get(f"{job['name']}_progress") or {}
+        done_cmds = list(prog.get("done", [])) if prog.get("date") == today_str else []
         for cmd in job["cmds"]:
+            key = cmd[0]
+            if key in done_cmds:
+                log.info("worker.skip_done", job=job["name"], cmd=key,
+                         note="이전 틱에서 완료 — 재실행 생략")
+                continue
             # daily 발행은 디스패치 시점의 거래일로 라벨을 고정한다. 배치가 자정을
             # 넘겨 끝나도 date.today() 가 다음날로 넘어가 오라벨되는 일을 막는다.
             if cmd and cmd[0] == "daily":
-                cmd = [*cmd, "--as-of", now.strftime("%Y-%m-%d")]
+                cmd = [*cmd, "--as-of", today_str]
             log.info("worker.dispatch", job=job["name"], cmd=" ".join(cmd))
             with logfile.open("ab") as f:
                 f.write(f"\n=== {job['name']} :: {' '.join(cmd)} @ {now.isoformat()} ===\n".encode())
@@ -403,6 +426,10 @@ def worker(
             log.info("worker.done", job=job["name"], cmd=" ".join(cmd), exit=rc)
             if rc != 0:
                 return False
+            # 성공 즉시 디스크에 기록 — 이후 강제 종료돼도 이 명령은 보존된다.
+            done_cmds.append(key)
+            state[f"{job['name']}_progress"] = {"date": today_str, "done": done_cmds}
+            save_state(state)
         return True
 
     log.info("worker.start", tz="KST", tick=tick, once=once, dry_run=dry_run,
@@ -430,10 +457,11 @@ def worker(
                 log.info("worker.would_run", job=name, now=now.isoformat(),
                          attempt=attempts + 1)
                 continue
-            ok = run_job(job, now)
+            ok = run_job(job, now, state)
             if ok:
                 state[name] = today
                 state.pop(f"{name}_fail", None)
+                state.pop(f"{name}_progress", None)
             else:
                 state[f"{name}_fail"] = {"date": today, "n": attempts + 1}
                 log.warning("worker.job_failed", job=name,
