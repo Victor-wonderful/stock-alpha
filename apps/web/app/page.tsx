@@ -10,7 +10,7 @@ import {
   getMorningBrief,
   getLatestPrice,
 } from "@/lib/data";
-import { fmtPrice, fmtPct } from "@/lib/format";
+import { fmtPrice, fmtPct, nextTradingDayLabel } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { SampleBadge } from "@/components/ui";
 import { PriceNow } from "@/components/PriceNow";
@@ -182,7 +182,11 @@ export default async function DashboardPage() {
       (!latestDay || p.as_of === latestDay) &&
       ratingBySymbol.get(p.symbol) !== "거래 부적합",
   );
-  const asOf = picks[0]?.as_of ?? null;
+  // 분석 기준일 — 픽이 0건인 날에도 날짜를 잃지 않도록 리포트 최신일로 폴백.
+  // (픽에서만 뽑으면 빈 날에 헤더가 "장마감 데이터 기준"으로만 떠 날짜가 사라졌다)
+  const asOf = picks[0]?.as_of ?? latestDay;
+  // 픽은 종가 분석 → 다음 거래일 플랜이다. 대상일을 함께 적어야 오해가 없다.
+  const planDay = asOf ? nextTradingDayLabel(asOf) : null;
 
   // 픽별 현재가·전일대비 — 추천(/focus)과 같은 정보를 홈 미리보기에도 노출.
   // 렌더하는 상위 5건만 조회한다(전체 픽을 다 조회할 이유가 없다).
@@ -313,6 +317,13 @@ export default async function DashboardPage() {
                 <h2 className="flex items-center gap-2 text-sm font-bold text-text">
                   <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
                   오늘의 포커스
+                  {/* 픽은 '종가 분석 → 다음 거래일 플랜'이다. 대상일을 안 적으면 장중
+                      사용자가 '아침에 있던 픽이 사라졌다'로 읽는다. */}
+                  {planDay && (
+                    <span className="text-[11px] font-medium text-text-mute">
+                      {planDay} 장전 플랜
+                    </span>
+                  )}
                 </h2>
                 <Link
                   href="/focus"
@@ -325,8 +336,8 @@ export default async function DashboardPage() {
                 {picks.length === 0 ? (
                   <div className="px-5 py-8 text-center text-sm text-text-mute">
                     {recs.isSample
-                      ? "데이터 연결 후 오늘의 픽이 표시됩니다"
-                      : "오늘은 기준을 통과한 종목이 없습니다"}
+                      ? "데이터 연결 후 픽이 표시됩니다"
+                      : `${planDay ? `${planDay} 장전 — ` : ""}기준을 통과한 종목이 없습니다`}
                   </div>
                 ) : (
                   previewPicks.map((p, i) => (

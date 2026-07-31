@@ -37,3 +37,23 @@ export function strengthPct(v: number | null | undefined): number {
   if (v == null) return 0;
   return Math.round(Math.max(0, Math.min(1, v)) * 100);
 }
+
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+// 분석 기준일(종가일) 라벨 — "7월 31일(금)"
+export function tradingDayLabel(asOf: string): string {
+  const [y, m, dd] = asOf.split("-").map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, dd)).getUTCDay();
+  return `${m}월 ${dd}일(${WEEKDAYS[wd]})`;
+}
+
+// 다음 거래일 라벨 — 픽은 '종가 분석 → 다음 거래일 장전 플랜'이라 대상일 표기에 쓴다.
+// 공휴일은 반영하지 않는다(주말만 건너뜀) — 라벨 용도라 하루 어긋나도 치명적이지 않다.
+export function nextTradingDayLabel(asOf: string): string {
+  const [y, m, dd] = asOf.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, dd));
+  do {
+    d.setUTCDate(d.getUTCDate() + 1);
+  } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${WEEKDAYS[d.getUTCDay()]})`;
+}

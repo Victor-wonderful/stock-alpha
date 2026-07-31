@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { getPickHistory, getReports } from "@/lib/data";
+import { nextTradingDayLabel } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -26,17 +27,6 @@ function fmtDateHeader(asOf: string): { date: string; weekday: string } {
   const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   return { date: `${m}월 ${d}일`, weekday: days[wd] };
-}
-
-// 종가 기준일 → 다음 거래일(플랜 적용일) 라벨
-function nextTradingDayLabel(asOf: string): string {
-  const [y, m, dd] = asOf.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1, dd));
-  do {
-    d.setUTCDate(d.getUTCDate() + 1);
-  } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
-  const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${days[d.getUTCDay()]})`;
 }
 
 export default async function ReportsPage({

@@ -18,28 +18,9 @@ import {
 import { RegimeHeader } from "@/components/RegimeHeader";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { fmtPrice } from "@/lib/format";
+import { fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PriceNow } from "@/components/PriceNow";
 import { PickCard } from "./_pick-card";
-
-// 다음 거래일 라벨
-function nextTradingDayLabel(asOf: string): string {
-  const [y, m, dd] = asOf.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1, dd));
-  do {
-    d.setUTCDate(d.getUTCDate() + 1);
-  } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
-  const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${days[d.getUTCDay()]})`;
-}
-
-// 분석 기준일(종가일) 라벨 — "6월 16일(화)"
-function tradingDayLabel(asOf: string): string {
-  const [y, m, dd] = asOf.split("-").map(Number);
-  const wd = new Date(Date.UTC(y, m - 1, dd)).getUTCDay();
-  const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${m}월 ${dd}일(${days[wd]})`;
-}
 
 // 레짐 게이지 (3구간 바 + 마커)
 function RegimeGauge({ score }: { score: number }) {
@@ -179,12 +160,14 @@ export default async function FocusContent() {
     const d = priceList[i]?.data;
     if (d?.close != null) priceMap.set(p.symbol, d);
   });
-  const asOf = picks[0]?.as_of ?? null;
-  const planDay = asOf ? nextTradingDayLabel(asOf) : null;
-  const basisDay = asOf ? tradingDayLabel(asOf) : null;
-
   // 판정 현황
   const latestDay = allReports.data[0]?.as_of ?? null;
+
+  // 분석 기준일 — 픽이 0건인 날에도 날짜를 잃지 않도록 리포트 최신일로 폴백한다.
+  // (픽에서만 뽑으면 빈 날에 asOf=null → 날짜 라벨이 통째로 사라졌다)
+  const asOf = picks[0]?.as_of ?? latestDay;
+  const planDay = asOf ? nextTradingDayLabel(asOf) : null;
+  const basisDay = asOf ? tradingDayLabel(asOf) : null;
   const todayReports = allReports.data.filter((r) => r.as_of === latestDay);
   const gradeBoard = {
     매수: todayReports.filter((r) => r.rating === "매수").length,
@@ -424,10 +407,13 @@ export default async function FocusContent() {
                         🛡️
                       </span>
                       <div>
+                        {/* 픽은 '종가 분석 → 다음 거래일 플랜'이다. "오늘"이라 쓰면 장중
+                            사용자가 '아침에 있던 픽이 사라졌다'로 읽는다 → 대상일 명시. */}
                         <p className="text-base font-bold text-text">
+                          {planDay ? `${planDay} 장전 — ` : ""}
                           {regime?.regime === "risk_off"
-                            ? "오늘 살 종목은 없습니다 — 그게 오늘의 알파입니다"
-                            : "오늘은 기준을 통과한 픽이 없습니다"}
+                            ? "살 종목이 없습니다. 그게 알파입니다"
+                            : "기준을 통과한 픽이 없습니다"}
                         </p>
                         <p className="mt-1.5 text-[13px] leading-relaxed text-text-dim">
                           {regime?.regime === "risk_off"
