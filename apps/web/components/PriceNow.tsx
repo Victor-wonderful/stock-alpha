@@ -10,11 +10,14 @@ export function PriceNow({
   changePct,
   date,
   size = "sm",
+  label = "현재",
 }: {
   close: number | null | undefined;
   changePct: number | null | undefined;
   date?: string | null;
   size?: "sm" | "xs";
+  /** 진입가·목표가와 나란히 놓일 때 어느 값인지 구분되도록. null 이면 라벨 생략. */
+  label?: string | null;
 }) {
   if (close == null) return null;
   const up = (changePct ?? 0) >= 0;
@@ -25,6 +28,9 @@ export function PriceNow({
       className="inline-flex items-baseline gap-1 whitespace-nowrap"
       title={date ? `${date} 종가 기준 (장중 실시간 아님)` : undefined}
     >
+      {label && (
+        <span className={`text-text-mute ${pctCls}`}>{label}</span>
+      )}
       <span className={`tnum font-bold text-text ${priceCls}`}>{fmtPrice(close)}</span>
       {changePct != null && (
         <span className={`tnum font-semibold ${pctCls} ${up ? "text-good" : "text-bad"}`}>

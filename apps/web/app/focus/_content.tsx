@@ -21,8 +21,7 @@ import {
 import { RegimeHeader } from "@/components/RegimeHeader";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
-import { PriceNow } from "@/components/PriceNow";
+import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PickCard } from "./_pick-card";
 
 // 레짐 게이지 (3구간 바 + 마커)
@@ -467,61 +466,98 @@ export default async function FocusContent() {
                         종목입니다 — 지금은 국면 때문에 발행이 막혀 있을 뿐, 시장이 돌면 가장 먼저
                         진입할 후보입니다.
                       </p>
-                      <div className="divide-y divide-border">
-                        {waitlist.map((r) => (
-                          <div key={r.id} className="flex items-center gap-3 py-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Link
-                                  href={`/stocks/${r.symbol}`}
-                                  className="text-sm font-bold text-text hover:text-accent"
+                      {/* 표로 분리 — 현재가·목표가·점수가 라벨 없이 한 열에 쌓여 있어
+                          어느 숫자가 무엇인지 구분되지 않았다. 열마다 머리글을 단다.
+                          '국면 대기' 배지는 이 목록 전체의 성격이라 행마다 반복하지 않는다. */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[680px] text-sm">
+                          <thead>
+                            <tr className="border-b border-border text-[10px] uppercase tracking-wide text-text-mute">
+                              <th className="py-2 pl-1 text-left font-medium">종목</th>
+                              <th className="px-3 py-2 text-right font-medium">현재가</th>
+                              <th className="px-3 py-2 text-right font-medium">전일대비</th>
+                              <th className="px-3 py-2 text-right font-medium">목표가</th>
+                              <th className="px-3 py-2 text-right font-medium">상승여력</th>
+                              <th className="px-3 py-2 text-right font-medium">점수</th>
+                              <th className="px-3 py-2 text-right font-medium">
+                                <span className="sr-only">액션</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {waitlist.map((r) => {
+                              const px = waitPrices.get(r.symbol ?? "");
+                              // 상승여력 = 목표가 대비 현재가. '지금 사면 얼마 남았나'를 한 눈에.
+                              const upside =
+                                px?.close != null && r.target_price != null && px.close > 0
+                                  ? r.target_price / px.close - 1
+                                  : null;
+                              return (
+                                <tr
+                                  key={r.id}
+                                  className="border-b border-border/50 last:border-0 hover:bg-surface-2"
                                 >
-                                  {r.name}
-                                </Link>
-                                <span className="mono text-[10px] text-text-mute">{r.symbol}</span>
-                                {r.rating && (
-                                  <Badge variant={r.rating === "매수" ? "bull" : "warn"} size="sm">
-                                    {r.rating}
-                                  </Badge>
-                                )}
-                                {/* 픽 카드의 '진입 대기'는 '현재가가 진입가 미도달'이라는
-                                    다른 뜻이다. 여기엔 진입가 자체가 없으므로 말을 구분한다. */}
-                                <span className="rounded-[999px] bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn">
-                                  🛡 국면 대기
-                                </span>
-                              </div>
-                              {/* 왜 후보인지 근거 — 검증 통과한 셋업명(선정 기준 그 자체) */}
-                              {passedSetupsByReport.get(r.id) && (
-                                <p className="mt-1 text-[11px] text-good">
-                                  검증 통과: {passedSetupsByReport.get(r.id)!.join(" · ")}
-                                </p>
-                              )}
-                              {r.summary && (
-                                <p className="mt-1 line-clamp-1 text-[11px] text-text-mute">
-                                  {r.summary}
-                                </p>
-                              )}
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <PriceNow
-                                close={waitPrices.get(r.symbol ?? "")?.close}
-                                changePct={waitPrices.get(r.symbol ?? "")?.changePct}
-                                date={waitPrices.get(r.symbol ?? "")?.date}
-                                size="xs"
-                              />
-                              <p className="tnum text-lg font-extrabold text-accent">{r.score}</p>
-                              {r.target_price != null && (
-                                <p className="text-[10px] text-text-mute">목표 {fmtPrice(r.target_price)}</p>
-                              )}
-                            </div>
-                            <Link
-                              href={`/reports/${r.id}`}
-                              className="shrink-0 rounded-[8px] border border-border px-2.5 py-1.5 text-[11px] font-semibold text-accent hover:border-accent"
-                            >
-                              🔔 알림·분석
-                            </Link>
-                          </div>
-                        ))}
+                                  <td className="py-2.5 pl-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Link
+                                        href={`/stocks/${r.symbol}`}
+                                        className="text-sm font-bold text-text hover:text-accent"
+                                      >
+                                        {r.name}
+                                      </Link>
+                                      <span className="mono text-[10px] text-text-mute">
+                                        {r.symbol}
+                                      </span>
+                                      {r.rating && (
+                                        <Badge
+                                          variant={r.rating === "매수" ? "bull" : "warn"}
+                                          size="sm"
+                                        >
+                                          {r.rating}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {passedSetupsByReport.get(r.id) && (
+                                      <p className="mt-0.5 text-[11px] text-good">
+                                        검증 통과: {passedSetupsByReport.get(r.id)!.join(" · ")}
+                                      </p>
+                                    )}
+                                  </td>
+                                  <td
+                                    className="tnum px-3 py-2.5 text-right font-bold text-text"
+                                    title={px?.date ? `${px.date} 종가 기준 (장중 실시간 아님)` : undefined}
+                                  >
+                                    {fmtPrice(px?.close ?? null)}
+                                  </td>
+                                  <td
+                                    className={`tnum px-3 py-2.5 text-right font-semibold ${
+                                      (px?.changePct ?? 0) >= 0 ? "text-good" : "text-bad"
+                                    }`}
+                                  >
+                                    {px?.changePct != null ? fmtPct(px.changePct) : "—"}
+                                  </td>
+                                  <td className="tnum px-3 py-2.5 text-right text-text-dim">
+                                    {fmtPrice(r.target_price)}
+                                  </td>
+                                  <td className="tnum px-3 py-2.5 text-right font-semibold text-good">
+                                    {upside != null ? fmtPct(upside) : "—"}
+                                  </td>
+                                  <td className="tnum px-3 py-2.5 text-right text-lg font-extrabold text-accent">
+                                    {r.score}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right">
+                                    <Link
+                                      href={`/reports/${r.id}`}
+                                      className="inline-block whitespace-nowrap rounded-[8px] border border-border px-2.5 py-1.5 text-[11px] font-semibold text-accent hover:border-accent"
+                                    >
+                                      🔔 알림·분석
+                                    </Link>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                       <p className="mt-3 text-[11px] leading-relaxed text-text-mute">
                         * 매수 추천이 아닌 <span className="font-semibold text-text-dim">관찰 후보</span> — 진입가·반등 신호 도달 시 알림(관심 추가). 진입 판단은 투자자 본인.
