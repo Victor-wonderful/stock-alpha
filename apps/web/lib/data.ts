@@ -863,13 +863,30 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
 }
 
 // ── 전략·백테스트 ──
+// backtests.params.walkforward → 화면용 요약. 엔진이 게이트 평가 시 적재한다.
+// 구버전 행(params 없음/구조 다름)은 null — 화면은 사유 없이 '미통과'만 보인다.
+function extractWalkforward(params: unknown): BacktestView["walkforward"] {
+  if (!params || typeof params !== "object") return null;
+  const wf = (params as Record<string, unknown>).walkforward;
+  if (!wf || typeof wf !== "object") return null;
+  const w = wf as Record<string, unknown>;
+  if (typeof w.ok !== "boolean") return null;
+  return {
+    ok: w.ok,
+    evaluable: w.evaluable === true,
+    reason: typeof w.reason === "string" ? w.reason : null,
+    recent_expectancy_r:
+      typeof w.recent_expectancy_r === "number" ? w.recent_expectancy_r : null,
+  };
+}
+
 export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
   try {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("backtests")
       .select(
-        "setup,style,ic,sharpe,mdd,turnover,win_rate,avg_rr,expectancy_r,passed,period,created_at",
+        "setup,style,ic,sharpe,mdd,turnover,win_rate,avg_rr,expectancy_r,passed,period,params,created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
@@ -895,6 +912,7 @@ export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
       expectancy_r: (r.expectancy_r as number) ?? null,
       period: r.period as string | null,
       verified_at: ((r.created_at as string) ?? "").slice(0, 10) || null,
+      walkforward: extractWalkforward(r.params),
       // 엔진이 저장한 게이트 판정(0015) 우선 — 구버전 행만 휴리스틱 폴백
       passed:
         typeof r.passed === "boolean"
@@ -1010,6 +1028,64 @@ export async function getLatestPrice(
     };
   } catch {
     return { data: null, isSample: true };
+  }
+}
+
+// ── 심볼 다건 현재가 (벌크) ──
+// getLatestPrice 는 instrument_id 1건씩 왕복한다. 목록 화면(진입 대기 등)은 심볼만
+// 들고 있고 건수도 여럿이라, 심볼 → 최신 종가·전일대비를 한 번에 채운다.
+export async function getLatestPricesBySymbols(
+  symbols: string[],
+): Promise<Map<string, LatestPrice>> {
+  const out = new Map<string, LatestPrice>();
+  const uniq = [...new Set(symbols.filter(Boolean))];
+  if (uniq.length === 0) return out;
+  try {
+    const supabase = await createClient();
+    const { data: insts } = await supabase
+      .from("instruments")
+      .select("id,symbol")
+      .in("symbol", uniq);
+    const symById = new Map<number, string>();
+    for (const r of (insts ?? []) as { id: number; symbol: string }[]) {
+      symById.set(Number(r.id), r.symbol);
+    }
+    const ids = [...symById.keys()];
+    if (ids.length === 0) return out;
+
+    // 종목당 최신 2봉이면 전일대비 계산에 충분 — 여유를 두고 한 번에 가져온다.
+    const { data: rows } = await supabase
+      .from("ohlcv")
+      .select("instrument_id,ts,close")
+      .eq("interval", "1d")
+      .in("instrument_id", ids)
+      .order("ts", { ascending: false })
+      .limit(ids.length * 4);
+
+    const byId = new Map<number, { ts: string; close: number }[]>();
+    for (const b of (rows ?? []) as Record<string, number | string>[]) {
+      const iid = Number(b.instrument_id);
+      const arr = byId.get(iid) ?? [];
+      if (arr.length < 2) arr.push({ ts: String(b.ts), close: Number(b.close) });
+      byId.set(iid, arr);
+    }
+    for (const [iid, bars] of byId) {
+      const sym = symById.get(iid);
+      if (!sym || bars.length === 0) continue;
+      const close = bars[0].close;
+      const prevClose = bars[1]?.close ?? null;
+      out.set(sym, {
+        close,
+        prevClose,
+        // 비율(fraction) — 표시는 fmtPct 가 ×100 처리(getLatestPrice 와 동일 규약).
+        changePct:
+          prevClose != null && prevClose !== 0 ? (close - prevClose) / prevClose : null,
+        date: bars[0].ts.slice(0, 10),
+      });
+    }
+    return out;
+  } catch {
+    return out;
   }
 }
 

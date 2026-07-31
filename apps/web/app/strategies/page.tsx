@@ -57,7 +57,94 @@ const SETUP_GUIDE: Partial<Record<TradeSetup, { name: string; desc: string }>> =
     name: "신규주",
     desc: "신규 상장 종목 수급 매매 — 탐지기 미구현",
   },
+  // 2026-06 이후 추가분 — 누락돼 영어 키가 그대로 노출되고 있었다(2026-07-31 보강).
+  double_bottom: {
+    name: "쌍바닥(W)",
+    desc: "같은 가격대에서 두 번 버틴 자리(쌍지지)에서 매도세가 소진된 뒤 반등을 노리는 매매",
+  },
+  anchor_pullback: {
+    name: "기준봉 눌림",
+    desc: "큰손이 대량 매수로 신고가를 뚫은 자리(기준봉) 이후 얕게 눌렸다 반등할 때 진입",
+  },
+  capitulation: {
+    name: "투매 소진",
+    desc: "투매로 바닥까지 밀린 종목을, 반등을 기다리지 않고 약세 구간에서 먼저 담는 매매",
+  },
+  kalman: {
+    name: "칼만 추세",
+    desc: "가격의 잡음을 걸러낸 '진짜 추세선'이 위를 향할 때 올라타는 매매",
+  },
+  median: {
+    name: "메디안 추세",
+    desc: "이상치에 흔들리지 않는 중앙값 기준으로 추세 방향을 판정해 진입",
+  },
+  sortino: {
+    name: "소르티노 모멘텀",
+    desc: "하락 위험 대비 상승폭이 큰 종목을 고르는 매매(변동성이 아닌 '하락'만 위험으로 계산)",
+  },
+  markov: {
+    name: "마르코프 레짐",
+    desc: "종목이 상승 국면에 있는지 통계로 판정하고, 그 국면이 이어질 확률이 높을 때 진입",
+  },
+  delta: {
+    name: "델타 모멘텀",
+    desc: "어제 오른 종목이 오늘도 오르는 '관성'이 통계적으로 확인될 때 진입",
+  },
+  ensemble: {
+    name: "앙상블 합의",
+    desc: "검증 통과한 여러 전략이 동시에 매수를 가리킬 때만 진입하는 고확신 매매",
+  },
+  bayes: {
+    name: "베이즈 결합",
+    desc: "가격·거래량 등 여러 증거를 확률로 합산해 상승 가능성이 높을 때 진입",
+  },
+  pivot: {
+    name: "피봇 돌파",
+    desc: "전일 고저종으로 계산한 기준선(피봇)을 위로 뚫을 때 진입하는 단기 매매",
+  },
+  sigma: {
+    name: "시그마 평균회귀",
+    desc: "평균에서 비정상적으로 멀어진 가격이 제자리로 돌아오는 데 거는 매매",
+  },
+  quantile: {
+    name: "콴타일 반등",
+    desc: "최근 가격 분포의 하위 구간까지 밀린 종목의 되돌림을 노리는 매매",
+  },
 };
+
+// 스타일 한국어 — 같은 전략이 스윙·포지션으로 각각 검증되므로 표에 반드시 구분 표기.
+const STYLE_LABEL: Record<string, string> = {
+  swing: "스윙",
+  position: "포지션",
+  day: "데이",
+  scalping: "스캘핑",
+};
+
+// 미통과 사유 — 어떤 기준에 걸렸는지. 기대값이 높은데 미통과인 행(워크포워드 탈락)이
+// 고장처럼 보이던 문제를 해소한다.
+function failReason(b: {
+  expectancy_r?: number | null;
+  mdd: number | null;
+  walkforward?: {
+    ok: boolean;
+    evaluable: boolean;
+    reason: string | null;
+    recent_expectancy_r?: number | null;
+  } | null;
+}): string | null {
+  const bits: string[] = [];
+  if (b.expectancy_r == null || b.expectancy_r < 0.05) bits.push("기대값 미달");
+  if (b.mdd != null && b.mdd > 0.4) bits.push("낙폭 초과");
+  const wf = b.walkforward;
+  if (wf && wf.evaluable && !wf.ok) {
+    const recent =
+      wf.recent_expectancy_r != null
+        ? ` (최근 ${wf.recent_expectancy_r >= 0 ? "+" : ""}${wf.recent_expectancy_r.toFixed(2)}R)`
+        : "";
+    bits.push(`최근 구간 부진${recent}`);
+  }
+  return bits.length > 0 ? bits.join(" · ") : null;
+}
 
 // 이벤트 백테스트 대상이 아닌 셋업의 상태 — 전략 지도를 완전하게.
 // (스크리너 필터와 검증 페이지가 같은 전략 목록을 보여야 혼란이 없다)
@@ -84,7 +171,15 @@ const NON_BACKTEST_SETUPS: {
 export default async function StrategiesPage() {
   const { data: allRows, isSample } = await getBacktests();
   // 멀티팩터(횡단면 검증)는 지표 체계가 달라(IC 기반) 본 표와 분리 표시
-  const data = allRows.filter((b) => b.setup !== "factor_composite");
+  // 같은 플레이북의 스타일별 행이 흩어져 있으면 판정이 모순돼 보인다 → 이름·스타일순 정렬로
+  // 나란히 붙인다(예: 돌파 스윙 미통과 / 돌파 포지션 통과).
+  const data = allRows
+    .filter((b) => b.setup !== "factor_composite")
+    .sort((a, b) => {
+      const an = SETUP_GUIDE[a.setup]?.name ?? a.setup;
+      const bn = SETUP_GUIDE[b.setup]?.name ?? b.setup;
+      return an.localeCompare(bn, "ko") || (a.style ?? "").localeCompare(b.style ?? "");
+    });
   const factor = allRows.find((b) => b.setup === "factor_composite");
   const passed = data.filter((b) => b.passed).length;
 
@@ -125,6 +220,16 @@ export default async function StrategiesPage() {
                 계좌가 고점 대비 몇 % 내려갔는가.{" "}
                 <span className="text-text-mute">40% 이하여야 통과.</span>
               </li>
+              <li>
+                <span className="font-medium text-text">최근 구간 성적</span> —
+                전체 기간을 넷으로 나눠, 성적이 한 시기에만 몰린 게 아닌지 봅니다.
+                특히 <span className="font-medium text-text">가장 최근 구간이 손실</span>이면
+                전체 기대값이 아무리 높아도 통과시키지 않습니다 — 예전엔 통했지만 지금은
+                통하지 않는 전략을 걸러내기 위해서입니다.{" "}
+                <span className="text-text-mute">
+                  표에서 &ldquo;기대값은 높은데 미통과&rdquo;인 전략이 대개 여기 걸린 경우입니다.
+                </span>
+              </li>
             </ul>
           </div>
         </Panel>
@@ -143,6 +248,7 @@ export default async function StrategiesPage() {
               <thead>
                 <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
                   <th className="py-2 pl-1 text-left font-medium">플레이북</th>
+                  <th className="px-3 py-2 text-center font-medium">스타일</th>
                   <th className="px-3 py-2 text-center font-medium">검증</th>
                   <th className="px-3 py-2 text-right font-medium">
                     기대값 (R/거래)
@@ -170,10 +276,18 @@ export default async function StrategiesPage() {
                           {guide?.desc ?? ""}
                         </p>
                       </td>
+                      <td className="px-3 py-2.5 text-center text-2xs text-text-dim">
+                        {b.style ? (STYLE_LABEL[b.style] ?? b.style) : "—"}
+                      </td>
                       <td className="px-3 py-2.5 text-center">
                         <Badge variant={b.passed ? "bull" : "bear"} size="md">
                           {b.passed ? "통과" : "미통과"}
                         </Badge>
+                        {!b.passed && failReason(b) && (
+                          <p className="mt-1 whitespace-nowrap text-2xs text-text-mute">
+                            {failReason(b)}
+                          </p>
+                        )}
                       </td>
                       <td
                         className={`mono px-3 py-2.5 text-right font-semibold ${
@@ -205,6 +319,7 @@ export default async function StrategiesPage() {
                         {SETUP_GUIDE.factor_composite?.desc}
                       </p>
                     </td>
+                    <td className="px-3 py-2.5 text-center text-2xs text-text-dim">—</td>
                     <td className="px-3 py-2.5 text-center">
                       <Badge variant={factor.passed ? "bull" : "bear"} size="md">
                         {factor.passed ? "통과" : "미통과"}
@@ -237,6 +352,7 @@ export default async function StrategiesPage() {
                           {guide?.desc ?? ""}
                         </p>
                       </td>
+                      <td className="px-3 py-2.5 text-center text-2xs text-text-dim">—</td>
                       <td className="px-3 py-2.5 text-center">
                         <Badge variant={s.variant} size="md">
                           {s.status}
@@ -256,7 +372,9 @@ export default async function StrategiesPage() {
           </div>
           <p className="mt-3 text-2xs text-text-mute">
             검증 기준: 표본 ≥ 20거래 · 기대값 ≥ +0.05R · 최대 낙폭 ≤ 40%(일일
-            리스크 1% 기준). 과거 성과는 미래 수익을 보장하지 않습니다.
+            리스크 1% 기준) · 최근 구간 기대값 ≥ 0. 같은 플레이북도 보유기간(스타일)별로
+            따로 검증하므로, 스윙은 통과하고 포지션은 미통과일 수 있습니다.
+            과거 성과는 미래 수익을 보장하지 않습니다.
           </p>
         </Panel>
 

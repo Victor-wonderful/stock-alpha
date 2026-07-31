@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { fmtPrice, fmtPct } from "@/lib/format";
 import { MiniSnowflake } from "@/components/MiniSnowflake";
+import { PriceNow } from "@/components/PriceNow";
 import { setupCharacter, TONE_CLASS } from "@/lib/setupCharacter";
 import type { SnowflakeAxis } from "@/lib/snowflake";
 import type { RecommendationView, ReportListItem } from "@/lib/types";
@@ -60,6 +61,8 @@ export function PickCard({
   riskPct,
   mini,
   lastPrice,
+  changePct,
+  priceDate,
 }: {
   pick: RecommendationView & { as_of?: string | null };
   rank: number;
@@ -67,6 +70,8 @@ export function PickCard({
   riskPct: number;
   mini?: SnowflakeAxis[];
   lastPrice?: number | null;
+  changePct?: number | null;
+  priceDate?: string | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -117,6 +122,8 @@ export function PickCard({
             </Link>
             <span className="mono text-[10px] text-text-mute">{pick.symbol}</span>
             <RatingBadge rating={report?.rating ?? null} />
+            {/* 현재가·전일대비 — 5분할 스탯은 xl 이상에서만 보이므로 여기(항상 노출)에 둔다. */}
+            <PriceNow close={lastPrice} changePct={changePct} date={priceDate} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <span className="rounded px-1.5 py-0.5 text-[10px] bg-surface-3 text-text-dim font-medium">

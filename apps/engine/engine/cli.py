@@ -381,9 +381,15 @@ def worker(
     jobs = [
         {"name": "morning", "hh": 8, "mm": 30, "logbase": "morning",
          "cmds": [["morning"]]},
+        # 분봉을 daily 보다 먼저 — KIS 분봉은 당일치만 제공해 놓치면 영구 손실이다.
+        # 반면 daily·공시는 실패해도 다음날 재실행으로 복구된다. 복구 불가능한 수집을
+        # 3시간짜리 daily 뒤에 두면, daily 가 실패하거나 늘어질 때 그날 분봉이 통째로
+        # 사라진다(2026-06~07 실제로 21거래일 손실). 순서를 뒤집어 먼저 확보한다.
+        # 분봉 대상 선정(top_liquid_symbols)은 최근 7일 거래대금이라 당일 시세가
+        # 아직 안 들어와도 결과가 사실상 같다.
         {"name": "daily", "hh": 16, "mm": 30, "logbase": "daily",
-         "cmds": [["daily"],
-                  ["ingest-minutes", "--top", "200"],
+         "cmds": [["ingest-minutes", "--top", "200"],
+                  ["daily"],
                   ["ingest-disclosures", "--days", "3"]]},
     ]
 
@@ -402,7 +408,8 @@ def worker(
     def run_job(job: dict, now: datetime, state: dict) -> bool:
         """작업 실행. 모든 하위 명령이 exit=0 이면 True. 하나라도 실패하면 즉시 False.
 
-        실패한 명령 이후 명령은 돌리지 않는다(예: daily 본체 실패 시 분봉/공시 생략).
+        실패한 명령 이후 명령은 돌리지 않는다. 그래서 cmds 순서는 '복구 불가능한 것부터'다
+        (분봉 → daily → 공시). 분봉이 먼저 끝나 있으면 daily 가 실패해도 그날 분봉은 남는다.
 
         명령 하나가 끝날 때마다 진행 상황을 state 에 즉시 기록한다. 이 프로세스가
         중간에 강제 종료돼도(작업스케줄러 ExecutionTimeLimit·절전 등) 다음 틱이

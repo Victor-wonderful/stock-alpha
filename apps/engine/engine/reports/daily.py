@@ -63,7 +63,9 @@ TREND_PICK_SETUPS = frozenset(
 # 워크포워드 탈락). 4국면 라우팅으로 range 에서만 픽 허용.
 RANGE_SETUPS = frozenset({"sigma", "quantile"})
 # 투매 반등(역추세) — 하락추세·횡보의 과대낙폭에서 작동.
-COUNTERTREND_SETUPS = frozenset({"oversold_bounce", "double_bottom"})
+# capitulation 추가(2026-07-31): 하락 국면에서 발행 가능한 검증 셋업이 anchor_pullback
+# 하나뿐이라 픽 0건인 날이 반복됐다(07-21·22·23·31). 게이트 통과(swing, 기대값 +0.241R).
+COUNTERTREND_SETUPS = frozenset({"oversold_bounce", "double_bottom", "capitulation"})
 
 
 def _pick_suppressed(setup: str | None, market_state: str | None, risk_off: bool) -> bool:

@@ -6,6 +6,7 @@ import { Calculator, ListFilter, ScanSearch } from "lucide-react";
 import { GNB } from "@/components/GNB";
 import {
   getLatestPrice,
+  getLatestPricesBySymbols,
   getMarketState,
   getMorningBrief,
   getPickHistory,
@@ -18,6 +19,7 @@ import { RegimeHeader } from "@/components/RegimeHeader";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { fmtPrice } from "@/lib/format";
+import { PriceNow } from "@/components/PriceNow";
 import { PickCard } from "./_pick-card";
 
 // 다음 거래일 라벨
@@ -171,10 +173,11 @@ export default async function FocusContent() {
       p.instrument_id ? getLatestPrice(p.instrument_id) : Promise.resolve({ data: null }),
     ),
   );
-  const priceMap = new Map<string, number>();
+  // close 뿐 아니라 전일대비(changePct)·기준일도 보관 — 카드에서 현재가 변동을 표시한다.
+  const priceMap = new Map<string, NonNullable<(typeof priceList)[number]["data"]>>();
   picks.forEach((p, i) => {
-    const c = priceList[i]?.data?.close;
-    if (c != null) priceMap.set(p.symbol, c);
+    const d = priceList[i]?.data;
+    if (d?.close != null) priceMap.set(p.symbol, d);
   });
   const asOf = picks[0]?.as_of ?? null;
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
@@ -212,6 +215,10 @@ export default async function FocusContent() {
     )
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     .slice(0, 6);
+  // 대기 목록은 '진입 시점을 기다리는' 목록이라 현재가가 핵심 정보다 — 벌크 1회 조회.
+  const waitPrices = await getLatestPricesBySymbols(
+    waitlist.map((r) => r.symbol).filter((s): s is string => !!s),
+  );
 
   // 픽 기록 상태
   const activePicks = history.data.filter((h) => h.status === "진행중");
@@ -473,6 +480,12 @@ export default async function FocusContent() {
                               )}
                             </div>
                             <div className="shrink-0 text-right">
+                              <PriceNow
+                                close={waitPrices.get(r.symbol ?? "")?.close}
+                                changePct={waitPrices.get(r.symbol ?? "")?.changePct}
+                                date={waitPrices.get(r.symbol ?? "")?.date}
+                                size="xs"
+                              />
                               <p className="tnum text-lg font-extrabold text-accent">{r.score}</p>
                               {r.target_price != null && (
                                 <p className="text-[10px] text-text-mute">목표 {fmtPrice(r.target_price)}</p>
@@ -503,7 +516,9 @@ export default async function FocusContent() {
                   report={reportBySymbol.get(p.symbol)}
                   riskPct={riskPct}
                   mini={snowMap.get(p.symbol)?.axes}
-                  lastPrice={priceMap.get(p.symbol) ?? null}
+                  lastPrice={priceMap.get(p.symbol)?.close ?? null}
+                  changePct={priceMap.get(p.symbol)?.changePct ?? null}
+                  priceDate={priceMap.get(p.symbol)?.date ?? null}
                 />
               ))
             )}
