@@ -15,6 +15,7 @@ export type TradeSetup =
   | 'factor_composite'
   | 'leader_trend'
   | 'oversold_bounce'
+  | 'capitulation'
   | 'breakout'
   | 'close_betting'
   | 'flow_accumulation'
@@ -51,6 +52,7 @@ export const TRADE_SETUP_LABELS: Record<TradeSetup, string> = {
   factor_composite: '멀티팩터 종합',
   leader_trend: '주도주 추세',
   oversold_bounce: '과대낙폭 반등',
+  capitulation: '투매 소진',
   breakout: '돌파',
   close_betting: '종가베팅',
   flow_accumulation: '수급 동반 매집',

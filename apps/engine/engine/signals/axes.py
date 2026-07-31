@@ -10,6 +10,7 @@ TradeSetup = Literal[
     "factor_composite",
     "leader_trend",
     "oversold_bounce",
+    "capitulation",
     "breakout",
     "close_betting",
     "flow_accumulation",
@@ -35,7 +36,7 @@ TradeSetup = Literal[
 TradeSession = Literal["pre", "regular", "close", "after"]
 
 SETUPS: tuple[TradeSetup, ...] = (
-    "factor_composite", "leader_trend", "oversold_bounce",
+    "factor_composite", "leader_trend", "oversold_bounce", "capitulation",
     "breakout", "close_betting",
     "flow_accumulation", "pullback", "high_52w", "vol_squeeze", "pead",
     "theme", "new_listing",
@@ -49,6 +50,7 @@ SETUP_LABELS: dict[TradeSetup, str] = {
     "factor_composite": "멀티팩터 종합",
     "leader_trend": "주도주 추세",
     "oversold_bounce": "과대낙폭 반등",
+    "capitulation": "투매 소진",
     "breakout": "돌파",
     "close_betting": "종가베팅",
     "flow_accumulation": "수급 동반 매집",
@@ -77,6 +79,7 @@ SETUP_DEFAULT_STYLE = {
     "factor_composite": "position",
     "leader_trend": "swing",
     "oversold_bounce": "swing",
+    "capitulation": "swing",
     "breakout": "swing",
     "close_betting": "day",
     "flow_accumulation": "swing",
@@ -101,6 +104,7 @@ SETUP_DEFAULT_SESSION = {
     "factor_composite": "regular",
     "leader_trend": "regular",
     "oversold_bounce": "regular",
+    "capitulation": "regular",
     "breakout": "regular",
     "close_betting": "close",
     "flow_accumulation": "regular",

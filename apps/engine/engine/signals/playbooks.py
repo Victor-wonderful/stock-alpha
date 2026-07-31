@@ -109,6 +109,53 @@ def detect_oversold_bounce(df: pd.DataFrame) -> Candidate | None:
     )
 
 
+def detect_capitulation(
+    df: pd.DataFrame, rsi_max: float = 25.0, low_tol: float = 0.02,
+) -> Candidate | None:
+    """투매 소진 — 심층 과매도 + 20일 저점권에서, **반등 확인 없이** 약세에 진입.
+
+    oversold_bounce 와 같은 역추세 계열이지만 진입 시점이 정반대다. oversold_bounce 는
+    반전 확인(강한 양봉·종가 고가권·전일대비 +1%·거래량)을 모두 기다린다. 이 셋업은
+    그 확인을 요구하지 않는다.
+
+    근거(2026-07-31 리서치, 하락국면 160일·2024-11~2026-07 · 진입 후 5일 수익):
+      RSI<30 단독 +1.73%  →  +반등확인 +0.73%  →  +대량반등 -0.13%
+    확인을 붙일수록 성과가 깎였다. 반등을 기다리면 반등분을 놓치고 들어가는 셈이다.
+
+    게이트(실제 하네스 — 비용·손절·스케일아웃·워크포워드):
+      swing 표본 1,053 · 기대값 +0.241R · MDD 0.112 · 승률 59.4%
+      폴드(과거→최근) +0.53 +0.20 +0.34 +0.02 — 전 구간 양(+)
+      position 은 최근 폴드 음(-)으로 탈락 → ALLOWED_STYLES 는 swing 만.
+
+    손절은 ATR 기준(levels)에 맡긴다 — 당일 저가를 support 로 주면 손절이 지나치게
+    타이트해져 하락 도중 흔들림에 먼저 걸린다(검증: MDD 0.112 → 0.236).
+    """
+    if len(df) < 40:
+        return None
+    close, low = df["close"], df["low"]
+    c0 = _last(close)
+    if c0 <= 0:                                        # 거래정지 이력(0원) 가드
+        return None
+    rsi = _last(ind.rsi(close))
+    if rsi >= rsi_max:                                 # 심층 과매도
+        return None
+    lo20 = float(low.iloc[-21:-1].min())               # 현재 봉 직전 20일 저점
+    if not (lo20 > 0 and _last(low) <= lo20 * (1 + low_tol)):
+        return None                                    # 저점권에서만(바닥 근처)
+    atr = _last(ind.atr(df))
+    if atr <= 0:
+        return None
+    strength = 0.6 + (0.15 if rsi < 20 else 0.0)
+    return Candidate(
+        setup="capitulation", side="buy", style="swing", session="regular",
+        entry_ref=c0, atr=atr, support=None,           # 손절은 ATR 기준(위 설명)
+        strength=min(1.0, strength),
+        rationale=[f"RSI {rsi:.0f} 심층 과매도", "20일 저점권 투매 소진",
+                   "반등 확인 대기 없이 진입"],
+        payload={"rsi": round(rsi, 2), "low20": lo20},
+    )
+
+
 def detect_breakout(df: pd.DataFrame, lookback: int = 20, vol_mult: float = 1.5) -> Candidate | None:
     """돌파: 직전 lookback일 신고가 상향 돌파 + 거래량 증가."""
     if len(df) < lookback + 1:
@@ -796,6 +843,7 @@ ALL_DETECTORS = {
     "quantile": detect_quantile,
     "leader_trend": detect_leader_trend,
     "oversold_bounce": detect_oversold_bounce,
+    "capitulation": detect_capitulation,
     "breakout": detect_breakout,
     "close_betting": detect_close_betting,
     "pullback": detect_pullback,
@@ -825,6 +873,7 @@ ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
     "bayes": ("position",),              # 베이지안 증거 결합
     "leader_trend": ("swing", "position"),
     "oversold_bounce": ("swing",),
+    "capitulation": ("swing",),          # position 은 최근 폴드 음(-)으로 게이트 탈락
     "breakout": ("swing", "position"),
     "close_betting": ("day",),
     "pullback": ("swing", "position"),
