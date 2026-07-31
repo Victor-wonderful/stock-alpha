@@ -403,6 +403,14 @@ export default async function DashboardPage() {
                 <h2 className="flex items-center gap-2 text-sm font-bold text-text">
                   <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
                   최신 분석 리포트
+                  {/* 픽이 0건인 날 바로 위에 "살 종목 없음"이 뜨는데 여기엔 '매수' 리포트가
+                      줄줄이 있어 모순처럼 읽힌다. 리포트=판정, 픽=실행 계획임을 명시. */}
+                  <span
+                    className="text-[11px] font-medium text-text-mute"
+                    title="분석·판정 결과입니다. 게이트(거래가능·국면·백테스트·진입가)를 통과해 '지금 실행 가능'으로 판정된 것만 오늘의 포커스에 오릅니다."
+                  >
+                    판정만 · 점수순 — 매매 계획은 &lsquo;추천&rsquo;에
+                  </span>
                 </h2>
                 <Link href="/reports" className="text-xs text-accent hover:underline">
                   전체 보기 →
