@@ -4,10 +4,13 @@
 import Link from "next/link";
 import { Calculator, ListFilter, ScanSearch } from "lucide-react";
 import { GNB } from "@/components/GNB";
+import { TRADE_SETUP_LABELS as SETUP_LABELS } from "@stock-alpha/db";
 import {
+  getBacktests,
   getLatestPrice,
   getLatestPricesBySymbols,
   getMarketState,
+  getPlanCombosForReports,
   getMorningBrief,
   getPickHistory,
   getRecommendations,
@@ -116,14 +119,16 @@ function HowItWorks({ analyzed }: { analyzed: number }) {
 }
 
 export default async function FocusContent() {
-  const [recs, allReports, history, brief, riskPct, marketState] = await Promise.all([
-    getRecommendations(),
-    getReports(200, { includeUnfit: true }), // 최신일 분포 집계 — 일 발행 상한(100)+α 커버
-    getPickHistory(),
-    getMorningBrief(),
-    getUserRiskPct(),
-    getMarketState(),
-  ]);
+  const [recs, allReports, history, brief, riskPct, marketState, backtests] =
+    await Promise.all([
+      getRecommendations(),
+      getReports(200, { includeUnfit: true }), // 최신일 분포 집계 — 일 발행 상한(100)+α 커버
+      getPickHistory(),
+      getMorningBrief(),
+      getUserRiskPct(),
+      getMarketState(),
+      getBacktests(), // 반등 대기 리스트의 '검증 통과 플랜 보유' 판정용
+    ]);
 
   // 픽 stale 가드 — 픽 선정 후 리포트가 재생성돼 픽 종목이 '거래 부적합'으로 바뀌거나,
   // 픽 날짜가 최신 리포트보다 과거(픽 재생성 누락)이면 그 픽은 무효. 무효 픽을 행동 가능한
@@ -185,10 +190,14 @@ export default async function FocusContent() {
   }
 
   // ── 반등 대기 리스트 (빈 날 surface) ──
-  // 폭락장 억제로 픽이 비어도, 거래가능·점수 상위 종목을 "반등 시 1순위 후보"로 제시.
+  // 폭락장 억제로 픽이 비어도, "국면만 바뀌면 바로 픽이 될 종목"을 후보로 제시.
   // "지금 사라"가 아니라 "지켜보라" — 알림/관심으로 참여·락인(위험한 추천 없이).
+  //
+  // 선정 기준은 점수가 아니라 '검증 통과 플랜 보유'다. 과거엔 점수 상위 N 만 뽑아서,
+  // 화면은 "게이트 통과했지만 국면상 대기"라 설명하는데 코드는 그걸 보장하지 않았다
+  // (게이트 통과율이 낮은 날엔 근거 없는 종목이 1순위 후보로 올라간다).
   const pickSyms = new Set(picks.map((p) => p.symbol));
-  const waitlist = todayReports
+  const candidates = todayReports
     .filter(
       (r) =>
         r.rating !== "거래 부적합" &&
@@ -197,6 +206,24 @@ export default async function FocusContent() {
         !pickSyms.has(r.symbol),
     )
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, 24); // 점수 상위에서만 검증 통과 여부를 확인(조회 비용 억제)
+
+  const passedCombos = new Set(
+    backtests.data
+      .filter((b) => b.passed && b.style)
+      .map((b) => `${b.setup}|${b.style}`),
+  );
+  const combosByReport = await getPlanCombosForReports(candidates.map((r) => r.id));
+  // 종목별 '검증 통과한 셋업' — 왜 후보인지 화면에 근거로 노출한다.
+  const passedSetupsByReport = new Map<number, string[]>();
+  for (const r of candidates) {
+    const names = (combosByReport.get(r.id) ?? [])
+      .filter((c) => passedCombos.has(`${c.setup}|${c.style}`))
+      .map((c) => SETUP_LABELS[c.setup as keyof typeof SETUP_LABELS] ?? c.setup);
+    if (names.length > 0) passedSetupsByReport.set(r.id, [...new Set(names)]);
+  }
+  const waitlist = candidates
+    .filter((r) => passedSetupsByReport.has(r.id))
     .slice(0, 6);
   // 대기 목록은 '진입 시점을 기다리는' 목록이라 현재가가 핵심 정보다 — 벌크 1회 조회.
   const waitPrices = await getLatestPricesBySymbols(
@@ -436,7 +463,9 @@ export default async function FocusContent() {
                         </span>
                       </div>
                       <p className="mb-3 text-[12px] text-text-mute">
-                        품질·점수는 좋지만 국면상 지금은 대기 — 시장이 돌면 가장 먼저 진입할 후보입니다.
+                        <span className="font-medium text-text-dim">검증을 통과한 매매 플랜을 이미 보유한</span>{" "}
+                        종목입니다 — 지금은 국면 때문에 발행이 막혀 있을 뿐, 시장이 돌면 가장 먼저
+                        진입할 후보입니다.
                       </p>
                       <div className="divide-y divide-border">
                         {waitlist.map((r) => (
@@ -455,10 +484,18 @@ export default async function FocusContent() {
                                     {r.rating}
                                   </Badge>
                                 )}
+                                {/* 픽 카드의 '진입 대기'는 '현재가가 진입가 미도달'이라는
+                                    다른 뜻이다. 여기엔 진입가 자체가 없으므로 말을 구분한다. */}
                                 <span className="rounded-[999px] bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn">
-                                  ⏳ 진입 대기
+                                  🛡 국면 대기
                                 </span>
                               </div>
+                              {/* 왜 후보인지 근거 — 검증 통과한 셋업명(선정 기준 그 자체) */}
+                              {passedSetupsByReport.get(r.id) && (
+                                <p className="mt-1 text-[11px] text-good">
+                                  검증 통과: {passedSetupsByReport.get(r.id)!.join(" · ")}
+                                </p>
+                              )}
                               {r.summary && (
                                 <p className="mt-1 line-clamp-1 text-[11px] text-text-mute">
                                   {r.summary}

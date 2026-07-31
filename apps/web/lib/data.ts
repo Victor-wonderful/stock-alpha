@@ -1031,6 +1031,36 @@ export async function getLatestPrice(
   }
 }
 
+// ── 리포트별 매매 플랜 조합 (벌크) ──
+// 목록 API(getReports)는 payload 를 안 싣는다. "이 종목에 검증 통과한 플랜이 있나"를
+// 판정해야 하는 화면(반등 대기 리스트)용으로 (setup,style) 만 뽑아 온다.
+export async function getPlanCombosForReports(
+  ids: number[],
+): Promise<Map<number, { setup: string; style: string }[]>> {
+  const out = new Map<number, { setup: string; style: string }[]>();
+  if (ids.length === 0) return out;
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("reports")
+      .select("id,plan:payload->plan")
+      .in("id", ids);
+    for (const r of (data ?? []) as { id: number; plan: unknown }[]) {
+      const plan = Array.isArray(r.plan) ? r.plan : [];
+      out.set(
+        Number(r.id),
+        plan
+          .map((p) => p as Record<string, unknown>)
+          .filter((p) => typeof p?.setup === "string" && typeof p?.style === "string")
+          .map((p) => ({ setup: String(p.setup), style: String(p.style) })),
+      );
+    }
+    return out;
+  } catch {
+    return out;
+  }
+}
+
 // ── 심볼 다건 현재가 (벌크) ──
 // getLatestPrice 는 instrument_id 1건씩 왕복한다. 목록 화면(진입 대기 등)은 심볼만
 // 들고 있고 건수도 여럿이라, 심볼 → 최신 종가·전일대비를 한 번에 채운다.
