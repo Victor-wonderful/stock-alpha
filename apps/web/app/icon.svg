@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <title>VECTA</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#38c6e0"/>
+      <stop offset="0.5" stop-color="#2e8fff"/>
+      <stop offset="1" stop-color="#7a5cff"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(22 4) scale(0.86 0.8605)">
+    <path d="M50 0 L100 86 L0 86 Z M50 24 L79 74 L21 74 Z" fill-rule="evenodd" fill="url(#g)"/>
+  </g>
+  <g transform="translate(14 30) scale(1 0.84)">
+    <path d="M4.1 88.1 L61.1 31.1 L53.7 23.7 L82 18 L76.3 46.3 L68.9 38.9 L11.9 95.9 Z" fill="url(#g)"/>
+  </g>
+</svg>
