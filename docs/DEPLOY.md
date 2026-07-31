@@ -108,3 +108,40 @@ vercel --prod                    # 프로덕션 배포
   - Vercel Hobby **$0**.
   - Supabase Free **$0** = 500MB 한도 → **지금은 들어감(77%)** 이나 여유 적음. ohlcv가 일 ~1MB 증가(3,859종목/일) → 수개월 내 한도 도달.
   - 대응: 한도 임박 시 ① **Supabase Pro $25/mo**(8GB) 또는 ② ohlcv 보관기간 축소(백테스트는 600일이면 충분 — 그 이전 봉 롤오프). **런칭은 Free로 시작 가능.**
+
+---
+
+## 자동배포가 멈추는 사고 (2026-06-27 발생 · 07-31 발견)
+
+master 에 머지·푸시했는데도 **한 달 넘게 프로덕션이 갱신되지 않았다.** 코드는 GitHub 에
+올라가 있었고(origin/master 동기), Vercel 이 빌드를 안 했다.
+
+**증상** — 화면 문구가 코드와 다르다. 코드에서 지운 라벨("· 실시간 갱신")이 라이브에
+그대로 보였다. 프로덕션은 `c8f373a`(6/27)에 고정, master 는 17커밋 앞선 상태였다.
+
+**진단** — 배포 목록에서 `target: "production"` 인 최신 항목의 `githubCommitSha` 를
+`git log` 와 대조한다. 커밋이 오래됐으면 자동배포가 죽은 것이다.
+
+```powershell
+git rev-list --count <배포된SHA>..master -- apps/web   # 밀린 웹 커밋 수
+```
+
+**자동배포 vs 수동배포 구분** — 배포 레코드의 메타로 판별한다. CLI 배포도 로컬 git 정보를
+읽어 `githubCommitSha`·`githubCommitRef` 를 붙이므로 커밋 연결만 보면 구분되지 않는다.
+
+| | 자동(웹훅) | 수동(CLI) |
+|---|---|---|
+| `actor` | 없음 | 있음 (예: `claude-code_*_agent`) |
+| `repoPushedAt` · `branchAlias` | 있음 | 없음 |
+
+**우회(즉시 반영)** — repo 루트에서:
+
+```powershell
+vercel --prod --yes
+```
+
+**근본 복구** — 대시보드 Settings → Git 에서 리포지토리 재연결 / Production Branch(`master`)
+/ Ignored Build Step 확인. Vercel API 로는 Git 연동 설정이 보이지 않는다.
+
+**교훈** — 머지 = 라이브 아님. 웹 수정을 반영했다고 말하기 전에 실제 URL 에서 확인할 것.
+엔진 쪽에서 같은 부류의 사고가 먼저 있었다(운영 코드가 61커밋 뒤처져 6주간 잘못된 픽 발행).
