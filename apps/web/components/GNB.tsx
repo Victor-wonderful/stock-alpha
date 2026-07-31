@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Bell, Search, User } from "lucide-react";
+import { Bell, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VectaLogo } from "@/components/VectaLogo";
 
 // IA 확정(2026-06-24, docs/PLAN.md '웹/앱 정보구조'): 8개 → 7개로 재편.
 // 추천(픽)·스크리너(시그널 탐색)·종목(검색·분석)을 본질이 달라 각각 독립 메뉴로 분리.
@@ -31,18 +32,8 @@ export function GNB() {
     <header className="sticky top-0 z-30 border-b border-border bg-bg/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-6 px-7">
         {/* 로고 */}
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2.5 font-bold tracking-tight"
-          aria-label="Stock Alpha 홈"
-        >
-          <span
-            className="grid h-8 w-8 place-items-center rounded-full bg-accent leading-none select-none"
-            aria-hidden
-          >
-            <Activity className="h-4 w-4 text-[#0B0C10]" strokeWidth={2.6} />
-          </span>
-          <span className="text-sm font-bold text-text">Stock Alpha</span>
+        <Link href="/" aria-label="VECTA Stock 홈" className="shrink-0">
+          <VectaLogo className="flex items-center gap-2" />
         </Link>
 
         {/* 네비게이션 */}

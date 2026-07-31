@@ -10,7 +10,7 @@ export default async function LoginPage({
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
       <h1 className="text-2xl font-bold">로그인 / 회원가입</h1>
-      <p className="mt-1 text-sm text-text-mute">Stock-Alpha 계정</p>
+      <p className="mt-1 text-sm text-text-mute">VECTA 계정</p>
 
       {error && (
         <p className="mt-4 rounded-md border border-bull/30 bg-bull-soft px-3 py-2 text-sm text-bull">
