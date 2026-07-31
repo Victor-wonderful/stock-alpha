@@ -8,10 +8,12 @@ import {
   getBacktests,
   getPickHistory,
   getMorningBrief,
+  getLatestPrice,
 } from "@/lib/data";
 import { fmtPrice, fmtPct } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { SampleBadge } from "@/components/ui";
+import { PriceNow } from "@/components/PriceNow";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +184,20 @@ export default async function DashboardPage() {
   );
   const asOf = picks[0]?.as_of ?? null;
 
+  // 픽별 현재가·전일대비 — 추천(/focus)과 같은 정보를 홈 미리보기에도 노출.
+  // 렌더하는 상위 5건만 조회한다(전체 픽을 다 조회할 이유가 없다).
+  const previewPicks = picks.slice(0, 5);
+  const previewPrices = await Promise.all(
+    previewPicks.map((p) =>
+      p.instrument_id ? getLatestPrice(p.instrument_id) : Promise.resolve({ data: null }),
+    ),
+  );
+  const priceMap = new Map<string, NonNullable<(typeof previewPrices)[number]["data"]>>();
+  previewPicks.forEach((p, i) => {
+    const d = previewPrices[i]?.data;
+    if (d?.close != null) priceMap.set(p.symbol, d);
+  });
+
   // 최신 분석 리포트 미리보기 — 종목(/reports) 페이지와 동일: 최신일 + 점수순 상위 6.
   const topReports = [...todayReps]
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
@@ -313,7 +329,7 @@ export default async function DashboardPage() {
                       : "오늘은 기준을 통과한 종목이 없습니다"}
                   </div>
                 ) : (
-                  picks.slice(0, 5).map((p, i) => (
+                  previewPicks.map((p, i) => (
                     <div
                       key={p.symbol}
                       className="flex items-center gap-3 px-5 py-3"
@@ -342,6 +358,13 @@ export default async function DashboardPage() {
                           {p.style}
                         </span>
                         <RatingBadge rating={ratingBySymbol.get(p.symbol) ?? null} />
+                        {/* 현재가·전일대비 — 계획가(진입→목표)와 나란히 두어 지금 위치를 읽게 한다. */}
+                        <PriceNow
+                          close={priceMap.get(p.symbol)?.close}
+                          changePct={priceMap.get(p.symbol)?.changePct}
+                          date={priceMap.get(p.symbol)?.date}
+                          size="xs"
+                        />
                         <div className="text-right">
                           <div className="tnum text-[11px] text-text-dim">
                             {fmtPrice(p.entry_price)} → {fmtPrice(p.target_price)}
