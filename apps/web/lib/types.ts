@@ -120,6 +120,15 @@ export interface BacktestView {
   period: string | null;
   verified_at?: string | null; // 마지막 검증일
   passed: boolean;
+  // 워크포워드(하위기간 지속성) 판정 — 미통과 사유 표기용.
+  // 엔진이 backtests.params.walkforward 에 저장한다(engine/backtest/gate.py).
+  // evaluable=false 면 표본 부족으로 평가하지 않은 것(통과/탈락 사유가 아님).
+  walkforward?: {
+    ok: boolean;
+    evaluable: boolean;
+    reason: string | null;
+    recent_expectancy_r?: number | null;
+  } | null;
 }
 
 // ── 수급 (종목 상세) ──
