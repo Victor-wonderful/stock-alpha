@@ -67,6 +67,13 @@ RANGE_SETUPS = frozenset({"sigma", "quantile"})
 # 하나뿐이라 픽 0건인 날이 반복됐다(07-21·22·23·31). 게이트 통과(swing, 기대값 +0.241R).
 COUNTERTREND_SETUPS = frozenset({"oversold_bounce", "double_bottom", "capitulation"})
 
+# 하락추세에서만 억제. 국면별 실측(2026-08-01, 전 종목 백테스트를 진입일 국면으로 분해)에서
+# 하락장 기대값이 명확히 음(-)인 셋업 — 상승·횡보에선 양(+)이라 그 국면까지 막을 근거는 없다.
+#   anchor_pullback/swing  상승 +0.149 · 횡보 +0.125 · 하락 -0.262
+# 이 셋업은 종목 자체의 상승추세(MA20>MA60)를 요구하는 추세 계열인데도 TREND_PICK_SETUPS
+# 에 없어 하락장에서 유일하게 허용됐다 — 즉 하락장에서 가장 나쁜 것만 통과시키고 있었다.
+DOWNTREND_BLOCKED_SETUPS = frozenset({"anchor_pullback"})
+
 
 def _pick_suppressed(setup: str | None, market_state: str | None, risk_off: bool) -> bool:
     """국면별 픽 억제 판정 — 4국면(market_state) 라우팅.
@@ -75,11 +82,18 @@ def _pick_suppressed(setup: str | None, market_state: str | None, risk_off: bool
     전 국면 허용(어디서도 억제 안 함). market_state 미상이면 구 risk_off 로직(하위호환).
     """
     if market_state is None:
-        return bool(risk_off and setup in TREND_PICK_SETUPS)
+        return bool(
+            risk_off
+            and (setup in TREND_PICK_SETUPS or setup in DOWNTREND_BLOCKED_SETUPS)
+        )
     if market_state == "uptrend":
         return setup in RANGE_SETUPS                      # 상승추세 — 평균회귀만 제외
     if market_state == "downtrend":
-        return setup in TREND_PICK_SETUPS or setup in RANGE_SETUPS  # 역추세·수급만
+        return (
+            setup in TREND_PICK_SETUPS
+            or setup in RANGE_SETUPS
+            or setup in DOWNTREND_BLOCKED_SETUPS          # 역추세·수급만
+        )
     if market_state == "range":
         return setup in TREND_PICK_SETUPS or setup in COUNTERTREND_SETUPS  # 평균회귀·수급
     return setup in TREND_PICK_SETUPS or setup in RANGE_SETUPS  # transition — 보수적
