@@ -308,6 +308,49 @@ def ingest_disclosures(days: int = 7, max_pages: int = 200) -> int:
     return n
 
 
+def reclassify_disclosures(batch: int = 500, dry_run: bool = False) -> dict[str, int]:
+    """저장된 disclosures 를 report_nm 만으로 재분류. DART API 를 쓰지 않는다.
+
+    분류 규칙이 바뀌면 이미 적재된 행은 옛 분류를 그대로 들고 있다. 재인제스트는
+    API 쿼터를 소모하고 조회 기간 제약도 있어, 보관된 report_nm 으로 다시 판정한다.
+
+    2026-08-15 반전 규칙(자기주식 '해지', 거래정지 '해제') 도입 시 2,845건 중 98건이
+    교정 대상이었다(호재→악재 53, 악재→호재 45).
+    """
+    from engine.db import get_client
+    from engine.ingest.disclosure_class import classify_disclosure
+
+    cli = get_client()
+    changed = scanned = 0
+    offset = 0
+    while True:
+        rows = (
+            cli.table("disclosures")
+            .select("id,report_nm,event_type,direction")
+            .order("id")
+            .range(offset, offset + batch - 1)
+            .execute()
+            .data
+            or []
+        )
+        if not rows:
+            break
+        for r in rows:
+            scanned += 1
+            etype, direction = classify_disclosure(r.get("report_nm"))
+            if etype == r.get("event_type") and direction == r.get("direction"):
+                continue
+            changed += 1
+            if not dry_run:
+                cli.table("disclosures").update(
+                    {"event_type": etype, "direction": direction}
+                ).eq("id", r["id"]).execute()
+        offset += batch
+
+    log.info("dart.disclosures.reclassify", scanned=scanned, changed=changed, dry_run=dry_run)
+    return {"scanned": scanned, "changed": changed}
+
+
 def _corp_cache_path() -> "os.PathLike[str] | str":
     import os
     import tempfile

@@ -48,11 +48,36 @@ _RULES: list[tuple[tuple[str, ...], str, str]] = [
 ]
 
 
+# 반전 규칙 — 키워드 매칭만으로는 "그 행위를 되돌린 공시"를 구분하지 못한다.
+# (조건 키워드들, 원래 direction) → 교정된 (event_type, direction).
+#
+# 왜 일괄 반전이 아닌가: '해제'가 늘 호재는 아니다. 실측 2,845건에서
+# "주권매매거래정지해제(상장폐지에따른정리매매개시)" 10건은 정지가 풀렸어도
+# 상장폐지 때문이라 악재가 맞다. 맥락을 함께 봐야 한다.
+#
+# 실측 오분류(2026-08-15 기준 2,845건):
+#   자기주식취득신탁계약'해지' 53건 → 호재로 찍혀 있었다(자사주 매입을 그만둔 것).
+#   주권매매거래'정지해제' 40건 → 악재로 찍혀 있었다(액면분할·병합 후 거래 재개 등).
+_REVERSALS: list[tuple[tuple[str, ...], tuple[str, ...], str, str]] = [
+    # (필수 키워드, 제외 키워드, event_type, direction)
+    # 자사주 취득/신탁 '해지' — 매입을 그만두는 것이므로 호재가 아니다.
+    (("자기주식", "해지"), (), "buyback_cancel_trust", "negative"),
+    # 거래정지 '해제' — 정지가 풀린 것. 단 상장폐지·정리매매 맥락이면 악재 유지.
+    (("거래정지", "해제"), ("상장폐지", "정리매매", "실질심사"), "trading_resume", "positive"),
+]
+
+
 def classify_disclosure(report_nm: str | None) -> tuple[str, str]:
     """보고서명 → (event_type, direction). 미분류/정기 공시는 ('other','neutral')."""
     if not report_nm:
         return ("other", "neutral")
     name = report_nm.replace(" ", "").replace("ㆍ", "").replace("·", "")
+
+    # 반전을 먼저 본다 — 일반 규칙이 첫 매치로 잘못 확정하기 전에 가로챈다.
+    for need, block, etype, direction in _REVERSALS:
+        if all(k in name for k in need) and not any(b in name for b in block):
+            return (etype, direction)
+
     for keywords, etype, direction in _RULES:
         if all(k.replace(" ", "") in name for k in keywords):
             return (etype, direction)
