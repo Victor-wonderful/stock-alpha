@@ -10,7 +10,7 @@ import {
   getMorningBrief,
   getLatestPricesBySymbols,
 } from "@/lib/data";
-import { fmtPrice, fmtPct, nextTradingDayLabel } from "@/lib/format";
+import { fmtPrice, fmtPct, nextTradingDayLabel, nextTradingDayIsCertain } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { SampleBadge } from "@/components/ui";
 import { PriceNow } from "@/components/PriceNow";
@@ -171,7 +171,11 @@ export default async function DashboardPage() {
   // (픽에서만 뽑으면 빈 날에 헤더가 "장마감 데이터 기준"으로만 떠 날짜가 사라졌다)
   const asOf = picks[0]?.as_of ?? latestDay;
   // 픽은 종가 분석 → 다음 거래일 플랜이다. 대상일을 함께 적어야 오해가 없다.
-  const planDay = asOf ? nextTradingDayLabel(asOf) : null;
+  // 공휴일이 낄 수 있는 구간이면 특정 날짜를 단정하지 않는다.
+  // 주말만 건너뛰는 계산이라 대체공휴일(예: 광복절이 토요일이면 다음 월요일)을 못 걸러낸다.
+  // 틀린 날짜를 자신 있게 쓰는 것보다 "다음 거래일"로 두는 편이 정직하다.
+  const planDay =
+    asOf && nextTradingDayIsCertain(asOf) ? nextTradingDayLabel(asOf) : null;
 
   // 최신 분석 리포트 미리보기 — 종목(/reports) 페이지와 동일: 최신일 + 점수순 상위 6.
   const topReports = [...todayReps]
@@ -255,7 +259,7 @@ export default async function DashboardPage() {
         <div className="mb-8 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
             <p className="text-[11px] tracking-[0.06em] text-text-mute">
-              {planDay ? `${planDay} 장전 플랜` : "장전 플랜"}
+              {planDay ? `${planDay} 장 시작 전 기준` : "다음 거래일 장 시작 전 기준"}
               {quotes.isSample && <SampleBadge />}
             </p>
             <h1 className="mt-2 text-[34px] font-bold leading-[1.15] tracking-[-0.02em] text-text">
@@ -325,9 +329,9 @@ export default async function DashboardPage() {
                     8/17 플랜이라 '오늘'은 틀린 말이었고, 아래 '최신 분석 리포트'와
                     나란히 놓이면 둘이 다른 시점처럼 읽혔다. */}
                 <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
-                  장전 플랜
+                  매매 계획
                   <span className="text-[11px] font-medium text-text-mute">
-                    게이트 통과 {picks.length}종목 · 실행 계획 있음
+                    {picks.length}종목 · 진입·목표·손절 있음
                   </span>
                 </h2>
                 <Link
@@ -427,9 +431,9 @@ export default async function DashboardPage() {
                     '최신'이라 부르니 더 새로운 것처럼 읽혔다. 둘의 관계(전체 → 부분집합)를
                     제목이 직접 말하게 한다. */}
                 <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
-                  판정 전체
+                  분석 결과
                   <span className="text-[11px] font-medium text-text-mute">
-                    {todayReps.length}종목 · 점수순 · 계획 없음
+                    {todayReps.length}종목 · 점수·판정만 · 계획 없음
                     {kpiDisplay.reportsTotal > todayReps.length && (
                       /* 위 각주의 '발행 리포트 100건'과 여기 89종목이 달라 보이는 이유를
                          그 자리에서 밝힌다. 근거가 없으면 숫자 오류로 읽힌다. */
