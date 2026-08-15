@@ -455,8 +455,11 @@ export default async function DashboardPage() {
               </div>
               <p className="pt-2 text-[11px] leading-relaxed text-text-mute">
                 같은 분석에서 나온 전체 목록이라 <span className="text-text-dim">추천 종목도 여기 함께
-                있습니다</span>. <span className="text-text-dim">&lsquo;매수&rsquo;여도 지금 진입할 자리가 아니면
-                추천에 오르지 않습니다</span> — 종목을 누르면 분석 근거를 볼 수 있습니다.
+                있습니다</span>. 점수는 <span className="text-text-dim">종목의 질</span>이고, 추천은 거기에
+                두 가지를 더 봅니다 — <span className="text-text-dim">백테스트로 검증된 전략인지</span>,
+                그리고 <span className="text-text-dim">신호가 난 진입가에서 주가가 5% 넘게 벗어나지
+                않았는지</span>. 그래서 점수가 더 높아도 이미 가격이 지나갔으면 추천에 오르지 않습니다.
+                종목을 누르면 분석 근거를 볼 수 있습니다.
               </p>
               <div className="divide-y divide-border">
                 {topReports.length === 0 ? (
