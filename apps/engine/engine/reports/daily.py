@@ -35,6 +35,12 @@ PICKS_MAX_PER_SECTOR = 2   # 한 섹터에서 뽑을 수 있는 픽 상한 (집�
 # 진입가 그대로 '오늘의 포커스'에 재등장하면(현재가와 6~18% 괴리) 다음날 그 가격 진입이
 # 불가능하다(2026-06-19 사고의 2차 원인). 신선한 시그널은 entry≈현재종가라 안 걸린다.
 PICKS_MAX_ENTRY_DRIFT = 0.05
+# 픽 손익비 하한. 1.0 미만은 "맞아도 손해"라 추천으로 내보내지 않는다.
+# 2026-08-14 발행 NHN 이 손익비 0.4(-47.4% 손절 / +19.9% 목표)로 추천에 올랐다.
+# 전수 점검(999건) 기준 손익비 1.0 미만은 7.6%, 중앙값은 3.72 라 하한 1.0 의
+# 발행량 영향은 작다. 근본 원인(구조 손절 무제한)은 signals/levels.py 에서 고쳤고
+# 이건 그 안전망이다.
+PICKS_MIN_RR = 1.0
 # 매수 판정이 아니어도 픽 후보가 되는 점수 하한.
 # 60 → 50 완화(2026-06-11): 판정 체계(매수≥65/중립≥45)에서 50은 "중립 상위".
 # 60 기준으론 하루 후보가 1~2개라 포커스 5슬롯이 비어 다님 — 50이면 거래가능+
@@ -181,6 +187,14 @@ def _plan_gate_ok(row: dict, passed_combos: dict[str, list[str]] | None) -> bool
     return row.get("style") in passed_combos.get(row.get("setup") or "", [])
 
 
+def _rr_ok(row: dict, min_rr: float = PICKS_MIN_RR) -> bool:
+    """손익비 하한. 손익비 미상이면 통과(과도 차단 안 함) — 값이 있을 때만 거른다."""
+    rr = row.get("risk_reward")
+    if rr in (None, 0):
+        return True
+    return float(rr) >= min_rr
+
+
 def _entry_actionable(row: dict, close: float | None, max_drift: float) -> bool:
     """플랜 진입가가 현재 종가에서 max_drift 안쪽인가 (낡은 시그널 배제).
 
@@ -258,6 +272,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             and not _pick_suppressed(row.get("setup"), market_state, risk_off)
             and _plan_gate_ok(row, passed_combos)
             and _entry_actionable(row, close, max_entry_drift)
+            and _rr_ok(row)
         ]
         tradable = (p.get("tradability") or {}).get("passed", False)
         if not tradable or not plan:

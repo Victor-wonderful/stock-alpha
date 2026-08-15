@@ -52,21 +52,40 @@ class Levels:
         }
 
 
+# 구조 손절이 ATR 손절보다 이만큼 넘게 멀면 채택하지 않는다.
+# 함수명은 clamp 였지만 실제로는 거리 제한이 없어, 지지선이 멀수록 손절이 멀어졌다.
+# 2026-08-14 발행 NHN: ATR 손절 -19.9%(손익비 1.0) 인데 지지선 39,261 을 채택해
+# -47.4%(손익비 0.4) 로 발행됐다. 47% 잃고 20% 먹는 계획은 맞아도 손해다.
+# 전수 점검(999건): 손절 -20% 초과 82건(8.2%), 손익비 1.0 미만 76건(7.6%).
+# 구조는 가까울 때만 의미가 있다. 멀면 그건 손절이 아니라 방치다.
+MAX_STRUCT_STOP_ATR_MULT = 1.5
+
+
 def _clamp_stop_to_structure(
     side: str, entry: float, atr_stop: float,
     support: float | None, resistance: float | None,
 ) -> float:
-    """기술적 지지/저항이 주어지면 그 바로 바깥을 손절로 사용(구조 우선).
-    없으면 ATR 기반 손절을 사용."""
+    """기술적 지지/저항이 '가까울 때만' 그 바로 바깥을 손절로 사용(구조 우선).
+
+    구조 손절이 ATR 손절 거리의 MAX_STRUCT_STOP_ATR_MULT 배를 넘으면 ATR 손절을 쓴다.
+    구조를 따르려다 리스크가 배로 커지는 것을 막는다.
+    """
+    atr_risk = abs(entry - atr_stop)
+    limit = atr_risk * MAX_STRUCT_STOP_ATR_MULT
+
     if side == "buy":
         # 매수: 지지 바로 아래를 손절로 (진입보다 낮은 유효 지지일 때)
         if support is not None and support < entry:
-            return support * 0.999
+            struct = support * 0.999
+            if abs(entry - struct) <= limit:
+                return struct
         return atr_stop
     else:
         # 매도: 저항 바로 위를 손절로
         if resistance is not None and resistance > entry:
-            return resistance * 1.001
+            struct = resistance * 1.001
+            if abs(struct - entry) <= limit:
+                return struct
         return atr_stop
 
 
