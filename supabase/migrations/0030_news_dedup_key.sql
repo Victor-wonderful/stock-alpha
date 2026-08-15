@@ -11,11 +11,13 @@
 alter table news add column if not exists provider text not null default 'naver';
 alter table news add column if not exists provider_article_id text;
 
--- 기존 행이 없으므로(0건) not null 승격 대신 부분 유니크로 간다 —
--- 다른 경로로 들어온 뉴스(provider_article_id 미상)를 막지 않기 위함.
+-- 부분 인덱스(where ... is not null)를 쓰면 PostgREST 의 on_conflict 가 매칭에 실패한다
+-- ("no unique or exclusion constraint matching the ON CONFLICT specification").
+-- Postgres 는 유니크 인덱스에서 NULL 을 서로 다른 값으로 취급하므로, 부분 조건 없이도
+-- provider_article_id 가 없는 행은 서로 충돌하지 않는다 — 의도한 동작이 그대로 나온다.
+drop index if exists news_provider_article_uniq;
 create unique index if not exists news_provider_article_uniq
-  on news (provider, provider_article_id, instrument_id)
-  where provider_article_id is not null;
+  on news (provider, provider_article_id, instrument_id);
 
 -- 종목별 최신 조회는 0003 의 (instrument_id, published_at desc) 인덱스를 그대로 쓴다.
 comment on column news.provider_article_id is
