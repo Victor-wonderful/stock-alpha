@@ -177,23 +177,10 @@ export default async function DashboardPage() {
   const planDay =
     asOf && nextTradingDayIsCertain(asOf) ? nextTradingDayLabel(asOf) : null;
 
-  // 최신 분석 리포트 미리보기 — 종목(/reports) 페이지와 동일: 최신일 + 점수순 상위 6.
-  const topReports = [...todayReps]
-    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
-    .slice(0, 6);
-
-  // 현재가·전일대비 — 종목이 나열되는 곳이면 현재가가 있어야 한다.
-  // 예전엔 픽 5건만, 그것도 종목당 1회씩(5왕복) 조회해 리포트 목록엔 가격이 아예 없었다.
-  // 픽과 리포트 심볼을 합쳐 벌크 1회로 가져온다(왕복 5→1).
+  // 현재가·전일대비 — 추천 5건을 벌크 1회로 가져온다(예전엔 종목당 1회, 5왕복).
+  // 홈에서 '분석한 종목 전체' 목록을 걷어내며 리포트 심볼 조회도 함께 뺐다.
   const previewPicks = picks.slice(0, 5);
-  const priceMap = await getLatestPricesBySymbols([
-    ...previewPicks.map((p) => p.symbol),
-    ...topReports.map((r) => r.symbol).filter((s): s is string => !!s),
-  ]);
-
-  // 오른쪽 '분석한 종목 전체' 는 추천 5종목을 '포함' 한다(부분집합). 같은 종목이
-  // 양쪽에 표시되는데 표시가 없으면 관계를 알 수 없어 "이건 또 뭐냐"가 된다.
-  const pickedSymbols = new Set(picks.map((p) => p.symbol));
+  const priceMap = await getLatestPricesBySymbols(previewPicks.map((p) => p.symbol));
 
   // 판정 분포 (리포트 기반)
   const dist = {
@@ -322,10 +309,6 @@ export default async function DashboardPage() {
             컬럼을 없애면 어긋날 짝이 사라진다 — 픽·리포트는 전체 폭으로 세우고,
             보조 지표 3종은 맨 아래 한 줄 띠로 내린다(세로 헤어라인으로만 분할). */}
         <div className="flex flex-col gap-8">
-          {/* 두 목록은 같은 8/14 배치에서 나온 형제다(플랜 5건은 판정 100건의 부분집합).
-              위아래로 쌓으면 인과가 아니라 시간 순서처럼 읽혀 좌우로 놓는다.
-              포커스 표가 최소 680px 를 요구하므로 xl 미만에서는 다시 쌓는다. */}
-          <div className="grid gap-8 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             {/* 장전 플랜 — 카드 상자를 걷고 표로 세운다.
                 밀도 8 짜리 데이터에 카드 컨테이너를 씌우면 정보가 상자 안에 갇혀
                 옆 패널과 같은 무게로 읽힌다. 여기선 헤어라인과 여백만 쓴다. */}
@@ -430,94 +413,15 @@ export default async function DashboardPage() {
                   ))
                 )}
               </div>
+              {/* 분석 전체 목록은 홈에서 걷어냈다(추천과 뒤섞여 혼란만 키움).
+                  접근 경로까지 막지는 않도록 링크 하나만 남긴다. */}
+              <Link
+                href="/reports"
+                className="mt-3 inline-block text-[11px] text-text-mute transition-colors hover:text-text-dim"
+              >
+                추천에 오르지 못한 종목까지 전체 분석 보기 →
+              </Link>
             </section>
-
-            {/* 최신 분석 리포트 */}
-            <section>
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border-soft pb-3">
-                {/* "최신 분석 리포트"였다. 옆 플랜과 '같은' 8/14 배치 산출물인데
-                    '최신'이라 부르니 더 새로운 것처럼 읽혔다. 둘의 관계(전체 → 부분집합)를
-                    제목이 직접 말하게 한다. */}
-                {/* 이 목록엔 '매수' 배지가 30개 붙는데 추천은 5종목뿐이다.
-                    "매수라면서 왜 추천이 아니냐"가 사용자의 첫 질문이라, 제목 옆에서 답한다. */}
-                <h2 className="flex flex-wrap items-baseline gap-x-2 text-sm font-bold text-text">
-                  분석한 종목 전체
-                  <span className="text-[11px] font-medium text-text-mute">
-                    {todayReps.length}종목 · 점수순 · 왼쪽 추천 {picks.length}종목 포함
-                    {kpiDisplay.reportsTotal > todayReps.length && (
-                      <> · 거래 부적합 {kpiDisplay.reportsTotal - todayReps.length}건 제외</>
-                    )}
-                  </span>
-                </h2>
-                <Link href="/reports" className="text-xs text-text-dim transition-colors hover:text-text">
-                  전체 보기 →
-                </Link>
-              </div>
-              <p className="pt-2 text-[11px] leading-relaxed text-text-mute">
-                같은 분석에서 나온 전체 목록이라 <span className="text-text-dim">추천 종목도 여기 함께
-                있습니다</span>. 점수는 <span className="text-text-dim">종목의 질</span>이고, 추천은 거기에
-                두 가지를 더 봅니다 — <span className="text-text-dim">백테스트로 검증된 전략인지</span>,
-                그리고 <span className="text-text-dim">신호가 난 진입가에서 주가가 5% 넘게 벗어나지
-                않았는지</span>. 그래서 점수가 더 높아도 이미 가격이 지나갔으면 추천에 오르지 않습니다.
-                종목을 누르면 분석 근거를 볼 수 있습니다.
-              </p>
-              <div className="divide-y divide-border">
-                {topReports.length === 0 ? (
-                  <div className="px-1 py-8 text-center text-sm text-text-mute">
-                    발행된 리포트가 없습니다
-                  </div>
-                ) : (
-                  topReports.map((r) => (
-                    <Link
-                      key={r.id}
-                      href={`/reports/${r.id}`}
-                      className="flex items-center gap-3 px-1 py-3 hover:bg-surface transition-colors"
-                    >
-                      <RatingBadge rating={r.rating} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-semibold text-text truncate">
-                            {r.name ?? r.title}
-                          </span>
-                          {r.symbol && (
-                            <span className="mono shrink-0 text-[10px] text-text-mute">
-                              {r.symbol}
-                            </span>
-                          )}
-                          {r.symbol && pickedSymbols.has(r.symbol) && (
-                            <span className="shrink-0 rounded-[4px] border border-accent/40 px-1.5 py-px text-[9px] font-semibold text-accent">
-                              추천
-                            </span>
-                          )}
-                        </div>
-                        {r.summary && (
-                          <p className="mt-0.5 truncate text-[11px] text-text-mute">
-                            {r.summary}
-                          </p>
-                        )}
-                      </div>
-                      {/* 현재가 — 종목이 나열되는 곳이면 지금 주가가 얼마인지 보여야 한다.
-                          판정·점수만 있으면 "그래서 지금 얼마인데?"가 남는다. */}
-                      <span className="hidden shrink-0 text-right sm:block">
-                        <PriceNow
-                          close={r.symbol ? priceMap.get(r.symbol)?.close : undefined}
-                          changePct={r.symbol ? priceMap.get(r.symbol)?.changePct : undefined}
-                          date={r.symbol ? priceMap.get(r.symbol)?.date : undefined}
-                          size="xs"
-                        />
-                      </span>
-                      {/* 포커스 점수와 같은 규칙 — 점수는 옐로가 아니라 굵기로 세운다. */}
-                      {r.score != null && (
-                        <span className="tnum w-7 shrink-0 text-right text-sm font-bold text-text">
-                          {r.score}
-                        </span>
-                      )}
-                    </Link>
-                  ))
-                )}
-              </div>
-            </section>
-          </div>
 
           {/* ── 보조 지표 띠 ──
               엔진이 얼마나 잘 하고 있는지를 말하는 메타 정보 3종. 상품(픽) 아래에
