@@ -109,83 +109,64 @@ export type DisclosureView = {
   receiptDate: string;
 };
 
-// 최신 공시일의 이벤트 공시. 엔진(engine/ingest/dart.py)이 DART 에서 매일 긁어
-// 정기·미분류를 걸러내고 event_type/direction 까지 붙여 disclosures 에 적재한다.
-// 2,845건이 쌓여 있는데 웹이 여태 한 번도 읽지 않았다 — 이 함수가 첫 소비자다.
-export async function getLatestDisclosures(
-  limit = 12,
-): Promise<
+// 최신 공시일의 이벤트 공시를 방향별로 묶어 반환.
+// 엔진(engine/ingest/dart.py)이 DART 에서 매일 긁어 정기·미분류를 걸러내고
+// event_type/direction 까지 붙여 disclosures 에 적재한다(2,845건 적재, 웹은 여태 미사용).
+//
+// 한 덩어리로 뽑아 자르면 특정 방향이 통째로 사라진다(초기 구현에서 악재 30건이
+// limit 12 를 다 먹어 호재 36건이 화면에서 증발했다). 방향별로 따로 가져온다.
+export async function getLatestDisclosures(perDirection = 40): Promise<
   Loaded<{
     asOf: string | null;
-    rows: DisclosureView[];
-    counts: { positive: number; negative: number; neutral: number };
+    positive: DisclosureView[];
+    negative: DisclosureView[];
+    neutral: DisclosureView[];
   }>
 > {
+  const empty = { asOf: null, positive: [], negative: [], neutral: [] };
   try {
     const supabase = createPublicClient();
-    // 최신 접수일 먼저 확정 — '오늘' 이 휴장일 수 있어 날짜를 가정하지 않는다.
+    // 최신 접수일을 먼저 확정 — '오늘'이 휴장일 수 있어 날짜를 가정하지 않는다.
     const { data: head } = await supabase
       .from("disclosures")
       .select("rcept_dt")
       .order("rcept_dt", { ascending: false })
       .limit(1);
     const asOf = head?.[0]?.rcept_dt ?? null;
-    const empty = { positive: 0, negative: 0, neutral: 0 };
-    if (!asOf) return { data: { asOf: null, rows: [], counts: empty }, isSample: false };
+    if (!asOf) return { data: empty, isSample: false };
 
-    // 방향별로 따로 가져와 섞는다. 예전엔 direction 오름차순 + limit 12 였는데
-    // 악재가 30건이라 12칸을 악재가 전부 채워 "호재는 없나" 로 보였다(실제 호재 36건).
-    // 하루 그림을 보려면 양쪽이 다 보여야 한다.
-    const half = Math.max(1, Math.ceil(limit / 2));
-    const pick = async (dir: string, n: number) => {
+    const map = (rows: Record<string, unknown>[]): DisclosureView[] =>
+      rows.map((r) => {
+        const inst = (r.instruments ?? {}) as { symbol?: string; name?: string };
+        return {
+          id: Number(r.id),
+          symbol: inst.symbol ?? null,
+          name: inst.name ?? null,
+          // DART report_nm 은 뒤에 공백이 잔뜩 붙어 온다.
+          reportName: String(r.report_nm ?? "").trim(),
+          eventType: (r.event_type as string) ?? null,
+          direction: (r.direction as DisclosureView["direction"]) ?? null,
+          receiptDate: String(r.rcept_dt),
+        };
+      });
+
+    const pick = async (dir: string) => {
       const { data } = await supabase
         .from("disclosures")
         .select("id,report_nm,event_type,direction,rcept_dt,instruments(symbol,name)")
         .eq("rcept_dt", asOf)
         .eq("direction", dir)
-        .limit(n);
-      return data ?? [];
+        .limit(perDirection);
+      return map((data ?? []) as Record<string, unknown>[]);
     };
-    const [neg, pos] = await Promise.all([pick("negative", half), pick("positive", half)]);
-    // 악재 먼저 — 거래정지·회생절차 같은 건 늦게 보면 의미가 없다.
-    const data = [...neg, ...pos];
-
-    const rows: DisclosureView[] = (data ?? []).map((r) => {
-      const inst = (r.instruments ?? {}) as { symbol?: string; name?: string };
-      return {
-        id: Number(r.id),
-        symbol: inst.symbol ?? null,
-        name: inst.name ?? null,
-        // DART report_nm 은 뒤에 공백이 잔뜩 붙어 온다.
-        reportName: String(r.report_nm ?? "").trim(),
-        eventType: (r.event_type as string) ?? null,
-        direction: (r.direction as DisclosureView["direction"]) ?? null,
-        receiptDate: String(r.rcept_dt),
-      };
-    });
-    // 방향별 전체 건수 — 화면에 몇 건씩 있는지 알려 표시분이 전부가 아님을 밝힌다.
-    const countOf = async (dir: string) => {
-      const { count } = await supabase
-        .from("disclosures")
-        .select("id", { count: "exact", head: true })
-        .eq("rcept_dt", asOf)
-        .eq("direction", dir);
-      return count ?? 0;
-    };
-    const [cp, cn, cu] = await Promise.all([
-      countOf("positive"),
-      countOf("negative"),
-      countOf("neutral"),
+    const [negative, neutral, positive] = await Promise.all([
+      pick("negative"),
+      pick("neutral"),
+      pick("positive"),
     ]);
-    return {
-      data: { asOf, rows, counts: { positive: cp, negative: cn, neutral: cu } },
-      isSample: false,
-    };
+    return { data: { asOf, positive, negative, neutral }, isSample: false };
   } catch {
-    return {
-      data: { asOf: null, rows: [], counts: { positive: 0, negative: 0, neutral: 0 } },
-      isSample: false,
-    };
+    return { data: empty, isSample: false };
   }
 }
 

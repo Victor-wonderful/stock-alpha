@@ -107,7 +107,9 @@ export default async function MarketPage() {
     getMarket(),
     getMarketQuotes(),
     getSignalSectorCounts(),
-    getLatestDisclosures(12),
+    // 방향당 상한을 넉넉히 — 그날 공시를 전부 보여준다(8/14 기준 호재 36·악재 30·중립 24).
+    // 열마다 내부 스크롤이 있어 페이지 길이는 늘지 않는다.
+    getLatestDisclosures(60),
   ]);
   const { regime, macro, sectors } = data;
   const rm = REGIME_META[regime.regime];
@@ -125,138 +127,66 @@ export default async function MarketPage() {
       subtitle="매크로 · 레짐 · 섹터 로테이션"
       badge={isSample ? <SampleBadge /> : undefined}
     >
-      {/* ── 주요 공시 ──
-          엔진이 DART 에서 매일 긁어 event_type/direction 까지 붙여두는데
-          웹이 여태 안 보여주고 있었다. 거래정지·상장폐지 같은 건 늦게 보면 의미가 없어
-          악재를 위로 정렬한다. */}
+      {/* ── 공시 모음 ──
+          호재·중립·악재를 좌우중간 3열로 모두 보여준다. 한 덩어리로 뽑아 자르면
+          건수 많은 방향이 나머지를 밀어내 통째로 사라진다(초기 구현에서 악재 30건이
+          자리를 다 먹어 호재 36건이 화면에서 증발했다).
+          열마다 내부 스크롤을 둬 그날 공시를 전부 볼 수 있게 하되 페이지는 안 길어진다. */}
       <div className="mb-5 rounded-[12px] border border-border bg-surface p-5">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
           <h2 className="flex items-baseline gap-2 text-[13px] font-bold">
-            주요 공시
+            공시 모음
             <span className="text-[11px] font-medium text-text-mute">
-              {disclosures.asOf ? `${disclosures.asOf} 접수` : "접수일 미상"} · 악재{" "}
-              {disclosures.counts.negative} · 호재 {disclosures.counts.positive} · 중립{" "}
-              {disclosures.counts.neutral}
+              {disclosures.asOf ? `${disclosures.asOf} 접수` : "접수일 미상"} ·{" "}
+              {disclosures.positive.length + disclosures.neutral.length + disclosures.negative.length}건
             </span>
           </h2>
-          <span className="text-[11px] text-text-mute">
-            정기공시 제외 · 이벤트 공시만 · 아래는 악재·호재 각 {Math.ceil(12 / 2)}건
-          </span>
+          <span className="text-[11px] text-text-mute">정기공시 제외 · 이벤트 공시만</span>
         </div>
-        {disclosures.rows.length === 0 ? (
+
+        {disclosures.asOf == null ? (
           <p className="py-4 text-sm text-text-mute">표시할 공시가 없습니다.</p>
         ) : (
-          <div className="divide-y divide-border-soft">
-            {disclosures.rows.map((d) => (
-              <div key={d.id} className="flex items-baseline gap-3 py-2.5">
-                <span
-                  className={`shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-semibold ${
-                    d.direction === "negative"
-                      ? "bg-bad-soft text-bad"
-                      : d.direction === "positive"
-                        ? "bg-good-soft text-good"
-                        : "bg-surface-2 text-text-dim"
-                  }`}
-                >
-                  {d.direction === "negative" ? "악재" : d.direction === "positive" ? "호재" : "중립"}
-                </span>
-                <span className="w-[150px] shrink-0 truncate text-[13px] font-semibold text-text">
-                  {d.symbol ? (
-                    <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
-                      {d.name ?? d.symbol}
-                    </Link>
-                  ) : (
-                    d.name ?? "—"
-                  )}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[12px] text-text-dim">
-                  {d.reportName}
-                </span>
+          <div className="grid gap-x-6 gap-y-6 lg:grid-cols-3 lg:divide-x lg:divide-border-soft">
+            {[
+              { key: "positive", label: "호재", rows: disclosures.positive, tone: "text-good", chip: "bg-good-soft text-good", pad: "lg:pr-6" },
+              { key: "neutral", label: "중립", rows: disclosures.neutral, tone: "text-text-dim", chip: "bg-surface-2 text-text-dim", pad: "lg:px-6" },
+              { key: "negative", label: "악재", rows: disclosures.negative, tone: "text-bad", chip: "bg-bad-soft text-bad", pad: "lg:pl-6" },
+            ].map(({ key, label, rows, tone, chip, pad }) => (
+              <div key={key} className={pad}>
+                <div className="mb-2 flex items-baseline gap-2 border-b border-border-soft pb-2">
+                  <span className={`rounded-[4px] px-1.5 py-px text-[10px] font-semibold ${chip}`}>
+                    {label}
+                  </span>
+                  <span className={`tnum text-sm font-bold ${tone}`}>{rows.length}건</span>
+                </div>
+                {rows.length === 0 ? (
+                  <p className="py-3 text-[12px] text-text-mute">해당 공시가 없습니다.</p>
+                ) : (
+                  <div className="no-scrollbar max-h-[320px] divide-y divide-border-soft overflow-y-auto">
+                    {rows.map((d) => (
+                      <div key={d.id} className="py-2">
+                        <div className="truncate text-[12px] font-semibold text-text">
+                          {d.symbol ? (
+                            <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
+                              {d.name ?? d.symbol}
+                            </Link>
+                          ) : (
+                            d.name ?? "—"
+                          )}
+                        </div>
+                        <div className="truncate text-[11px] text-text-mute">{d.reportName}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
-      <div className="space-y-4">
-        {/* ── 레짐 히어로 ── */}
-        <div className="rounded-[12px] border border-accent/30 bg-surface p-5">
-          <div className="grid gap-5 lg:grid-cols-[1fr_1fr_auto]">
-            {/* 레짐 + 게이지 */}
-            <div>
-              <div className="mb-3 flex items-center gap-2">
-                <Badge variant={rm.variant} size="md" className="text-xs">
-                  {rm.label}
-                </Badge>
-                <span className="tnum text-lg font-extrabold text-text">
-                  {regime.score > 0 ? "+" : ""}{regime.score.toFixed(2)}
-                </span>
-              </div>
 
-              {/* 3구간 게이지 */}
-              <div className="mb-1">
-                <div className="relative h-3 overflow-hidden rounded-full bg-gradient-to-r from-bad/50 via-warn/40 to-good/50">
-                  <div
-                    className="absolute top-1/2 h-5 w-1.5 -translate-y-1/2 rounded-full bg-text shadow-lg"
-                    style={{ left: `calc(${gauge}% - 3px)` }}
-                  />
-                </div>
-                <div className="mt-1 flex justify-between text-[10px] text-text-mute">
-                  <span>약세장 · 방어</span>
-                  <span>중립</span>
-                  <span>강세장 · 공격</span>
-                </div>
-              </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-text-mute">
-                게이지가 왼쪽(빨강)일수록 위험 회피, 오른쪽(그린)일수록 위험 선호 구간
-              </p>
-            </div>
-
-            {/* 레짐 드라이버 */}
-            <div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-mute">
-                레짐 드라이버
-              </p>
-              <div className="space-y-1.5">
-                {regime.drivers.slice(0, 3).map((d, i) => (
-                  <div key={d} className="flex items-center gap-2">
-                    <span className="text-[10px] text-text-mute">{i + 1}.</span>
-                    <span className="text-[12px] text-text-dim">{d}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 코스피·코스닥·원달러·VIX 쿼트 4 */}
-            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-              {quotes.slice(0, 4).map((q) => (
-                <div
-                  key={q.id}
-                  className="rounded-[12px] bg-surface-2 px-3 py-2.5 text-center"
-                >
-                  <p className="text-[10px] text-text-mute">{q.label}</p>
-                  <p className="tnum mt-0.5 text-sm font-bold text-text">
-                    {fmtNum(q.value, q.unit === "원" ? 0 : 2)}
-                    <span className="ml-0.5 text-[9px] text-text-mute">{q.unit}</span>
-                  </p>
-                  <p
-                    className={`tnum mt-0.5 text-[10px] font-semibold ${
-                      q.up ? "text-good" : "text-bad"
-                    }`}
-                  >
-                    {q.up ? "+" : ""}{fmtNum(q.change, 2)}
-                  </p>
-                </div>
-              ))}
-            </div>
-            {quotes[0]?.asOf && (
-              <p className="mt-2 text-[10px] text-text-mute">
-                지수는 {quotes[0].asOf.slice(5).replace("-", "/")} 장마감 기준 · 장중 실시간 미반영
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* ── 매크로 지표 ── */}
+      <div className="grid gap-4">
         <div className="rounded-[12px] border border-border bg-surface p-5">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-bold">매크로 지표</h2>
