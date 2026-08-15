@@ -284,7 +284,7 @@ export default async function DashboardPage() {
             href="/focus"
             className="whitespace-nowrap rounded-[12px] bg-accent px-5 py-2.5 text-[13px] font-semibold text-[#0B0C10] transition-colors hover:bg-accent-2"
           >
-            오늘의 포커스 보기
+            추천 종목 전체 보기
           </Link>
         </div>
 
@@ -328,10 +328,12 @@ export default async function DashboardPage() {
                 {/* "오늘의 포커스"였다. 오늘(8/15)과 무관하게 8/14 종가로 만든
                     8/17 플랜이라 '오늘'은 틀린 말이었고, 아래 '최신 분석 리포트'와
                     나란히 놓이면 둘이 다른 시점처럼 읽혔다. */}
+                {/* 제목은 시스템이 한 일(매매 계획/판정)이 아니라 사용자가 묻는 것에
+                    답해야 한다 — "그래서 뭘 사면 되는데?" */}
                 <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
-                  매매 계획
+                  오늘의 추천 종목
                   <span className="text-[11px] font-medium text-text-mute">
-                    {picks.length}종목 · 진입·목표·손절 있음
+                    {picks.length}종목 · 진입가·목표가·손절가까지 계산 완료
                   </span>
                 </h2>
                 <Link
@@ -430,13 +432,13 @@ export default async function DashboardPage() {
                 {/* "최신 분석 리포트"였다. 옆 플랜과 '같은' 8/14 배치 산출물인데
                     '최신'이라 부르니 더 새로운 것처럼 읽혔다. 둘의 관계(전체 → 부분집합)를
                     제목이 직접 말하게 한다. */}
-                <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
-                  분석 결과
+                {/* 이 목록엔 '매수' 배지가 30개 붙는데 추천은 5종목뿐이다.
+                    "매수라면서 왜 추천이 아니냐"가 사용자의 첫 질문이라, 제목 옆에서 답한다. */}
+                <h2 className="flex flex-wrap items-baseline gap-x-2 text-sm font-bold text-text">
+                  오늘 분석한 종목 전체
                   <span className="text-[11px] font-medium text-text-mute">
-                    {todayReps.length}종목 · 점수·판정만 · 계획 없음
+                    {todayReps.length}종목 · 점수순
                     {kpiDisplay.reportsTotal > todayReps.length && (
-                      /* 위 각주의 '발행 리포트 100건'과 여기 89종목이 달라 보이는 이유를
-                         그 자리에서 밝힌다. 근거가 없으면 숫자 오류로 읽힌다. */
                       <> · 거래 부적합 {kpiDisplay.reportsTotal - todayReps.length}건 제외</>
                     )}
                   </span>
@@ -445,6 +447,10 @@ export default async function DashboardPage() {
                   전체 보기 →
                 </Link>
               </div>
+              <p className="pt-2 text-[11px] leading-relaxed text-text-mute">
+                판정만 한 목록입니다. <span className="text-text-dim">&lsquo;매수&rsquo;여도 지금 진입할 자리가
+                아니면 추천에 오르지 않습니다</span> — 종목을 누르면 분석 근거를 볼 수 있습니다.
+              </p>
               <div className="divide-y divide-border">
                 {topReports.length === 0 ? (
                   <div className="px-1 py-8 text-center text-sm text-text-mute">
