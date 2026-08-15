@@ -170,73 +170,105 @@ export async function getLatestDisclosures(perDirection = 40): Promise<
   }
 }
 
-export type NewsItem = {
-  id: number;
-  headline: string;
-  source: string | null;
-  url: string | null;
-  publishedAt: string;   // ISO(UTC)
-  publishedKst: string;  // 'MM/DD HH:mm' — 화면 표기용
+export type NewsEvent = {
+  symbol: string;
+  date: string;             // YYYY-MM-DD (KST)
+  outletCount: number;      // 그날 보도한 매체 수
+  changePct: number | null; // 그날 등락(전일 종가 대비)
 };
 
-// 종목별 최신 뉴스. 엔진(ingest/naver_news.py)이 제목·언론사·시각·링크만 수집한다
-// (본문은 언론사 저작물이라 저장하지 않는다). 화면도 '인용 + 출처 + 링크' 로만 쓰고
-// VECTA 는 같은 기간에 측정한 수치를 옆에 붙여 대조한다.
-export async function getNewsBySymbols(
+// 종목별 '사건' 탐지 — 기사 제목을 쓰지 않고 보도 밀도만으로 판단한다.
+//
+// 왜 제목을 안 쓰나: 기사 제목·본문은 언론사 저작물이고, 외부 링크는 사용자를 뺏기며,
+// 제목을 VECTA 문장으로 옮기면 검증 책임까지 넘어온다.
+//
+// 왜 날짜 기준인가: 같은 사건을 다룬 한국어 제목은 어휘가 크게 달라 토큰 유사도로
+// 안 묶인다(실측: NHN 목표가 상향 기사들의 공통 토큰이 '목표가' 하나뿐이라 유사도 0.14).
+// 반면 '같은 날 여러 매체가 동시에 썼다'는 어휘와 무관하고 강건하다. 실측에서 NHN 8/12 은
+// 7개 매체(2분기 실적·목표가 상향·급등)로 잡혔고, 안국약품·제닉은 전부 단독 기사로 갈렸다.
+//
+// 노이즈 제거: 네이버 종목뉴스는 업종 기사까지 섞어준다(안국약품 목록에
+// '다이소로 몰려가는 제약사들'). 제목에 종목명이 없으면 버린다 — 실측 67건 중 40건(60%).
+export async function getNewsEvents(
   symbols: string[],
-  perSymbol = 3,
-): Promise<Map<string, NewsItem[]>> {
-  const out = new Map<string, NewsItem[]>();
+  opts: { minOutlets?: number; days?: number } = {},
+): Promise<Map<string, NewsEvent[]>> {
+  const minOutlets = opts.minOutlets ?? 2;
+  const days = opts.days ?? 10;
+  const out = new Map<string, NewsEvent[]>();
   const uniq = [...new Set(symbols.filter(Boolean))];
   if (uniq.length === 0) return out;
+
   try {
     const supabase = createPublicClient();
     const { data: insts } = await supabase
       .from("instruments")
-      .select("id,symbol")
+      .select("id,symbol,name")
       .in("symbol", uniq);
-    const symById = new Map<number, string>();
-    for (const r of (insts ?? []) as { id: number; symbol: string }[]) {
-      symById.set(Number(r.id), r.symbol);
+    const meta = new Map<number, { symbol: string; name: string }>();
+    for (const r of (insts ?? []) as { id: number; symbol: string; name: string }[]) {
+      meta.set(Number(r.id), { symbol: r.symbol, name: r.name });
     }
-    if (symById.size === 0) return out;
+    if (meta.size === 0) return out;
 
+    const since = new Date(Date.now() - days * 864e5).toISOString();
     const { data } = await supabase
       .from("news")
-      .select("id,instrument_id,headline,source,url,published_at")
-      .in("instrument_id", [...symById.keys()])
-      .order("published_at", { ascending: false })
-      .limit(uniq.length * perSymbol * 3);
+      .select("instrument_id,headline,source,published_at")
+      .in("instrument_id", [...meta.keys()])
+      .gte("published_at", since)
+      .limit(1000);
 
+    const bucket = new Map<string, { iid: number; date: string; outlets: Set<string> }>();
     for (const r of (data ?? []) as Record<string, unknown>[]) {
-      const sym = symById.get(Number(r.instrument_id));
-      if (!sym) continue;
-      const arr = out.get(sym) ?? [];
-      if (arr.length >= perSymbol) continue;
-      arr.push({
-        id: Number(r.id),
-        headline: String(r.headline ?? ""),
-        source: (r.source as string) ?? null,
-        url: (r.url as string) ?? null,
-        publishedAt: String(r.published_at),
-        publishedKst: fmtKst(String(r.published_at)),
-      });
-      out.set(sym, arr);
+      const iid = Number(r.instrument_id);
+      const m = meta.get(iid);
+      if (!m) continue;
+      const headline = String(r.headline ?? "").replace(/\s/g, "");
+      if (!headline.includes(m.name.replace(/\s/g, ""))) continue;
+      const kst = new Date(new Date(String(r.published_at)).getTime() + 9 * 3600 * 1000);
+      const date = kst.toISOString().slice(0, 10);
+      const key = iid + "|" + date;
+      const b = bucket.get(key) ?? { iid, date, outlets: new Set<string>() };
+      b.outlets.add(String(r.source ?? "?"));
+      bucket.set(key, b);
     }
+
+    const events = [...bucket.values()].filter((b) => b.outlets.size >= minOutlets);
+    if (events.length === 0) return out;
+
+    // 그날 등락 — 사건 옆에 붙이는 유일한 해석이고, VECTA 가 직접 잰 값이다.
+    const { data: bars } = await supabase
+      .from("ohlcv")
+      .select("instrument_id,ts,close")
+      .eq("interval", "1d")
+      .in("instrument_id", [...new Set(events.map((e) => e.iid))])
+      .order("ts", { ascending: false })
+      .limit(events.length * 40);
+    const seriesByIid = new Map<number, { d: string; c: number }[]>();
+    for (const b of (bars ?? []) as Record<string, unknown>[]) {
+      const iid = Number(b.instrument_id);
+      const arr = seriesByIid.get(iid) ?? [];
+      arr.push({ d: String(b.ts).slice(0, 10), c: Number(b.close) });
+      seriesByIid.set(iid, arr);
+    }
+
+    for (const e of events) {
+      const m = meta.get(e.iid);
+      if (!m) continue;
+      const ser = seriesByIid.get(e.iid) ?? [];
+      const i = ser.findIndex((x) => x.d === e.date);
+      const changePct =
+        i >= 0 && ser[i + 1] && ser[i + 1].c ? ser[i].c / ser[i + 1].c - 1 : null;
+      const arr = out.get(m.symbol) ?? [];
+      arr.push({ symbol: m.symbol, date: e.date, outletCount: e.outlets.size, changePct });
+      out.set(m.symbol, arr);
+    }
+    for (const [, arr] of out) arr.sort((a, b) => (a.date < b.date ? 1 : -1));
     return out;
   } catch {
     return out;
   }
-}
-
-// published_at 은 timestamptz 라 UTC 로 돌아온다. 한국 시각으로 바꿔 표기하지 않으면
-// 9시간 어긋난다(원문 8/15 06:00 기사가 8/14 21:00 으로 보인다).
-function fmtKst(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(kst.getUTCMonth() + 1)}/${p(kst.getUTCDate())} ${p(kst.getUTCHours())}:${p(kst.getUTCMinutes())}`;
 }
 
 // 셋업별 상위 N건 — 스크리너 기본 화면(셋업 섹션 뷰)용.

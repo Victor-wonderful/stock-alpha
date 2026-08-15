@@ -9,7 +9,7 @@ import {
   getPickHistory,
   getMorningBrief,
   getLatestPricesBySymbols,
-  getNewsBySymbols,
+  getNewsEvents,
 } from "@/lib/data";
 import { fmtPrice, fmtPct, nextTradingDayLabel, nextTradingDayIsCertain } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -182,8 +182,8 @@ export default async function DashboardPage() {
   // 홈에서 '분석한 종목 전체' 목록을 걷어내며 리포트 심볼 조회도 함께 뺐다.
   const previewPicks = picks.slice(0, 5);
   const priceMap = await getLatestPricesBySymbols(previewPicks.map((p) => p.symbol));
-  // 추천 종목 뉴스 — 제목·출처·링크만 인용하고, 판단 근거는 위 표의 VECTA 수치가 낸다.
-  const newsMap = await getNewsBySymbols(previewPicks.map((p) => p.symbol), 2);
+  // 추천 종목에 '사건'이 있었나 — 기사 제목은 쓰지 않고 보도 밀도로만 판단한다.
+  const eventMap = await getNewsEvents(previewPicks.map((p) => p.symbol), { minOutlets: 2, days: 10 });
 
   // 판정 분포 (리포트 기반)
   const dist = {
@@ -437,52 +437,61 @@ export default async function DashboardPage() {
                   ))
                 )}
               </div>
-              {/* ── 추천 종목 관련 뉴스 ──
-                  기사 본문은 저장·표시하지 않는다(언론사 저작물). 제목은 원문 링크로만
-                  걸고 언론사를 명시한다. VECTA 는 기사를 요약하지 않는다 — 요약하면
-                  기사 주장이 VECTA 주장이 되는데 검증 수단이 절반뿐이다.
-                  판단 근거는 위 표의 진입·목표·손절·점수가 낸다. */}
-              {[...newsMap.entries()].some(([, v]) => v.length > 0) && (
-                <div className="mt-5 border-t border-border-soft pt-4">
-                  <h3 className="mb-2 flex items-baseline gap-2 text-[12px] font-bold text-text">
-                    추천 종목 관련 기사
-                    <span className="text-[10px] font-medium text-text-mute">
-                      제목·출처만 인용 · 누르면 원문
-                    </span>
-                  </h3>
-                  <div className="divide-y divide-border-soft">
-                    {previewPicks.flatMap((p) =>
-                      (newsMap.get(p.symbol) ?? []).map((n) => (
-                        <div key={n.id} className="flex flex-wrap items-baseline gap-x-2 py-2">
-                          <span className="w-[92px] shrink-0 truncate text-[11px] font-semibold text-text">
-                            {p.name}
+              {/* ── 최근 보도 ──
+                  기사 제목·본문을 쓰지 않는다(언론사 저작물). 외부로 나가는 링크도 없다.
+                  '같은 날 여러 매체가 동시에 다뤘다'는 사실만 세고, 그 옆에 VECTA 가
+                  실제로 잰 그날 등락을 붙인다. 조용한 종목은 조용하다고 적는다 —
+                  그것도 정보다. 상세는 종목명을 눌러 내부 상세로 간다. */}
+              <div className="mt-5 border-t border-border-soft pt-4">
+                <h3 className="mb-2 flex items-baseline gap-2 text-[12px] font-bold text-text">
+                  최근 보도
+                  <span className="text-[10px] font-medium text-text-mute">
+                    최근 10일 · 같은 날 2개 매체 이상 다룬 건만
+                  </span>
+                </h3>
+                <div className="divide-y divide-border-soft">
+                  {previewPicks.map((p) => {
+                    const evs = eventMap.get(p.symbol) ?? [];
+                    return (
+                      <div key={p.symbol} className="flex flex-wrap items-baseline gap-x-3 py-2">
+                        <Link
+                          href={`/stocks/${p.symbol}`}
+                          className="w-[104px] shrink-0 truncate text-[12px] font-semibold text-text transition-colors hover:text-accent"
+                        >
+                          {p.name}
+                        </Link>
+                        {evs.length === 0 ? (
+                          <span className="text-[11px] text-text-mute">
+                            눈에 띄는 보도 없음
                           </span>
-                          <span className="tnum w-[74px] shrink-0 text-[10px] text-text-mute">
-                            {n.publishedKst}
+                        ) : (
+                          <span className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
+                            {evs.slice(0, 3).map((e) => (
+                              <span key={e.date} className="flex items-baseline gap-1.5">
+                                <span className="tnum text-[11px] text-text-mute">
+                                  {e.date.slice(5).replace("-", "/")}
+                                </span>
+                                <span className="rounded-[4px] border border-border-strong px-1.5 py-px text-[10px] font-semibold text-text-dim">
+                                  {e.outletCount}개 매체
+                                </span>
+                                {e.changePct != null && (
+                                  <span
+                                    className={`tnum text-[11px] font-medium ${
+                                      e.changePct >= 0 ? "text-good" : "text-bad"
+                                    }`}
+                                  >
+                                    {fmtPct(e.changePct)}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
                           </span>
-                          {n.url ? (
-                            <a
-                              href={n.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="min-w-0 flex-1 truncate text-[12px] text-text-dim transition-colors hover:text-text hover:underline"
-                            >
-                              {n.headline}
-                            </a>
-                          ) : (
-                            <span className="min-w-0 flex-1 truncate text-[12px] text-text-dim">
-                              {n.headline}
-                            </span>
-                          )}
-                          <span className="shrink-0 text-[10px] text-text-mute">
-                            {n.source ?? ""}
-                          </span>
-                        </div>
-                      )),
-                    )}
-                  </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
 
               {/* 분석 전체 목록은 홈에서 걷어냈다(추천과 뒤섞여 혼란만 키움).
                   접근 경로까지 막지는 않도록 링크 하나만 남긴다. */}
