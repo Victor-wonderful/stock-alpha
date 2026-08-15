@@ -312,12 +312,24 @@ export default async function DashboardPage() {
             컬럼을 없애면 어긋날 짝이 사라진다 — 픽·리포트는 전체 폭으로 세우고,
             보조 지표 3종은 맨 아래 한 줄 띠로 내린다(세로 헤어라인으로만 분할). */}
         <div className="flex flex-col gap-8">
-            {/* 오늘의 포커스 — 카드 상자를 걷고 표로 세운다.
+          {/* 두 목록은 같은 8/14 배치에서 나온 형제다(플랜 5건은 판정 100건의 부분집합).
+              위아래로 쌓으면 인과가 아니라 시간 순서처럼 읽혀 좌우로 놓는다.
+              포커스 표가 최소 680px 를 요구하므로 xl 미만에서는 다시 쌓는다. */}
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            {/* 장전 플랜 — 카드 상자를 걷고 표로 세운다.
                 밀도 8 짜리 데이터에 카드 컨테이너를 씌우면 정보가 상자 안에 갇혀
                 옆 패널과 같은 무게로 읽힌다. 여기선 헤어라인과 여백만 쓴다. */}
             <section>
               <div className="flex items-baseline justify-between pb-3">
-                <h2 className="text-sm font-bold text-text">오늘의 포커스</h2>
+                {/* "오늘의 포커스"였다. 오늘(8/15)과 무관하게 8/14 종가로 만든
+                    8/17 플랜이라 '오늘'은 틀린 말이었고, 아래 '최신 분석 리포트'와
+                    나란히 놓이면 둘이 다른 시점처럼 읽혔다. */}
+                <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
+                  장전 플랜
+                  <span className="text-[11px] font-medium text-text-mute">
+                    게이트 통과 {picks.length}종목 · 실행 계획 있음
+                  </span>
+                </h2>
                 <Link
                   href="/focus"
                   className="text-xs text-text-dim transition-colors hover:text-text"
@@ -411,15 +423,18 @@ export default async function DashboardPage() {
             {/* 최신 분석 리포트 */}
             <section>
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border-soft pb-3">
+                {/* "최신 분석 리포트"였다. 옆 플랜과 '같은' 8/14 배치 산출물인데
+                    '최신'이라 부르니 더 새로운 것처럼 읽혔다. 둘의 관계(전체 → 부분집합)를
+                    제목이 직접 말하게 한다. */}
                 <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
-                  최신 분석 리포트
-                  {/* 픽이 0건인 날 바로 위에 "살 종목 없음"이 뜨는데 여기엔 '매수' 리포트가
-                      줄줄이 있어 모순처럼 읽힌다. 리포트=판정, 픽=실행 계획임을 명시. */}
-                  <span
-                    className="text-[11px] font-medium text-text-mute"
-                    title="분석·판정 결과입니다. 게이트(거래가능·국면·백테스트·진입가)를 통과해 '지금 실행 가능'으로 판정된 것만 오늘의 포커스에 오릅니다."
-                  >
-                    판정만 · 점수순 — 매매 계획은 &lsquo;추천&rsquo;에
+                  판정 전체
+                  <span className="text-[11px] font-medium text-text-mute">
+                    {todayReps.length}종목 · 점수순 · 계획 없음
+                    {kpiDisplay.reportsTotal > todayReps.length && (
+                      /* 위 각주의 '발행 리포트 100건'과 여기 89종목이 달라 보이는 이유를
+                         그 자리에서 밝힌다. 근거가 없으면 숫자 오류로 읽힌다. */
+                      <> · 거래 부적합 {kpiDisplay.reportsTotal - todayReps.length}건 제외</>
+                    )}
                   </span>
                 </h2>
                 <Link href="/reports" className="text-xs text-text-dim transition-colors hover:text-text">
@@ -477,6 +492,8 @@ export default async function DashboardPage() {
                 )}
               </div>
             </section>
+          </div>
+
           {/* ── 보조 지표 띠 ──
               엔진이 얼마나 잘 하고 있는지를 말하는 메타 정보 3종. 상품(픽) 아래에
               한 줄로 눕히고 세로 헤어라인으로만 나눈다. 위쪽 가로줄이 하나뿐이라
