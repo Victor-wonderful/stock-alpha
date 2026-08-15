@@ -1,4 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
+// 기본은 공개(무쿠키·60초 캐시) 클라이언트. 쿠키를 읽으면 요청이 동적으로 확정돼
+// fetch 캐시가 전부 무효화되므로, 세션이 실제로 필요한 곳에서만 createUserClient 를 쓴다.
+import { createPublicClient } from "@/lib/supabase/public";
+import { createClient as createUserClient } from "@/lib/supabase/server";
 import type { TradeSetup, TradeStyle } from "@stock-alpha/db";
 import {
   computePositionSizePct,
@@ -46,7 +49,8 @@ export interface SignalFilters {
 // (RLS: profiles 는 본인만 read → anon 은 자동으로 기본값)
 export async function getUserRiskPct(): Promise<number> {
   try {
-    const supabase = await createClient();
+    // 여기만 로그인 세션이 필요하다 — 쿠키 클라이언트 유지(캐시 대상 아님).
+    const supabase = await createUserClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -101,7 +105,7 @@ export async function getSignals(
   offset = 0,
 ): Promise<Loaded<SignalView[]> & { total: number }> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     let q = supabase
       .from("signals")
       // !inner — 시장(market) 필터가 임베드 컬럼(instruments.exchange) 대상이라
@@ -150,7 +154,7 @@ export async function getInstrumentBySymbol(
   symbol: string,
 ): Promise<Loaded<InstrumentView>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("instruments")
       .select("id,symbol,name,exchange,sector,currency")
@@ -169,7 +173,7 @@ export async function getValuation(
   symbol = "",
 ): Promise<Loaded<ValuationView | null>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("valuations")
       .select("per,pbr,ev_ebitda,roe,dcf_value,upside_pct")
@@ -189,7 +193,7 @@ export async function getFactor(
   symbol = "",
 ): Promise<Loaded<FactorView | null>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("factor_scores")
       .select(
@@ -215,7 +219,7 @@ export async function getSnowflakesForSymbols(
   const uniq = [...new Set(symbols.filter(Boolean))];
   if (uniq.length === 0) return out;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data: insts } = await supabase
       .from("instruments")
       .select("id,symbol")
@@ -299,7 +303,7 @@ export async function getSignalsForSymbol(
   // instrument_id 로 직접 조회 — 전역 시그널을 클라이언트 필터하면 1000행 제한·
   // 강도순 상위 절단으로 해당 종목을 놓칠 수 있음.
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data: inst } = await supabase
       .from("instruments")
       .select("id")
@@ -343,7 +347,7 @@ export async function getMarket(): Promise<
   let regimeReal = false, sectorsReal = false, macroReal = false;
 
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // 레짐
     const { data: rg } = await supabase
@@ -431,7 +435,7 @@ export async function getMarket(): Promise<
 // ── 모델 포트폴리오 / 추천 ──
 export async function getRecommendations(): Promise<Loaded<RecommendationView[]>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("recommendations")
       .select("instrument_id,basket_type,style,weight,conviction,thesis,entry_price,target_price,tp2_price,stop_loss,as_of,setup,instruments(symbol,name)")
@@ -508,7 +512,7 @@ export interface PortfolioDiagnosis {
 export async function getPortfolioDiagnosis(
   items: HoldingInput[],
 ): Promise<PortfolioDiagnosis> {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   const holdings: HoldingDiagnosis[] = [];
   const notFound: string[] = [];
 
@@ -686,7 +690,7 @@ export interface MarketStateView {
 
 export async function getMarketState(): Promise<MarketStateView | null> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data } = await supabase
       .from("market_regime")
       .select("regime,score,drivers,market_state,structure")
@@ -712,7 +716,7 @@ export async function getMarketState(): Promise<MarketStateView | null> {
 
 export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("reports")
       .select("as_of,summary,payload,created_at")
@@ -769,7 +773,7 @@ const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
 
 export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("recommendations")
       .select(
@@ -882,7 +886,7 @@ function extractWalkforward(params: unknown): BacktestView["walkforward"] {
 
 export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("backtests")
       .select(
@@ -932,7 +936,7 @@ export async function getFlows(
   symbol = "",
 ): Promise<Loaded<FlowRowView[]>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("flows")
       .select("date,inst_net,foreign_net,retail_net,short_volume")
@@ -971,7 +975,7 @@ export async function getOhlcv(
   days = 180,
 ): Promise<Loaded<OhlcvCandle[]>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("ohlcv")
       .select("ts,open,high,low,close")
@@ -1006,7 +1010,7 @@ export async function getLatestPrice(
   instrumentId: number,
 ): Promise<Loaded<LatestPrice | null>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("ohlcv")
       .select("ts,close")
@@ -1040,7 +1044,7 @@ export async function getPlanCombosForReports(
   const out = new Map<number, { setup: string; style: string }[]>();
   if (ids.length === 0) return out;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data } = await supabase
       .from("reports")
       .select("id,plan:payload->plan")
@@ -1071,7 +1075,7 @@ export async function getLatestPricesBySymbols(
   const uniq = [...new Set(symbols.filter(Boolean))];
   if (uniq.length === 0) return out;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data: insts } = await supabase
       .from("instruments")
       .select("id,symbol")
@@ -1163,7 +1167,7 @@ export async function getAlphaZoneStocks(
   limit = 12,
 ): Promise<Loaded<AlphaZoneCard[]>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     // 매수 시그널 + 레벨. 강도순 상위에서 종목별 최강 1건만.
     const { data: sigs, error } = await supabase
       .from("signals")
@@ -1340,7 +1344,7 @@ export async function getRisk(
   symbol = "",
 ): Promise<Loaded<RiskView>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("risk_metrics")
       .select("date,beta,vol_annual,var_95,max_drawdown")
@@ -1405,7 +1409,7 @@ export async function getReports(
   opts: { includeUnfit?: boolean } = {},
 ): Promise<Loaded<ReportListItem[]>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     let q = supabase
       .from("reports")
       .select(
@@ -1431,7 +1435,7 @@ export async function getReportForInstrument(
   instrumentId: number,
 ): Promise<Loaded<ReportListItem | null>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("reports")
       .select(
@@ -1454,7 +1458,7 @@ export async function getReportById(
   id: number,
 ): Promise<Loaded<ReportDetail | null>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("reports")
       .select("*, instruments(symbol,name)")
@@ -1490,7 +1494,7 @@ export interface DashboardKpi {
 
 export async function getDashboardKpi(): Promise<DashboardKpi> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // 픽: 최신 as_of 의 daily_focus 건수
     const { data: latestFocus } = await supabase
@@ -1613,7 +1617,7 @@ export async function getMarketQuotes(): Promise<Loaded<MarketQuote[]>> {
     { id: "DGS10", label: "미 국채 10Y", unit: "%" },
   ];
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     // KOSPI/KOSDAQ=KIS(당일 종가) · USDKRW=네이버 환율 고시(당일, FRED DEXKOUS 폴백) ·
     // 나머지는 FRED(1~2일 지연 — 카드에 기준일 표시).
     const macroIds = ["KOSPI", "KOSDAQ", "SP500", "NASDAQCOM", "VIXCLS", "USDKRW", "DEXKOUS", "DGS10"];
@@ -1689,7 +1693,7 @@ const SAMPLE_SIGNAL_SECTORS: SignalSectorCount[] = [
 
 export async function getSignalSectorCounts(): Promise<Loaded<SignalSectorCount[]>> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     // 오늘 날짜 기준(UTC) — 가장 최근 created_at 배치의 날짜 그룹
     const { data: latest } = await supabase
       .from("signals")
@@ -1729,7 +1733,7 @@ export async function getSparkForSymbol(
   bars = 12,
 ): Promise<number[]> {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data: inst } = await supabase
       .from("instruments")
       .select("id")
