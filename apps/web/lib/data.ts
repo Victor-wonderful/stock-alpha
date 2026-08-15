@@ -99,6 +99,35 @@ function mapSignal(row: Record<string, unknown>, riskPct: number): SignalView {
   };
 }
 
+// 셋업별 상위 N건 — 스크리너 기본 화면(셋업 섹션 뷰)용.
+// 1000행 표 하나를 훑게 하는 대신 "오늘 어떤 셋업이 떴나"를 셋업별로 보여준다.
+// 셋업당 소량이라 병렬 조회해도 가볍고, 60초 fetch 캐시가 걸린다.
+export async function getSignalsBySetups(
+  setups: string[],
+  perSetup = 5,
+): Promise<Map<string, SignalView[]>> {
+  const out = new Map<string, SignalView[]>();
+  try {
+    const riskPct = await getUserRiskPct();
+    const supabase = createPublicClient();
+    const results = await Promise.all(
+      setups.map(async (setup) => {
+        const { data } = await supabase
+          .from("signals")
+          .select("*, instruments!inner(symbol,name,exchange,currency)")
+          .eq("setup", setup)
+          .order("strength", { ascending: false })
+          .limit(perSetup);
+        return (data ?? []).map((r) => mapSignal(r, riskPct));
+      }),
+    );
+    setups.forEach((st, i) => out.set(st, results[i]));
+    return out;
+  } catch {
+    return out;
+  }
+}
+
 // 셋업별 정확한 시그널 건수 + 전체 건수.
 //
 // 왜 필요한가: 스크리너가 getSignals({},1000) 로 '강도 상위 1000건'만 받아 그 안에서

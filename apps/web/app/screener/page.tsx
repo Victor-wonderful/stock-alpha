@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
-import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts } from "@/lib/data";
+import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts, getSignalsBySetups } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
 import type { SignalView } from "@/lib/types";
 
@@ -191,6 +191,19 @@ export default async function ScreenerPage({
   const { total: grandTotal, bySetup: setupCounts } = await getSignalCounts(
     ALL_SETUPS.map((x) => x.key),
   );
+  // 필터가 하나도 없으면 '셋업별 섹션' 뷰. 1000행 표를 훑게 하는 대신
+  // 오늘 어떤 셋업이 떴는지를 덩어리로 보여주고, 칩을 누르면 그 셋업 표로 파고든다.
+  const sectionView = !activeSetup && !activeStyle && !activeMarket && !search && !near;
+  const bySetupRows = sectionView
+    ? await getSignalsBySetups(ALL_SETUPS.map((x) => x.key), 5)
+    : new Map<string, typeof visible>();
+  const sectionSymbols = sectionView
+    ? [...bySetupRows.values()].flat().map((r) => r.symbol)
+    : [];
+  const sectionPrices = sectionView
+    ? await getLatestPricesBySymbols(sectionSymbols)
+    : new Map();
+
   const hl = computeHighlights(visible);
   // 최다 셋업도 표본이 아니라 전체 카운트에서 뽑는다.
   const topSetupEntry = [...setupCounts.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -385,8 +398,88 @@ export default async function ScreenerPage({
         </form>
       </div>
 
-      {/* 시그널 테이블 */}
-      {visible.length === 0 ? (
+      {/* 셋업별 섹션 — 기본 화면 */}
+      {sectionView ? (
+        <div className="flex flex-col gap-7">
+          {ALL_SETUPS.map(({ key, label }) => {
+            const rows = bySetupRows.get(key) ?? [];
+            const cnt = setupCounts.get(key) ?? 0;
+            return (
+              <section key={key}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border-soft pb-2.5">
+                  <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
+                    {label}
+                    <span className="tnum text-[11px] font-medium text-text-mute">
+                      {cnt}건
+                    </span>
+                  </h2>
+                  {cnt > 0 && (
+                    <Link
+                      href={`?setup=${key}`}
+                      className="text-xs text-text-dim transition-colors hover:text-text"
+                    >
+                      전체 보기 →
+                    </Link>
+                  )}
+                </div>
+                {rows.length === 0 ? (
+                  <p className="py-4 text-[12px] text-text-mute">
+                    오늘 이 셋업의 시그널은 없습니다.
+                  </p>
+                ) : (
+                  <div className="no-scrollbar divide-y divide-border-soft overflow-x-auto">
+                    {rows.map((r) => {
+                      const px = sectionPrices.get(r.symbol);
+                      return (
+                        <Link
+                          key={r.id}
+                          href={`/stocks/${r.symbol}`}
+                          className="grid min-w-[620px] grid-cols-[minmax(140px,2fr)_5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-center gap-3 px-1 py-3 transition-colors hover:bg-surface"
+                        >
+                          <span className="flex min-w-0 items-baseline gap-2">
+                            <span className="truncate text-[13px] font-semibold text-text">
+                              {r.name}
+                            </span>
+                            <span className="mono shrink-0 text-[10px] text-text-mute">
+                              {r.symbol}
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-text-dim">
+                            {STYLE_LABELS[r.style] ?? r.style}
+                          </span>
+                          <span className="mono whitespace-nowrap text-right text-[12px]">
+                            {px ? (
+                              <>
+                                <span className="font-semibold text-text">{fmtPrice(px.close)}</span>
+                                {px.changePct != null && (
+                                  <span className={`ml-1 text-[10px] ${px.changePct >= 0 ? "text-good" : "text-bad"}`}>
+                                    {fmtPct(px.changePct)}
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-text-mute">—</span>
+                            )}
+                          </span>
+                          <span className="tnum text-right text-[12px] text-text-dim">
+                            {fmtPrice(r.entry_price)} → {fmtPrice(r.tp1)}
+                          </span>
+                          <span className="tnum text-right text-[11px] text-text-mute">
+                            {r.risk_reward != null ? `${fmtNum(r.risk_reward, 1)}R` : "—"}
+                          </span>
+                          <span className="tnum text-right text-[13px] font-bold text-text">
+                            {fmtNum(r.strength, 2)}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      ) : visible.length === 0 ? (
         <div className="rounded-[12px] border border-border bg-surface px-6 py-12 text-center">
           <p className="text-sm text-text-mute">조건에 맞는 시그널이 없습니다. 필터를 바꿔보세요.</p>
         </div>
