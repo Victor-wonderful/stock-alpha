@@ -170,6 +170,75 @@ export async function getLatestDisclosures(perDirection = 40): Promise<
   }
 }
 
+export type NewsItem = {
+  id: number;
+  headline: string;
+  source: string | null;
+  url: string | null;
+  publishedAt: string;   // ISO(UTC)
+  publishedKst: string;  // 'MM/DD HH:mm' — 화면 표기용
+};
+
+// 종목별 최신 뉴스. 엔진(ingest/naver_news.py)이 제목·언론사·시각·링크만 수집한다
+// (본문은 언론사 저작물이라 저장하지 않는다). 화면도 '인용 + 출처 + 링크' 로만 쓰고
+// VECTA 는 같은 기간에 측정한 수치를 옆에 붙여 대조한다.
+export async function getNewsBySymbols(
+  symbols: string[],
+  perSymbol = 3,
+): Promise<Map<string, NewsItem[]>> {
+  const out = new Map<string, NewsItem[]>();
+  const uniq = [...new Set(symbols.filter(Boolean))];
+  if (uniq.length === 0) return out;
+  try {
+    const supabase = createPublicClient();
+    const { data: insts } = await supabase
+      .from("instruments")
+      .select("id,symbol")
+      .in("symbol", uniq);
+    const symById = new Map<number, string>();
+    for (const r of (insts ?? []) as { id: number; symbol: string }[]) {
+      symById.set(Number(r.id), r.symbol);
+    }
+    if (symById.size === 0) return out;
+
+    const { data } = await supabase
+      .from("news")
+      .select("id,instrument_id,headline,source,url,published_at")
+      .in("instrument_id", [...symById.keys()])
+      .order("published_at", { ascending: false })
+      .limit(uniq.length * perSymbol * 3);
+
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      const sym = symById.get(Number(r.instrument_id));
+      if (!sym) continue;
+      const arr = out.get(sym) ?? [];
+      if (arr.length >= perSymbol) continue;
+      arr.push({
+        id: Number(r.id),
+        headline: String(r.headline ?? ""),
+        source: (r.source as string) ?? null,
+        url: (r.url as string) ?? null,
+        publishedAt: String(r.published_at),
+        publishedKst: fmtKst(String(r.published_at)),
+      });
+      out.set(sym, arr);
+    }
+    return out;
+  } catch {
+    return out;
+  }
+}
+
+// published_at 은 timestamptz 라 UTC 로 돌아온다. 한국 시각으로 바꿔 표기하지 않으면
+// 9시간 어긋난다(원문 8/15 06:00 기사가 8/14 21:00 으로 보인다).
+function fmtKst(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(kst.getUTCMonth() + 1)}/${p(kst.getUTCDate())} ${p(kst.getUTCHours())}:${p(kst.getUTCMinutes())}`;
+}
+
 // 셋업별 상위 N건 — 스크리너 기본 화면(셋업 섹션 뷰)용.
 // 1000행 표 하나를 훑게 하는 대신 "오늘 어떤 셋업이 떴나"를 셋업별로 보여준다.
 // 셋업당 소량이라 병렬 조회해도 가볍고, 60초 fetch 캐시가 걸린다.
