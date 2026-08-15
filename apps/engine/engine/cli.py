@@ -96,6 +96,42 @@ def ingest_disclosures(
     typer.echo(f"disclosure events: {dart.ingest_disclosures(days=days)}")
 
 
+@app.command("ingest-news")
+def ingest_news(
+    symbols: str = typer.Option("", help="쉼표 구분 종목코드. 미지정 시 그날 리포트·추천 종목"),
+    pages: int = typer.Option(1, help="종목당 뉴스 페이지 수"),
+) -> None:
+    """네이버 금융 종목뉴스 → news 적재 (제목·언론사·시각·링크만, 본문 저장 안 함).
+
+    대상은 전 종목이 아니라 그날 리포트·추천이 나간 종목이다. 2,500종목을 매일
+    긁을 이유가 없고 요청량만 커진다.
+    """
+    from engine.ingest import naver_news as nn
+
+    syms = [x.strip() for x in symbols.split(",") if x.strip()]
+    if not syms:
+        from engine.db import get_client
+
+        cli = get_client()
+        # 그날 발행 리포트 + 추천 픽 종목 — 뉴스를 붙일 가치가 있는 대상만.
+        rows = (
+            cli.table("reports")
+            .select("instruments(symbol)")
+            .eq("report_type", "indepth")
+            .eq("status", "published")
+            .order("as_of", desc=True)
+            .limit(200)
+            .execute()
+            .data
+            or []
+        )
+        syms = sorted({(r.get("instruments") or {}).get("symbol") for r in rows} - {None})
+    if not syms:
+        typer.echo("대상 종목 없음")
+        raise typer.Exit(1)
+    typer.echo(f"news rows: {nn.ingest_news(syms, pages=pages)} (종목 {len(syms)})")
+
+
 @app.command("seed-universe")
 def seed_universe(
     markets: str = typer.Option("KOSPI,KOSDAQ", help="쉼표구분 시장: KOSPI,KOSDAQ"),
