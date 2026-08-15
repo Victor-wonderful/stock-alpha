@@ -305,10 +305,13 @@ export default async function DashboardPage() {
           ))}
         </dl>
 
-        {/* ── 메인 2컬럼 레이아웃 ── */}
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]">
-          {/* 좌측: 오늘의 포커스 + 최신 분석 리포트 */}
-          <div className="flex flex-col gap-6">
+        {/* ── 본문 ──
+            예전엔 좌(픽·리포트) / 우(메타 3종) 2컬럼이었다. 두 컬럼의 콘텐츠 길이가
+            달라 섹션 구분선이 서로 어긋났고(좌 722px 에서 1회, 우 464·733px 에서 2회),
+            가로줄 두 세트가 따로 노는 게 "높이가 안 맞는다"로 읽혔다.
+            컬럼을 없애면 어긋날 짝이 사라진다 — 픽·리포트는 전체 폭으로 세우고,
+            보조 지표 3종은 맨 아래 한 줄 띠로 내린다(세로 헤어라인으로만 분할). */}
+        <div className="flex flex-col gap-8">
             {/* 오늘의 포커스 — 카드 상자를 걷고 표로 세운다.
                 밀도 8 짜리 데이터에 카드 컨테이너를 씌우면 정보가 상자 안에 갇혀
                 옆 패널과 같은 무게로 읽힌다. 여기선 헤어라인과 여백만 쓴다. */}
@@ -326,14 +329,14 @@ export default async function DashboardPage() {
                   예전엔 진입가·목표가·R:R 이 라벨 없이 우측에 뭉쳐 있었다. */}
               {picks.length > 0 && (
                 <div className="no-scrollbar overflow-x-auto border-b border-border-soft">
-                  <div className="flex min-w-[640px] items-center gap-3 px-1 pb-2 text-[10px] tracking-[0.04em] text-text-mute">
-                    <span className="w-5 shrink-0">순위</span>
-                    <span className="min-w-0 flex-1">종목</span>
-                    <span className="w-[68px] shrink-0">스타일</span>
-                    <span className="w-[52px] shrink-0">판정</span>
-                    <span className="w-[104px] shrink-0 text-right">현재가</span>
-                    <span className="w-[132px] shrink-0 text-right">진입 → 목표</span>
-                    <span className="w-7 shrink-0 text-right">점수</span>
+                  <div className="grid grid-cols-[2rem_minmax(150px,3fr)_1fr_5rem_minmax(120px,2fr)_minmax(130px,2fr)_2.5rem] items-center gap-3 min-w-[680px] px-1 pb-2 text-[10px] tracking-[0.04em] text-text-mute">
+                    <span>순위</span>
+                    <span>종목</span>
+                    <span>스타일</span>
+                    <span>판정</span>
+                    <span className="text-right">현재가</span>
+                    <span className="text-right">진입 → 목표</span>
+                    <span className="text-right">점수</span>
                   </div>
                 </div>
               )}
@@ -351,14 +354,14 @@ export default async function DashboardPage() {
                     // min-w 를 주고 가로 스크롤에 맡긴다(정보를 숨기지 않는다).
                     <div
                       key={p.symbol}
-                      className="flex min-w-[640px] items-center gap-3 px-1 py-3.5 transition-colors hover:bg-surface"
+                      className="grid grid-cols-[2rem_minmax(150px,3fr)_1fr_5rem_minmax(120px,2fr)_minmax(130px,2fr)_2.5rem] items-center gap-3 min-w-[680px] px-1 py-3.5 transition-colors hover:bg-surface"
                     >
                       {/* 순위 — 1위에 옐로 배지를 쓰면 화면의 accent 예산을 여기서 태운다.
                           순위는 이미 위에서 아래 순서로 드러나므로 조용한 모노 숫자면 족하다. */}
-                      <span className="mono w-5 shrink-0 text-[11px] tabular-nums text-text-mute">
+                      <span className="mono text-[11px] tabular-nums text-text-mute">
                         {String(i + 1).padStart(2, "0")}
                       </span>
-                      <div className="flex min-w-0 flex-1 items-baseline gap-2">
+                      <div className="flex min-w-0 items-baseline gap-2">
                         <Link
                           href={`/stocks/${p.symbol}`}
                           className="truncate text-sm font-semibold text-text hover:text-accent"
@@ -367,14 +370,14 @@ export default async function DashboardPage() {
                         </Link>
                         <span className="mono shrink-0 text-[10px] text-text-mute">{p.symbol}</span>
                       </div>
-                      <span className="w-[68px] shrink-0 text-[10px] text-text-dim">
+                      <span className="truncate text-[10px] text-text-dim">
                         {p.style}
                       </span>
-                      <span className="w-[52px] shrink-0">
+                      <span>
                         <RatingBadge rating={ratingBySymbol.get(p.symbol) ?? null} />
                       </span>
                       {/* 현재가·전일대비 — 계획가(진입→목표)와 나란히 두어 지금 위치를 읽게 한다. */}
-                      <span className="w-[104px] shrink-0 text-right">
+                      <span className="text-right">
                         <PriceNow
                           close={priceMap.get(p.symbol)?.close}
                           changePct={priceMap.get(p.symbol)?.changePct}
@@ -382,36 +385,31 @@ export default async function DashboardPage() {
                           size="xs"
                         />
                       </span>
-                      <div className="flex items-center gap-3">
-                        <div className="w-[132px] shrink-0 text-right">
-                          <div className="tnum text-[12px] text-text-dim">
-                            {fmtPrice(p.entry_price)} → {fmtPrice(p.target_price)}
-                          </div>
-                          {p.entry_price && p.stop_loss && p.target_price && (
-                            <div className="tnum text-[10px] text-text-mute">
-                              R:R{" "}
-                              {((p.target_price - p.entry_price) / (p.entry_price - p.stop_loss)).toFixed(1)}
-                            </div>
-                          )}
+                      <div className="text-right">
+                        <div className="tnum text-[12px] text-text-dim">
+                          {fmtPrice(p.entry_price)} → {fmtPrice(p.target_price)}
                         </div>
-                        {/* 확신도 — 숫자만으로는 77 과 75 의 차이가 안 보인다.
-                            얇은 막대를 붙여 종목 간 비교가 눈으로 되게 한다. */}
-                        {/* 확신도 — 막대를 붙여봤지만 홈 미리보기는 상위 5건이라
-                            값이 거의 같게 뭉쳐(77·77·77·77·75) 변별이 안 되고 잡음만 됐다.
-                            목록이 이미 점수 내림차순이라 순서가 그 역할을 한다.
-                            옐로를 뺀 것만으로 강조 예산은 회수된다. */}
-                        <span className="tnum w-7 shrink-0 text-right text-sm font-bold text-text">
-                          {Math.round(p.conviction * 100)}
-                        </span>
+                        {p.entry_price && p.stop_loss && p.target_price && (
+                          <div className="tnum text-[10px] text-text-mute">
+                            R:R{" "}
+                            {((p.target_price - p.entry_price) / (p.entry_price - p.stop_loss)).toFixed(1)}
+                          </div>
+                        )}
                       </div>
+                      {/* 확신도 — 막대를 붙여봤지만 홈 미리보기는 상위 5건이라 값이
+                          거의 같게 뭉쳐(77·77·77·77·75) 변별이 안 되고 잡음만 됐다.
+                          목록이 이미 점수 내림차순이라 순서가 그 역할을 한다. */}
+                      <span className="tnum text-right text-sm font-bold text-text">
+                        {Math.round(p.conviction * 100)}
+                      </span>
                     </div>
                   ))
                 )}
               </div>
             </section>
 
-            {/* 최신 분석 리포트 — flex-1: 우측 레일과 하단 라인 정렬 */}
-            <section className="flex-1">
+            {/* 최신 분석 리포트 */}
+            <section>
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border-soft pb-3">
                 <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
                   최신 분석 리포트
@@ -479,12 +477,13 @@ export default async function DashboardPage() {
                 )}
               </div>
             </section>
-          </div>
-
-          {/* 우측 레일 */}
-          <div className="flex flex-col gap-6">
+          {/* ── 보조 지표 띠 ──
+              엔진이 얼마나 잘 하고 있는지를 말하는 메타 정보 3종. 상품(픽) 아래에
+              한 줄로 눕히고 세로 헤어라인으로만 나눈다. 위쪽 가로줄이 하나뿐이라
+              어긋날 구분선이 없다. 높이는 내용에 따라 달라도 상단이 맞으니 정돈돼 보인다. */}
+          <div className="grid gap-x-8 gap-y-8 border-t border-border-soft pt-5 lg:grid-cols-3 lg:divide-x lg:divide-border-soft">
             {/* 판정 분포 */}
-            <section className="border-t border-border-soft pt-4">
+            <section className="lg:pr-8">
               <h2 className="mb-3 text-sm font-bold text-text">판정 분포</h2>
               {dist.total === 0 ? (
                 <p className="text-sm text-text-mute">데이터 없음</p>
@@ -535,7 +534,7 @@ export default async function DashboardPage() {
             </section>
 
             {/* 픽 트랙레코드 미니 */}
-            <section className="border-t border-border-soft pt-4">
+            <section className="lg:px-8">
               <h2 className="mb-3 text-sm font-bold text-text">픽 트랙레코드</h2>
               <div className="grid grid-cols-2 gap-2.5">
                 {[
@@ -562,7 +561,7 @@ export default async function DashboardPage() {
                     color: "text-text",
                   },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className="border-l border-border-soft pl-3">
+                  <div key={label}>
                     <p className="text-[10px] text-text-mute">{label}</p>
                     <p className={`tnum mt-0.5 text-lg font-extrabold ${color}`}>{value}</p>
                   </div>
@@ -597,7 +596,7 @@ export default async function DashboardPage() {
             </section>
 
             {/* 전략 검증 현황 */}
-            <section className="border-t border-border-soft pt-4">
+            <section className="lg:pl-8">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-bold text-text">전략 검증 현황</h2>
                 <Link href="/strategies" className="text-xs text-text-dim transition-colors hover:text-text">
