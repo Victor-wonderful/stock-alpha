@@ -371,6 +371,32 @@ def daily(
         f"published:{r['published']} skipped:{r['skipped']} picks:{r['picks']}"
     )
 
+    # 뉴스는 리포트 뒤에 — 그날 리포트가 나간 종목만 대상이라 순서가 뒤바뀌면 대상이 빈다.
+    # 실패해도 배치를 죽이지 않는다(뉴스는 부가 정보이고, 외부 사이트 구조 변경·차단에
+    # 취약하다). 제목·언론사·시각·링크만 저장하고 본문은 저장하지 않는다.
+    try:
+        from engine.ingest import naver_news as nn
+        from engine.db import get_client
+
+        cli_db = get_client()
+        rows = (
+            cli_db.table("reports")
+            .select("instruments(symbol)")
+            .eq("report_type", "indepth")
+            .eq("status", "published")
+            .eq("as_of", target)
+            .limit(300)
+            .execute()
+            .data
+            or []
+        )
+        syms = sorted({(x.get("instruments") or {}).get("symbol") for x in rows} - {None})
+        n_news = nn.ingest_news(syms) if syms else 0
+        typer.echo(f"      news: {n_news} rows (종목 {len(syms)})")
+    except Exception as e:
+        log.warning("daily.news.failed", error=str(e))
+        typer.echo(f"      news: 실패 — {e}")
+
 
 @app.command()
 def worker(
