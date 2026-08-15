@@ -40,7 +40,7 @@ export function SnowflakePanel({
   const dataPoly = axes.map((a, i) => point(i, a.score / 100).map((n) => n.toFixed(1)).join(",")).join(" ");
 
   return (
-    <div className="mb-4 rounded-[20px] border border-border bg-surface p-5">
+    <div className="mb-4 rounded-[12px] border border-border bg-surface p-5">
       <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* 레이더 */}
         <div>

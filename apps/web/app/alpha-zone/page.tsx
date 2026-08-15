@@ -44,7 +44,7 @@ export default async function AlphaZonePage() {
       </div>
 
       {cards.length === 0 ? (
-        <div className="rounded-[20px] border border-border bg-surface px-6 py-16 text-center">
+        <div className="rounded-[12px] border border-border bg-surface px-6 py-16 text-center">
           <p className="text-sm text-text-mute">
             현재 알파 존에 들어온 종목이 없습니다. 가격이 진입 구간에 도달하면 표시됩니다.
           </p>

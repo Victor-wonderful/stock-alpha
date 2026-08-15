@@ -27,7 +27,7 @@ export function Panel({
       {title && (
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="flex items-center gap-2 text-sm font-bold text-text">
-            <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
+            <span className="h-3.5 w-0.5 rounded-full bg-border-strong" aria-hidden />
             {title}
           </h2>
           {action}

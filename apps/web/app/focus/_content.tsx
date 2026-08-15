@@ -306,7 +306,7 @@ export default async function FocusContent() {
 
         {/* ── 모닝 브리프 카드 ── */}
         {briefData && (
-          <div className="mb-6 rounded-[20px] border border-border bg-surface p-5">
+          <div className="mb-6 rounded-[12px] border border-border bg-surface p-5">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_1px_260px]">
               {/* 좌: 헤드라인 + 드라이버 칩 */}
               <div>
@@ -421,13 +421,13 @@ export default async function FocusContent() {
             )}
             {picks.length === 0 ? (
               recs.isSample ? (
-                <div className="rounded-[20px] border border-dashed border-border bg-surface p-16 text-center">
+                <div className="rounded-[12px] border border-dashed border-border bg-surface p-16 text-center">
                   <p className="text-sm text-text-mute">데이터 연결 후 오늘의 픽이 표시됩니다</p>
                 </div>
               ) : stalePicks.length > 0 ? null : (
                 <div className="space-y-4">
                   {/* B — 방어가 오늘의 알파 (빈 날을 정직함·신뢰로 전환) */}
-                  <div className="rounded-[20px] border border-border bg-surface p-6">
+                  <div className="rounded-[12px] border border-border bg-surface p-6">
                     <div className="flex items-start gap-3">
                       <span className="text-2xl" aria-hidden>
                         🛡️
@@ -452,7 +452,7 @@ export default async function FocusContent() {
 
                   {/* A — 반등 대기 리스트 (지금 진입 X · 신호 시 알림 → 참여·락인) */}
                   {waitlist.length > 0 && (
-                    <div className="rounded-[20px] border border-border bg-surface p-5">
+                    <div className="rounded-[12px] border border-border bg-surface p-5">
                       <div className="mb-1 flex items-center justify-between">
                         <h2 className="flex items-center gap-2 text-sm font-bold text-text">
                           <span aria-hidden>👀</span> 반등 대기 리스트
@@ -593,7 +593,7 @@ export default async function FocusContent() {
           {/* 우측 레일 */}
           <div className="flex flex-col gap-5">
             {/* 오늘의 판정 현황 */}
-            <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+            <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
               <h2 className="mb-3 text-sm font-bold text-text">오늘의 판정 현황</h2>
               <div className="grid grid-cols-2 gap-2">
                 {(
@@ -631,7 +631,7 @@ export default async function FocusContent() {
             </section>
 
             {/* 픽 기록 미니 */}
-            <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+            <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-bold text-text">픽 기록</h2>
                 <div className="flex items-center gap-2">

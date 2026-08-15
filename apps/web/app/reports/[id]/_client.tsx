@@ -14,9 +14,9 @@ export function ReportDetailClient({ narrative: n }: { narrative: Narrative }) {
   const [quantOpen, setQuantOpen] = useState(false);
 
   return (
-    <div className="rounded-[20px] border border-border bg-surface p-5">
+    <div className="rounded-[12px] border border-border bg-surface p-5">
       <h2 className="mb-4 flex items-center gap-2 text-[13px] font-bold">
-        <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
+        <span className="h-3.5 w-0.5 rounded-full bg-border-strong" aria-hidden />
         근거 — 전문 트레이더 · 퀀트 모델 관점
       </h2>
 

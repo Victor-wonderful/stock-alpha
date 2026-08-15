@@ -119,7 +119,7 @@ export default async function ReportDetailPage({
       </div>
 
       {/* 히어로 카드 (accent 테두리) */}
-      <div className="mb-5 rounded-[20px] border border-accent/40 bg-surface p-5">
+      <div className="mb-5 rounded-[12px] border border-accent/40 bg-surface p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -164,10 +164,10 @@ export default async function ReportDetailPage({
         {/* 좌측 본문 */}
         <div className="space-y-4">
           {/* 실행 플랜 카드 */}
-          <div className="rounded-[20px] border border-border bg-surface p-5">
+          <div className="rounded-[12px] border border-border bg-surface p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-[13px] font-bold">
-                <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
+                <span className="h-3.5 w-0.5 rounded-full bg-border-strong" aria-hidden />
                 실행 플랜
               </h2>
               <span className="text-[10px] text-text-mute">상태는 현재가 기준 실시간 판정</span>
@@ -273,7 +273,7 @@ export default async function ReportDetailPage({
         {/* 우측 레일 */}
         <div className="space-y-4">
           {/* 거래 가능 게이트 */}
-          <div className="rounded-[20px] border border-border bg-surface p-4">
+          <div className="rounded-[12px] border border-border bg-surface p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[13px] font-bold">거래 가능 게이트</h2>
               <span
@@ -308,7 +308,7 @@ export default async function ReportDetailPage({
           </div>
 
           {/* 퀀트 핵심 수치 */}
-          <div className="rounded-[20px] border border-border bg-surface p-4">
+          <div className="rounded-[12px] border border-border bg-surface p-4">
             <h2 className="mb-3 text-[13px] font-bold">퀀트 핵심 수치</h2>
             {/* 6셀 그리드 */}
             <div className="mb-3 grid grid-cols-2 gap-2">
@@ -368,7 +368,7 @@ export default async function ReportDetailPage({
 
           {/* 수급 10일 */}
           {p.flows && (
-            <div className="rounded-[20px] border border-border bg-surface p-4">
+            <div className="rounded-[12px] border border-border bg-surface p-4">
               <h2 className="mb-3 text-[13px] font-bold">수급 {p.flows.window_days}일</h2>
               <div className="space-y-2">
                 {[
@@ -392,7 +392,7 @@ export default async function ReportDetailPage({
           )}
 
           {/* source_refs 출처 노트 */}
-          <div className="rounded-[20px] bg-surface-2 p-4">
+          <div className="rounded-[12px] bg-surface-2 p-4">
             <p className="text-[11px] font-bold text-text-dim">출처 · 정직성 선언</p>
             <div className="mt-2 space-y-1 text-[10px] leading-relaxed text-text-mute">
               <p>수치 근거 {report.source_refs?.length ?? 0}건 추적 (source_refs)</p>

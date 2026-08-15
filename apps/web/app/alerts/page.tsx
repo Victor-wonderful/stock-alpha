@@ -102,7 +102,7 @@ export default async function AlertsPage() {
       <div className="grid gap-6 xl:grid-cols-[560px_minmax(0,1fr)]">
         {/* 좌측: 채널 + 이벤트 설정 */}
         <div className="flex flex-col gap-5">
-          <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+          <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
             <h2 className="mb-3 text-sm font-bold text-text">알림 채널</h2>
             <div className="space-y-2">
               <div className="flex items-center justify-between rounded-[12px] bg-surface-2 px-3.5 py-2.5">
@@ -126,7 +126,7 @@ export default async function AlertsPage() {
             </div>
           </section>
 
-          <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+          <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-bold text-text">이벤트 설정</h2>
               <span className="text-[10px] text-text-mute">발송: 08:30 모닝 · 16:30 일일 배치</span>
@@ -136,7 +136,7 @@ export default async function AlertsPage() {
         </div>
 
         {/* 우측: 알림 피드 */}
-        <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+        <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
           <h2 className="mb-3 text-sm font-bold text-text">최근 알림</h2>
           {feed.length === 0 ? (
             <p className="py-8 text-center text-sm text-text-mute">
