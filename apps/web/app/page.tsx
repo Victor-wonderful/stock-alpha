@@ -336,13 +336,16 @@ export default async function DashboardPage() {
                   예전엔 진입가·목표가·R:R 이 라벨 없이 우측에 뭉쳐 있었다. */}
               {picks.length > 0 && (
                 <div className="no-scrollbar overflow-x-auto border-b border-border-soft">
-                  <div className="grid grid-cols-[2rem_minmax(150px,3fr)_1fr_5rem_minmax(120px,2fr)_minmax(130px,2fr)_2.5rem] items-center gap-3 min-w-[680px] px-1 pb-2 text-[10px] tracking-[0.04em] text-text-mute">
+                  <div className="grid grid-cols-[2rem_minmax(140px,2.4fr)_4.5rem_3.5rem_minmax(100px,1.3fr)_minmax(92px,1.1fr)_minmax(104px,1.2fr)_minmax(104px,1.2fr)_3rem_2.5rem] items-center gap-2.5 min-w-[860px] px-1 pb-2 text-[10px] tracking-[0.04em] text-text-mute">
                     <span>순위</span>
                     <span>종목</span>
                     <span>스타일</span>
                     <span>판정</span>
                     <span className="text-right">현재가</span>
-                    <span className="text-right">진입 → 목표</span>
+                    <span className="text-right">진입가</span>
+                    <span className="text-right">목표가</span>
+                    <span className="text-right">손절가</span>
+                    <span className="text-right">R:R</span>
                     <span className="text-right">점수</span>
                   </div>
                 </div>
@@ -361,7 +364,7 @@ export default async function DashboardPage() {
                     // min-w 를 주고 가로 스크롤에 맡긴다(정보를 숨기지 않는다).
                     <div
                       key={p.symbol}
-                      className="grid grid-cols-[2rem_minmax(150px,3fr)_1fr_5rem_minmax(120px,2fr)_minmax(130px,2fr)_2.5rem] items-center gap-3 min-w-[680px] px-1 py-3.5 transition-colors hover:bg-surface"
+                      className="grid grid-cols-[2rem_minmax(140px,2.4fr)_4.5rem_3.5rem_minmax(100px,1.3fr)_minmax(92px,1.1fr)_minmax(104px,1.2fr)_minmax(104px,1.2fr)_3rem_2.5rem] items-center gap-2.5 min-w-[860px] px-1 py-3.5 transition-colors hover:bg-surface"
                     >
                       {/* 순위 — 1위에 옐로 배지를 쓰면 화면의 accent 예산을 여기서 태운다.
                           순위는 이미 위에서 아래 순서로 드러나므로 조용한 모노 숫자면 족하다. */}
@@ -392,17 +395,35 @@ export default async function DashboardPage() {
                           size="xs"
                         />
                       </span>
-                      <div className="text-right">
-                        <div className="tnum text-[12px] text-text-dim">
-                          {fmtPrice(p.entry_price)} → {fmtPrice(p.target_price)}
-                        </div>
-                        {p.entry_price && p.stop_loss && p.target_price && (
-                          <div className="tnum text-[10px] text-text-mute">
-                            R:R{" "}
-                            {((p.target_price - p.entry_price) / (p.entry_price - p.stop_loss)).toFixed(1)}
-                          </div>
+                      {/* 진입·목표·손절을 각각 세운다. 예전엔 "진입 → 목표"만 붙여 놓고
+                          손절가가 아예 없었다. 손절은 손실 크기를 정하는 값이라
+                          가장 먼저 보여야 하는 숫자다(2026-08-14 NHN 은 손절이 -47.4% 였는데
+                          화면에 없어서 드러나지 않았다). 진입가 대비 %를 함께 적어
+                          거리가 눈에 들어오게 한다. */}
+                      <span className="tnum text-right text-[12px] text-text-dim">
+                        {fmtPrice(p.entry_price)}
+                      </span>
+                      <span className="tnum text-right text-[12px]">
+                        <span className="text-good">{fmtPrice(p.target_price)}</span>
+                        {p.entry_price && p.target_price && (
+                          <span className="block text-[10px] text-good/70">
+                            {fmtPct((p.target_price - p.entry_price) / p.entry_price)}
+                          </span>
                         )}
-                      </div>
+                      </span>
+                      <span className="tnum text-right text-[12px]">
+                        <span className="text-bad">{fmtPrice(p.stop_loss)}</span>
+                        {p.entry_price && p.stop_loss && (
+                          <span className="block text-[10px] text-bad/70">
+                            {fmtPct((p.stop_loss - p.entry_price) / p.entry_price)}
+                          </span>
+                        )}
+                      </span>
+                      <span className="tnum text-right text-[11px] text-text-dim">
+                        {p.entry_price && p.stop_loss && p.target_price
+                          ? `${((p.target_price - p.entry_price) / (p.entry_price - p.stop_loss)).toFixed(1)}`
+                          : "—"}
+                      </span>
                       {/* 확신도 — 막대를 붙여봤지만 홈 미리보기는 상위 5건이라 값이
                           거의 같게 뭉쳐(77·77·77·77·75) 변별이 안 되고 잡음만 됐다.
                           목록이 이미 점수 내림차순이라 순서가 그 역할을 한다. */}
