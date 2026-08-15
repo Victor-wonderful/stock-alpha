@@ -9,6 +9,7 @@ import {
   getPickHistory,
   getMorningBrief,
   getLatestPricesBySymbols,
+  getNewsBySymbols,
 } from "@/lib/data";
 import { fmtPrice, fmtPct, nextTradingDayLabel, nextTradingDayIsCertain } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -181,6 +182,8 @@ export default async function DashboardPage() {
   // 홈에서 '분석한 종목 전체' 목록을 걷어내며 리포트 심볼 조회도 함께 뺐다.
   const previewPicks = picks.slice(0, 5);
   const priceMap = await getLatestPricesBySymbols(previewPicks.map((p) => p.symbol));
+  // 추천 종목 뉴스 — 제목·출처·링크만 인용하고, 판단 근거는 위 표의 VECTA 수치가 낸다.
+  const newsMap = await getNewsBySymbols(previewPicks.map((p) => p.symbol), 2);
 
   // 판정 분포 (리포트 기반)
   const dist = {
@@ -434,6 +437,53 @@ export default async function DashboardPage() {
                   ))
                 )}
               </div>
+              {/* ── 추천 종목 관련 뉴스 ──
+                  기사 본문은 저장·표시하지 않는다(언론사 저작물). 제목은 원문 링크로만
+                  걸고 언론사를 명시한다. VECTA 는 기사를 요약하지 않는다 — 요약하면
+                  기사 주장이 VECTA 주장이 되는데 검증 수단이 절반뿐이다.
+                  판단 근거는 위 표의 진입·목표·손절·점수가 낸다. */}
+              {[...newsMap.entries()].some(([, v]) => v.length > 0) && (
+                <div className="mt-5 border-t border-border-soft pt-4">
+                  <h3 className="mb-2 flex items-baseline gap-2 text-[12px] font-bold text-text">
+                    추천 종목 관련 기사
+                    <span className="text-[10px] font-medium text-text-mute">
+                      제목·출처만 인용 · 누르면 원문
+                    </span>
+                  </h3>
+                  <div className="divide-y divide-border-soft">
+                    {previewPicks.flatMap((p) =>
+                      (newsMap.get(p.symbol) ?? []).map((n) => (
+                        <div key={n.id} className="flex flex-wrap items-baseline gap-x-2 py-2">
+                          <span className="w-[92px] shrink-0 truncate text-[11px] font-semibold text-text">
+                            {p.name}
+                          </span>
+                          <span className="tnum w-[74px] shrink-0 text-[10px] text-text-mute">
+                            {n.publishedKst}
+                          </span>
+                          {n.url ? (
+                            <a
+                              href={n.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="min-w-0 flex-1 truncate text-[12px] text-text-dim transition-colors hover:text-text hover:underline"
+                            >
+                              {n.headline}
+                            </a>
+                          ) : (
+                            <span className="min-w-0 flex-1 truncate text-[12px] text-text-dim">
+                              {n.headline}
+                            </span>
+                          )}
+                          <span className="shrink-0 text-[10px] text-text-mute">
+                            {n.source ?? ""}
+                          </span>
+                        </div>
+                      )),
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* 분석 전체 목록은 홈에서 걷어냈다(추천과 뒤섞여 혼란만 키움).
                   접근 경로까지 막지는 않도록 링크 하나만 남긴다. */}
               <Link
