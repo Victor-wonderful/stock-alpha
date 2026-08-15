@@ -191,6 +191,10 @@ export default async function DashboardPage() {
     ...topReports.map((r) => r.symbol).filter((s): s is string => !!s),
   ]);
 
+  // 오른쪽 '분석한 종목 전체' 는 추천 5종목을 '포함' 한다(부분집합). 같은 종목이
+  // 양쪽에 표시되는데 표시가 없으면 관계를 알 수 없어 "이건 또 뭐냐"가 된다.
+  const pickedSymbols = new Set(picks.map((p) => p.symbol));
+
   // 판정 분포 (리포트 기반)
   const dist = {
     매수: todayReps.filter((r) => r.rating === "매수").length,
@@ -274,9 +278,11 @@ export default async function DashboardPage() {
               )}
             </h1>
             <p className="mt-2 text-[13px] text-text-dim">
-              {asOf ? `${asOf} 종가 분석` : "종가 분석"}
+              {/* 분석 시점을 못 박는다. '오늘'로 뭉뚱그리면 토요일에 보는 사람에게
+                  금요일 장마감 산출물이 오늘 것처럼 읽힌다. */}
+              {asOf ? `${asOf} 장마감(16:30) 분석` : "장마감 분석"}
               <span className="mx-2 text-border-strong">│</span>
-              기준을 통과한 종목만 오릅니다
+              기준을 통과한 종목만 추천에 오릅니다
             </p>
           </div>
 
@@ -331,7 +337,7 @@ export default async function DashboardPage() {
                 {/* 제목은 시스템이 한 일(매매 계획/판정)이 아니라 사용자가 묻는 것에
                     답해야 한다 — "그래서 뭘 사면 되는데?" */}
                 <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
-                  오늘의 추천 종목
+                  추천 종목
                   <span className="text-[11px] font-medium text-text-mute">
                     {picks.length}종목 · 진입가·목표가·손절가까지 계산 완료
                   </span>
@@ -435,9 +441,9 @@ export default async function DashboardPage() {
                 {/* 이 목록엔 '매수' 배지가 30개 붙는데 추천은 5종목뿐이다.
                     "매수라면서 왜 추천이 아니냐"가 사용자의 첫 질문이라, 제목 옆에서 답한다. */}
                 <h2 className="flex flex-wrap items-baseline gap-x-2 text-sm font-bold text-text">
-                  오늘 분석한 종목 전체
+                  분석한 종목 전체
                   <span className="text-[11px] font-medium text-text-mute">
-                    {todayReps.length}종목 · 점수순
+                    {todayReps.length}종목 · 점수순 · 왼쪽 추천 {picks.length}종목 포함
                     {kpiDisplay.reportsTotal > todayReps.length && (
                       <> · 거래 부적합 {kpiDisplay.reportsTotal - todayReps.length}건 제외</>
                     )}
@@ -448,8 +454,9 @@ export default async function DashboardPage() {
                 </Link>
               </div>
               <p className="pt-2 text-[11px] leading-relaxed text-text-mute">
-                판정만 한 목록입니다. <span className="text-text-dim">&lsquo;매수&rsquo;여도 지금 진입할 자리가
-                아니면 추천에 오르지 않습니다</span> — 종목을 누르면 분석 근거를 볼 수 있습니다.
+                같은 분석에서 나온 전체 목록이라 <span className="text-text-dim">추천 종목도 여기 함께
+                있습니다</span>. <span className="text-text-dim">&lsquo;매수&rsquo;여도 지금 진입할 자리가 아니면
+                추천에 오르지 않습니다</span> — 종목을 누르면 분석 근거를 볼 수 있습니다.
               </p>
               <div className="divide-y divide-border">
                 {topReports.length === 0 ? (
@@ -472,6 +479,11 @@ export default async function DashboardPage() {
                           {r.symbol && (
                             <span className="mono shrink-0 text-[10px] text-text-mute">
                               {r.symbol}
+                            </span>
+                          )}
+                          {r.symbol && pickedSymbols.has(r.symbol) && (
+                            <span className="shrink-0 rounded-[4px] border border-accent/40 px-1.5 py-px text-[9px] font-semibold text-accent">
+                              추천
                             </span>
                           )}
                         </div>
