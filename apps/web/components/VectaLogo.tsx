@@ -68,12 +68,15 @@ export function VectaWordmark({ className }: { className?: string }) {
 
 // 헤더용 잠금 조합 — 심볼 + 워드마크 + 서브브랜드.
 // 우산 브랜드에 VECTA Stock / VECTA Crypto 가 함께 있어 제품 구분자를 붙인다.
+// 좁은 폭에서는 심볼만 남긴다. 로고 잠금 조합은 175px 를 차지하는데,
+// 375px 화면에서 그걸 유지하면 GNB 메뉴에 남는 폭이 0 이 된다(계측치).
+// 심볼 자체가 aria-label="VECTA" 를 들고 있어 워드마크를 숨겨도 이름은 읽힌다.
 export function VectaLogo({ className }: { className?: string }) {
   return (
     <span className={className}>
       <VectaSymbol className="h-[26px] w-[26px] shrink-0" />
-      <VectaWordmark className="h-[17px] w-auto text-text" />
-      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-dim">
+      <VectaWordmark className="hidden h-[17px] w-auto text-text sm:block" />
+      <span className="hidden text-[11px] font-semibold uppercase tracking-[0.14em] text-text-dim sm:inline">
         Stock
       </span>
     </span>

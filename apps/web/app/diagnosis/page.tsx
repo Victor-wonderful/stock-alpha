@@ -196,7 +196,7 @@ export default async function DiagnosisPage({
       <div className="space-y-4">
         {/* ── 1행: 종목 입력(좌 560) + 진단 결과(우) — 시안 b5YzG ── */}
         <div className="grid items-stretch gap-4 lg:grid-cols-[560px_minmax(0,1fr)]">
-          <section className="rounded-[20px] border border-border bg-surface px-6 py-5">
+          <section className="rounded-[12px] border border-border bg-surface px-6 py-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-sm font-bold text-text">종목 입력</h2>
               <span className="text-[11px] text-text-mute">종목명 또는 코드 · 비중 합계 100%</span>
@@ -204,7 +204,7 @@ export default async function DiagnosisPage({
             <DiagnosisForm />
           </section>
 
-          <section className="flex flex-col rounded-[20px] border border-border bg-surface px-6 py-5">
+          <section className="flex flex-col rounded-[12px] border border-border bg-surface px-6 py-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-sm font-bold text-text">포트폴리오 진단 결과</h2>
               {diag && <span className="text-[11px] text-text-mute">최근 종가 기준</span>}
@@ -277,7 +277,7 @@ export default async function DiagnosisPage({
             {/* 종합 등급 + 섹터 배분 */}
             <div className="grid gap-4 lg:grid-cols-2">
               {grade && (
-                <section className="rounded-[20px] border border-accent/50 bg-surface px-6 py-5">
+                <section className="rounded-[12px] border border-accent/50 bg-surface px-6 py-5">
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-sm font-bold text-text">종합 등급</h2>
                     <span className="text-[11px] text-text-mute">알파 · 분산 · 리스크 3축 평가</span>
@@ -298,7 +298,7 @@ export default async function DiagnosisPage({
                 </section>
               )}
               {diag.sectors.length > 0 && (
-                <section className="rounded-[20px] border border-border bg-surface px-6 py-5">
+                <section className="rounded-[12px] border border-border bg-surface px-6 py-5">
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-sm font-bold text-text">섹터 배분</h2>
                     <span className="text-[11px] text-text-mute">비중 기준</span>

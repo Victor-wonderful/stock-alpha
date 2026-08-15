@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
-import { getSignals, getAlphaZoneStocks } from "@/lib/data";
+import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
 import type { SignalView } from "@/lib/types";
 
@@ -159,6 +159,18 @@ export default async function ScreenerPage({
     filtered = filtered.filter((s) => zoneSet.has(s.symbol));
   }
 
+  // 표시 상한 — 필터 없이 들어오면 1000건이 통째로 렌더돼 HTML 이 9.6MB, 응답 15초였다.
+  // 아무도 1000행을 읽지 않는다. 합성알파 내림차순 상위 100건만 그리고,
+  // 잘린 사실은 아래 표 머리에 명시한다(조용히 자르면 "전부 봤다"로 읽힌다).
+  const MAX_ROWS = 100;
+  const ranked = [...filtered].sort((a, b) => b.strength - a.strength);
+  const visible = ranked.slice(0, MAX_ROWS);
+  const truncated = ranked.length - visible.length;
+
+  // 현재가 — 진입가만 보여주면 "지금 사도 되는 자리인가"를 판단할 수 없다.
+  // 그리는 행만 벌크 1회로 가져온다(종목당 조회는 행 수만큼 왕복이 된다).
+  const priceMap = await getLatestPricesBySymbols(visible.map((s) => s.symbol));
+
   const hl = computeHighlights(allSignals);
 
   const buildHref = (key: string, value: string | null) => {
@@ -211,7 +223,7 @@ export default async function ScreenerPage({
         ].map(({ label, value, sub }) => (
           <div
             key={label}
-            className="rounded-[20px] border border-border bg-surface p-4"
+            className="rounded-[12px] border border-border bg-surface p-4"
           >
             <p className="text-[11px] text-text-mute">{label}</p>
             <p className="tnum mt-1 text-xl font-extrabold text-accent">{value}</p>
@@ -357,11 +369,24 @@ export default async function ScreenerPage({
 
       {/* 시그널 테이블 */}
       {filtered.length === 0 ? (
-        <div className="rounded-[20px] border border-border bg-surface px-6 py-12 text-center">
+        <div className="rounded-[12px] border border-border bg-surface px-6 py-12 text-center">
           <p className="text-sm text-text-mute">조건에 맞는 시그널이 없습니다. 필터를 바꿔보세요.</p>
         </div>
       ) : (
-        <div className="rounded-[20px] border border-border bg-surface overflow-hidden">
+        <div className="rounded-[12px] border border-border bg-surface overflow-hidden">
+          {/* 잘린 건수를 밝힌다 — 상한을 숨기면 사용자는 이게 전부라고 믿는다. */}
+          <div className="flex flex-wrap items-baseline gap-x-2 border-b border-border px-4 py-2.5 text-[11px]">
+            <span className="text-text-dim">
+              합성알파 상위{" "}
+              <span className="tnum font-semibold text-text">{visible.length}</span>건 표시
+            </span>
+            {truncated > 0 && (
+              <span className="text-text-mute">
+                (조건에 맞는 <span className="tnum">{ranked.length}</span>건 중{" "}
+                <span className="tnum">{truncated}</span>건은 생략 — 필터로 좁혀 보세요)
+              </span>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
               <thead>
@@ -371,6 +396,7 @@ export default async function ScreenerPage({
                     "셋업",
                     "스타일",
                     "신호일",
+                    "현재가",
                     "진입가",
                     "목표가",
                     "손절가",
@@ -389,7 +415,7 @@ export default async function ScreenerPage({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s) => {
+                {visible.map((s) => {
                   const tpPct =
                     s.tp1 != null && s.entry_price
                       ? (s.tp1 - s.entry_price) / s.entry_price
@@ -437,6 +463,28 @@ export default async function ScreenerPage({
                       {/* 신호일 */}
                       <td className="mono px-3 py-3 text-[11px] text-text-mute">
                         {dateStr}
+                      </td>
+
+                      {/* 현재가 — 진입가 바로 왼쪽에 둬야 "지금 자리인지"가 눈으로 비교된다. */}
+                      <td className="mono px-3 py-3 whitespace-nowrap">
+                        {priceMap.get(s.symbol) ? (
+                          <>
+                            <span className="text-[13px] font-semibold text-text">
+                              {fmtPrice(priceMap.get(s.symbol)!.close)}
+                            </span>
+                            {priceMap.get(s.symbol)!.changePct != null && (
+                              <span
+                                className={`ml-1 text-[10px] ${
+                                  priceMap.get(s.symbol)!.changePct! >= 0 ? "text-good" : "text-bad"
+                                }`}
+                              >
+                                {fmtPct(priceMap.get(s.symbol)!.changePct)}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-[11px] text-text-mute">—</span>
+                        )}
                       </td>
 
                       {/* 진입가 */}

@@ -118,7 +118,7 @@ export default async function PicksPage({
         </div>
 
         {/* 픽 테이블 */}
-        <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+        <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
           {rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-text-mute">
               {all.length === 0 ? "발행된 픽이 없습니다 — 매일 16:30 일일 배치에서 생성됩니다" : "해당 상태의 픽이 없습니다"}

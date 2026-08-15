@@ -4,8 +4,9 @@ import { ChevronRight, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { getPickHistory, getReports } from "@/lib/data";
+import { getPickHistory, getReports, getLatestPricesBySymbols } from "@/lib/data";
 import { nextTradingDayLabel } from "@/lib/format";
+import { PriceNow } from "@/components/PriceNow";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,11 @@ export default async function ReportsPage({
   }
   for (const g of groups.values()) g.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 
+  // 현재가 — 렌더되는 종목 전부를 벌크 1회로 가져온다.
+  const priceMap = await getLatestPricesBySymbols(
+    filtered.map((r) => r.symbol).filter((s): s is string => !!s),
+  );
+
   const buildHref = (key: string, val: string | null) => {
     const p = new URLSearchParams();
     if (activeMarket && key !== "market") p.set("market", activeMarket);
@@ -108,7 +114,7 @@ export default async function ReportsPage({
         {ratingFilter && <input type="hidden" name="rating" value={ratingFilter} />}
         {activeMarket && <input type="hidden" name="market" value={activeMarket} />}
         {includeUnfit && <input type="hidden" name="all" value="1" />}
-        <div className="flex items-center gap-3 rounded-[20px] border border-border bg-surface px-5 py-4 focus-within:border-accent">
+        <div className="flex items-center gap-3 rounded-[12px] border border-border bg-surface px-5 py-4 focus-within:border-accent">
           <Search className="h-5 w-5 shrink-0 text-text-mute" />
           <input
             name="q"
@@ -233,6 +239,15 @@ export default async function ReportsPage({
 
                     {/* 점수 + 셋업 힌트 + chevron */}
                     <div className="flex shrink-0 items-center gap-3">
+                      {/* 현재가 — 종목 허브에 지금 주가가 없으면 판정만 보고 나가야 한다. */}
+                      <span className="hidden text-right sm:block">
+                        <PriceNow
+                          close={r.symbol ? priceMap.get(r.symbol)?.close : undefined}
+                          changePct={r.symbol ? priceMap.get(r.symbol)?.changePct : undefined}
+                          date={r.symbol ? priceMap.get(r.symbol)?.date : undefined}
+                          size="xs"
+                        />
+                      </span>
                       {r.score != null && (
                         <span
                           className={`tnum text-sm font-extrabold ${

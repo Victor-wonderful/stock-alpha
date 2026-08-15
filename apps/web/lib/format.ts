@@ -11,8 +11,11 @@ export function fmtPrice(v: number | null | undefined, currency = "KRW"): string
 
 export function fmtPct(v: number | null | undefined, digits = 1): string {
   if (v == null) return "—";
-  const sign = v > 0 ? "+" : "";
-  return `${sign}${(v * 100).toFixed(digits)}%`;
+  // 부호 판정을 반올림 '뒤'에 한다. 먼저 하면 -0.0002 가 "-0.0%" 로 찍혀
+  // 홈 대표 KPI('진행중 픽 수익률')에 마이너스 0 이 뜬다 — 고장으로 읽힌다.
+  const pct = Number((v * 100).toFixed(digits));
+  const shown = pct === 0 ? 0 : pct; // -0 을 0 으로 정규화
+  return `${shown > 0 ? "+" : ""}${shown.toFixed(digits)}%`;
 }
 
 export function fmtNum(v: number | null | undefined, digits = 2): string {

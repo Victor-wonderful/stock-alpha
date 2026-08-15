@@ -29,7 +29,12 @@
   /* 텍스트 */
   --text: #FFFFFF;           /* primary */
   --text-dim: #9CA0A8;       /* secondary */
-  --text-mute: #5C6068;      /* tertiary */
+  /* tertiary — 구 #5C6068 은 WCAG AA(4.5:1) 미달이었다(surface 2.81 / surface-2 2.58 /
+     surface-3 2.30). 라벨·기준일·유사투자자문 면책고지가 전부 이 색이라 판독성이자 규정 문제였다.
+     #8A909C 는 bg 6.10 / surface 5.54 / surface-2 5.08 / surface-3 4.54 로 전부 통과한다.
+     accent-soft(#313523) 위에서만 3.94 라 그 한 곳은 text-dim 을 쓴다(app/page.tsx '진행중 평균 수익').
+     대신 text-dim 과의 대비가 1.22:1 로 얇아진다 — 3단 위계를 유지하려는 의도적 절충. */
+  --text-mute: #8A909C;      /* tertiary */
 
   /* 상태 색상 — 상승=그린/하락=레드 (디자인 V3 결정) */
   --good: #4ADE80;
@@ -89,4 +94,43 @@ body {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* 스크롤은 되되 막대는 숨긴다 — GNB 메뉴가 좁은 폭에서 옆으로 스크롤될 때 쓴다.
+   전역 ::-webkit-scrollbar(8px)가 헤더 안에 그려지면 56px 높이를 잡아먹는다. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* 지수 티커 — 폭보다 종목이 많아 흐르게 둔다(터미널의 관습).
+   같은 내용을 두 벌 이어 붙이고 정확히 절반만큼 밀어야 이음매가 안 보인다. */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-ticker {
+  animation: ticker-scroll 48s linear infinite;
+}
+
+/* 모션 최소화 설정을 켠 사용자에게는 애니메이션을 끈다(전환 자체는 즉시 완료).
+   transition/animate 를 32곳에서 쓰고 있어 전역 처리가 맞다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* 지수 티커는 이 규칙의 예외 — OS 모션 설정과 무관하게 항상 흐른다(Victor 결정, 2026-08-15).
+     위 전역 규칙이 duration 을 0.01ms·iteration 1 로 덮으므로, 그냥 두면 절반 밀린 채로
+     굳어버린다. 그래서 longhand 로 원래 값을 되돌린다.
+     shorthand(animation: ...)를 쓰면 animation-play-state 까지 running 으로 리셋돼
+     hover 정지가 죽는다 — play-state 는 건드리지 않는다. */
+  .animate-ticker {
+    animation-name: ticker-scroll !important;
+    animation-duration: 48s !important;
+    animation-timing-function: linear !important;
+    animation-iteration-count: infinite !important;
+  }
 }

@@ -121,7 +121,7 @@ export default async function MarketPage() {
     >
       <div className="space-y-4">
         {/* ── 레짐 히어로 ── */}
-        <div className="rounded-[20px] border border-accent/30 bg-surface p-5">
+        <div className="rounded-[12px] border border-accent/30 bg-surface p-5">
           <div className="grid gap-5 lg:grid-cols-[1fr_1fr_auto]">
             {/* 레짐 + 게이지 */}
             <div>
@@ -199,7 +199,7 @@ export default async function MarketPage() {
         </div>
 
         {/* ── 매크로 지표 ── */}
-        <div className="rounded-[20px] border border-border bg-surface p-5">
+        <div className="rounded-[12px] border border-border bg-surface p-5">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-bold">매크로 지표</h2>
             <span className="text-[10px] text-text-mute">해외 변수는 모닝 배치 갱신</span>
@@ -230,7 +230,7 @@ export default async function MarketPage() {
         </div>
 
         {/* ── 수급·브레드스 ── */}
-        <div className="rounded-[20px] border border-border bg-surface p-5">
+        <div className="rounded-[12px] border border-border bg-surface p-5">
           <h2 className="mb-3 text-[13px] font-bold">수급 · 브레드스 (5일)</h2>
           <div className="grid gap-4 md:grid-cols-2">
             {/* 외국인/기관/개인 막대 */}
@@ -278,7 +278,7 @@ export default async function MarketPage() {
         </div>
 
         {/* ── 섹터 로테이션 ── */}
-        <div className="rounded-[20px] border border-border bg-surface p-5">
+        <div className="rounded-[12px] border border-border bg-surface p-5">
           <h2 className="mb-4 text-[13px] font-bold">섹터 로테이션</h2>
           <div className="grid gap-4 md:grid-cols-2">
             {/* 사분면 맵 */}

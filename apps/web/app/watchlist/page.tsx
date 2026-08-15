@@ -27,7 +27,7 @@ export default function WatchlistPage() {
       <AssetTabs />
       <div className="space-y-4">
         {/* 오늘의 변화 (예시) */}
-        <section className="rounded-[20px] border border-accent/50 bg-surface px-5 py-4">
+        <section className="rounded-[12px] border border-accent/50 bg-surface px-5 py-4">
           <div className="mb-3 flex items-center gap-2">
             <h2 className="text-sm font-bold text-text">오늘의 변화</h2>
             <span className="text-[10px] text-text-mute">16:30 일일 배치 기준 · 예시</span>
@@ -48,7 +48,7 @@ export default function WatchlistPage() {
         </section>
 
         {/* 워치리스트 테이블 (예시) */}
-        <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+        <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-sm">
               <thead>

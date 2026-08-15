@@ -8,7 +8,7 @@ import {
   getBacktests,
   getPickHistory,
   getMorningBrief,
-  getLatestPrice,
+  getLatestPricesBySymbols,
 } from "@/lib/data";
 import { fmtPrice, fmtPct, nextTradingDayLabel } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -65,63 +65,38 @@ function MarketCard({
     })
     .join(" ");
 
+  // 티커 밴드의 한 칸. 배경도 테두리 카드도 없다 — 세로 헤어라인 하나로만 나눈다.
+  // 한 줄에 라벨·값·등락을 눕혀 밴드 높이를 36px 로 눌렀다(예전 카드 7장은 첫 화면의 절반).
   return (
-    <div className="flex flex-col gap-1.5 rounded-[12px] bg-surface px-4 py-3 border border-border">
-      <span className="flex items-center justify-between text-[11px] text-text-mute">
-        <span>
-          {label}
-          {sample && <span className="ml-1 rounded-[4px] bg-surface-2 px-1 py-px text-[9px] text-text-mute">예시</span>}
-        </span>
-        {asOf && <span className="tnum text-[9px]">{asOf.slice(5).replace("-", "/")} 기준</span>}
-      </span>
-      <div className="flex items-end justify-between gap-2">
-        <div>
-          <span className="tnum text-base font-bold text-text">
-            {value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
-            {unit && <span className="ml-0.5 text-xs text-text-mute">{unit}</span>}
-          </span>
-          {changePct != null && (
-            <div className={`tnum mt-0.5 text-[11px] font-semibold ${changeColor}`}>
-              {fmtPct(changePct)}
-            </div>
-          )}
-        </div>
-        <svg width="80" height="20" className="shrink-0 opacity-80" aria-hidden>
-          <polyline
-            points={pts}
-            fill="none"
-            stroke={up ? "var(--good)" : "var(--bad)"}
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-// ── KPI 스탯 카드
-function KpiCard({
-  label,
-  value,
-  sub,
-  accent,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  accent?: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1 rounded-[12px] bg-surface px-4 py-3.5 border border-border">
+    // 흐르는 밴드라 셀은 고정폭이어야 한다(flex-1 이면 두 벌의 폭이 달라져 이음매가 튄다).
+    <div className="flex w-[210px] shrink-0 items-baseline gap-2 whitespace-nowrap border-r border-border-soft px-4 py-2.5">
       <span className="text-[11px] text-text-mute">{label}</span>
-      <span
-        className={`tnum text-xl font-extrabold leading-none ${accent ? "text-accent" : "text-text"}`}
-      >
-        {value}
+      <span className="tnum text-[12px] font-medium text-text">
+        {value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+        {unit && <span className="ml-0.5 text-[10px] text-text-mute">{unit}</span>}
       </span>
-      {sub && <span className="text-[11px] text-text-mute">{sub}</span>}
+      {changePct != null && (
+        <span className={`tnum text-[11px] ${changeColor}`}>{fmtPct(changePct)}</span>
+      )}
+      {sample && <span className="text-[9px] text-text-mute">예시</span>}
+      <svg
+        width="40"
+        height="12"
+        viewBox="0 0 80 20"
+        preserveAspectRatio="none"
+        className="ml-auto shrink-0 self-center opacity-50"
+        aria-hidden
+      >
+        <polyline
+          points={pts}
+          fill="none"
+          stroke={up ? "var(--good)" : "var(--bad)"}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
     </div>
   );
 }
@@ -155,13 +130,20 @@ export default async function DashboardPage() {
 
   // 시장 레짐 — 모닝 브리프(market 리포트) 실데이터. 없으면 필 비표시.
   const regime = brief.data?.regime ?? null;
-  const regimePill = regime
-    ? regime.regime === "risk_off"
-      ? { text: "시장 레짐 · 방어 구간", cls: "bg-bad-soft text-bad" }
-      : regime.regime === "risk_on"
-        ? { text: "시장 레짐 · 공격 구간", cls: "bg-good-soft text-good" }
-        : { text: "시장 레짐 · 중립", cls: "bg-warn-soft text-warn" }
-    : null;
+  // 레짐을 알약 배지가 아니라 헤드라인의 첫 단어로 쓴다. 배지는 화면 구석의
+  // 장식이지만, 오늘 시장을 어떻게 볼지가 이 제품의 첫 마디여야 한다.
+  const regimeWord =
+    regime?.regime === "risk_off"
+      ? "방어 구간"
+      : regime?.regime === "risk_on"
+        ? "공격 구간"
+        : "중립 구간";
+  const regimeTone =
+    regime?.regime === "risk_off"
+      ? "text-bad"
+      : regime?.regime === "risk_on"
+        ? "text-good"
+        : "text-warn";
 
   // 심볼별 최신 판정 — 픽 배지·가드용. reports.data 는 as_of 내림차순이라 첫 등장이 최신.
   const ratingBySymbol = new Map<string | null, string | null>();
@@ -188,24 +170,19 @@ export default async function DashboardPage() {
   // 픽은 종가 분석 → 다음 거래일 플랜이다. 대상일을 함께 적어야 오해가 없다.
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
 
-  // 픽별 현재가·전일대비 — 추천(/focus)과 같은 정보를 홈 미리보기에도 노출.
-  // 렌더하는 상위 5건만 조회한다(전체 픽을 다 조회할 이유가 없다).
-  const previewPicks = picks.slice(0, 5);
-  const previewPrices = await Promise.all(
-    previewPicks.map((p) =>
-      p.instrument_id ? getLatestPrice(p.instrument_id) : Promise.resolve({ data: null }),
-    ),
-  );
-  const priceMap = new Map<string, NonNullable<(typeof previewPrices)[number]["data"]>>();
-  previewPicks.forEach((p, i) => {
-    const d = previewPrices[i]?.data;
-    if (d?.close != null) priceMap.set(p.symbol, d);
-  });
-
   // 최신 분석 리포트 미리보기 — 종목(/reports) 페이지와 동일: 최신일 + 점수순 상위 6.
   const topReports = [...todayReps]
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
     .slice(0, 6);
+
+  // 현재가·전일대비 — 종목이 나열되는 곳이면 현재가가 있어야 한다.
+  // 예전엔 픽 5건만, 그것도 종목당 1회씩(5왕복) 조회해 리포트 목록엔 가격이 아예 없었다.
+  // 픽과 리포트 심볼을 합쳐 벌크 1회로 가져온다(왕복 5→1).
+  const previewPicks = picks.slice(0, 5);
+  const priceMap = await getLatestPricesBySymbols([
+    ...previewPicks.map((p) => p.symbol),
+    ...topReports.map((r) => r.symbol).filter((s): s is string => !!s),
+  ]);
 
   // 판정 분포 (리포트 기반)
   const dist = {
@@ -238,124 +215,147 @@ export default async function DashboardPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <GNB />
-      <main className="mx-auto w-full max-w-[1440px] flex-1 px-7 py-7 pb-10">
-        {/* ── 페이지 헤더 ── */}
-        <div className="mb-6 flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-text">홈</h1>
-            <p className="mt-0.5 text-xs text-text-mute">
-              {asOf ? `${asOf} 장마감 데이터 기준` : "장마감 데이터 기준"}
-              {quotes.isSample && " · "}
-              {quotes.isSample && <SampleBadge />}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* 레짐 필 — 모닝 브리프 실데이터 */}
-            {regimePill && (
-              <span className={`rounded-[999px] px-3 py-1.5 text-xs font-semibold ${regimePill.cls}`}>
-                {regimePill.text}
-              </span>
-            )}
-            <Link
-              href="/focus"
-              className="rounded-[999px] bg-accent px-4 py-1.5 text-xs font-semibold text-[#0B0C10] hover:bg-accent-2 transition-colors"
-            >
-              오늘의 포커스 보기
-            </Link>
-          </div>
-        </div>
 
-        {/* ── 마켓 스트립 — 코스피·코스닥·S&P500·나스닥·VIX·원달러·미 국채 10Y ── */}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
-          {quotes.data.map((q) => (
-            <MarketCard
-              key={q.id}
-              label={q.label}
-              value={q.value}
-              unit={q.unit}
-              changePct={q.changePct}
-              spark={q.spark}
-              sample={q.sample}
-              asOf={q.asOf}
-            />
+      {/* ── 지수 티커 밴드 ──
+          지수는 사용자가 물어본 게 아니라 배경 맥락이다. 콘텐츠 흐름에서 빼
+          GNB 아래 얇은 밴드로 내린다(터미널의 티커 자리). 카드도 배경도 없다.
+          좁은 화면에선 7종이 다 안 들어가므로 흐르게 둔다 — 가로 스크롤은
+          "옆에 뭔가 더 있다"를 사용자가 알아채야 하지만 티커는 저절로 보여준다.
+          읽으려면 멈춰야 하니 hover 시 정지한다. */}
+      <div className="ticker-band no-scrollbar group relative overflow-hidden border-b border-border-soft">
+        <div className="flex w-max animate-ticker group-hover:[animation-play-state:paused]">
+          {[0, 1].map((copy) => (
+            // 두 벌째는 이음매를 메우는 복제본 — 스크린리더가 지수를 두 번 읽지 않도록 감춘다.
+            <div key={copy} className="flex" aria-hidden={copy === 1}>
+              {quotes.data.map((q) => (
+                <MarketCard
+                  key={q.id}
+                  label={q.label}
+                  value={q.value}
+                  unit={q.unit}
+                  changePct={q.changePct}
+                  spark={q.spark}
+                  sample={q.sample}
+                  asOf={q.asOf}
+                />
+              ))}
+            </div>
           ))}
         </div>
+      </div>
 
-        {/* ── KPI 4 스탯카드 ── */}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <KpiCard
-            label="오늘의 픽"
-            value={`${kpiDisplay.picksToday}종목`}
-            sub="기준 통과"
-            accent
-          />
-          <KpiCard
-            label="발행 리포트"
-            value={`${kpiDisplay.reportsTotal}건`}
-            sub="오늘 인뎁스 발행 · 상한 100"
-          />
-          <KpiCard
-            label="진행중 픽 수익률"
-            value={avgReturn != null ? fmtPct(avgReturn) : "—"}
-            sub={activePicks.length > 0 ? `${activePicks.length}종목 평균` : "진행중 없음"}
-            accent={avgReturn != null && avgReturn > 0}
-          />
-          <KpiCard
-            label="검증 통과 전략"
-            value={`${kpiDisplay.backtestPassed} / ${kpiDisplay.backtestTotal}`}
-            sub="PASS / 전체"
-          />
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-7 pb-10 pt-9">
+        {/* ── 오늘의 판단 ──
+            예전엔 "홈" 이라는 제목과 KPI 상자 4개로 시작했다. 제목은 정보가 0이고
+            KPI 는 자기자랑("리포트 100건 발행")이라 정작 상품인 픽이 세 번째로 밀렸다.
+            화면은 이 제품이 파는 것 — 오늘의 판단 — 으로 연다. */}
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <div className="min-w-0">
+            <p className="text-[11px] tracking-[0.06em] text-text-mute">
+              {planDay ? `${planDay} 장전 플랜` : "장전 플랜"}
+              {quotes.isSample && <SampleBadge />}
+            </p>
+            <h1 className="mt-2 text-[34px] font-bold leading-[1.15] tracking-[-0.02em] text-text">
+              {regime ? (
+                <>
+                  <span className={regimeTone}>{regimeWord}</span>
+                  <span className="text-text-dim">, </span>
+                  {picks.length}종목
+                </>
+              ) : (
+                <>{picks.length}종목</>
+              )}
+            </h1>
+            <p className="mt-2 text-[13px] text-text-dim">
+              {asOf ? `${asOf} 종가 분석` : "종가 분석"}
+              <span className="mx-2 text-border-strong">│</span>
+              기준을 통과한 종목만 오릅니다
+            </p>
+          </div>
+
+          <Link
+            href="/focus"
+            className="whitespace-nowrap rounded-[12px] bg-accent px-5 py-2.5 text-[13px] font-semibold text-[#0B0C10] transition-colors hover:bg-accent-2"
+          >
+            오늘의 포커스 보기
+          </Link>
         </div>
+
+        {/* ── 보조 지표 ──
+            KPI 상자 4개를 한 줄 텍스트로 내렸다. 이건 오늘의 판단을 뒷받침하는
+            각주이지 헤드라인이 아니다. */}
+        <dl className="mb-8 flex flex-wrap items-baseline gap-x-7 gap-y-2 border-y border-border-soft py-3 text-[13px]">
+          {[
+            { k: "발행 리포트", v: `${kpiDisplay.reportsTotal}건` },
+            { k: "검증 통과 전략", v: `${kpiDisplay.backtestPassed}/${kpiDisplay.backtestTotal}` },
+            {
+              k: "진행중 픽",
+              v: avgReturn != null ? fmtPct(avgReturn) : "없음",
+              sub: activePicks.length > 0 ? `${activePicks.length}종목` : undefined,
+            },
+          ].map(({ k, v, sub }) => (
+            <div key={k} className="flex items-baseline gap-2">
+              <dt className="text-text-mute">{k}</dt>
+              <dd className="tnum font-semibold text-text">{v}</dd>
+              {sub && <span className="tnum text-[11px] text-text-mute">{sub}</span>}
+            </div>
+          ))}
+        </dl>
 
         {/* ── 메인 2컬럼 레이아웃 ── */}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]">
           {/* 좌측: 오늘의 포커스 + 최신 분석 리포트 */}
           <div className="flex flex-col gap-6">
-            {/* 오늘의 포커스 미리보기 */}
-            <section className="rounded-[20px] border border-border bg-surface">
-              <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-text">
-                  <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
-                  오늘의 포커스
-                  {/* 픽은 '종가 분석 → 다음 거래일 플랜'이다. 대상일을 안 적으면 장중
-                      사용자가 '아침에 있던 픽이 사라졌다'로 읽는다. */}
-                  {planDay && (
-                    <span className="text-[11px] font-medium text-text-mute">
-                      {planDay} 장전 플랜
-                    </span>
-                  )}
-                </h2>
+            {/* 오늘의 포커스 — 카드 상자를 걷고 표로 세운다.
+                밀도 8 짜리 데이터에 카드 컨테이너를 씌우면 정보가 상자 안에 갇혀
+                옆 패널과 같은 무게로 읽힌다. 여기선 헤어라인과 여백만 쓴다. */}
+            <section>
+              <div className="flex items-baseline justify-between pb-3">
+                <h2 className="text-sm font-bold text-text">오늘의 포커스</h2>
                 <Link
                   href="/focus"
-                  className="text-xs text-accent hover:underline"
+                  className="text-xs text-text-dim transition-colors hover:text-text"
                 >
                   전체 보기 →
                 </Link>
               </div>
-              <div className="divide-y divide-border">
+              {/* 컬럼 헤더 — 어느 숫자가 무엇인지 표가 스스로 말하게 한다.
+                  예전엔 진입가·목표가·R:R 이 라벨 없이 우측에 뭉쳐 있었다. */}
+              {picks.length > 0 && (
+                <div className="no-scrollbar overflow-x-auto border-b border-border-soft">
+                  <div className="flex min-w-[640px] items-center gap-3 px-1 pb-2 text-[10px] tracking-[0.04em] text-text-mute">
+                    <span className="w-5 shrink-0">순위</span>
+                    <span className="min-w-0 flex-1">종목</span>
+                    <span className="w-[68px] shrink-0">스타일</span>
+                    <span className="w-[52px] shrink-0">판정</span>
+                    <span className="w-[104px] shrink-0 text-right">현재가</span>
+                    <span className="w-[132px] shrink-0 text-right">진입 → 목표</span>
+                    <span className="w-7 shrink-0 text-right">점수</span>
+                  </div>
+                </div>
+              )}
+              <div className="no-scrollbar divide-y divide-border-soft overflow-x-auto">
                 {picks.length === 0 ? (
-                  <div className="px-5 py-8 text-center text-sm text-text-mute">
+                  <div className="px-1 py-8 text-center text-sm text-text-mute">
                     {recs.isSample
                       ? "데이터 연결 후 픽이 표시됩니다"
                       : `${planDay ? `${planDay} 장전 — ` : ""}기준을 통과한 종목이 없습니다`}
                   </div>
                 ) : (
                   previewPicks.map((p, i) => (
+                    // 한 행에 이름·스타일·판정·현재가·계획가·R:R·점수가 들어간다.
+                    // 좁은 화면에서 잘려나가지 않도록 이 코드베이스의 표 관례대로
+                    // min-w 를 주고 가로 스크롤에 맡긴다(정보를 숨기지 않는다).
                     <div
                       key={p.symbol}
-                      className="flex items-center gap-3 px-5 py-3"
+                      className="flex min-w-[640px] items-center gap-3 px-1 py-3.5 transition-colors hover:bg-surface"
                     >
-                      {/* 순위 필 */}
-                      <span
-                        className={`grid h-6 w-6 shrink-0 place-items-center rounded-[6px] text-[11px] font-extrabold ${
-                          i === 0
-                            ? "bg-accent text-[#0B0C10]"
-                            : "bg-surface-3 text-text-mute"
-                        }`}
-                      >
-                        {i + 1}
+                      {/* 순위 — 1위에 옐로 배지를 쓰면 화면의 accent 예산을 여기서 태운다.
+                          순위는 이미 위에서 아래 순서로 드러나므로 조용한 모노 숫자면 족하다. */}
+                      <span className="mono w-5 shrink-0 text-[11px] tabular-nums text-text-mute">
+                        {String(i + 1).padStart(2, "0")}
                       </span>
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="flex min-w-0 flex-1 items-baseline gap-2">
                         <Link
                           href={`/stocks/${p.symbol}`}
                           className="truncate text-sm font-semibold text-text hover:text-accent"
@@ -364,20 +364,24 @@ export default async function DashboardPage() {
                         </Link>
                         <span className="mono shrink-0 text-[10px] text-text-mute">{p.symbol}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-surface-3 text-text-dim">
-                          {p.style}
-                        </span>
+                      <span className="w-[68px] shrink-0 text-[10px] text-text-dim">
+                        {p.style}
+                      </span>
+                      <span className="w-[52px] shrink-0">
                         <RatingBadge rating={ratingBySymbol.get(p.symbol) ?? null} />
-                        {/* 현재가·전일대비 — 계획가(진입→목표)와 나란히 두어 지금 위치를 읽게 한다. */}
+                      </span>
+                      {/* 현재가·전일대비 — 계획가(진입→목표)와 나란히 두어 지금 위치를 읽게 한다. */}
+                      <span className="w-[104px] shrink-0 text-right">
                         <PriceNow
                           close={priceMap.get(p.symbol)?.close}
                           changePct={priceMap.get(p.symbol)?.changePct}
                           date={priceMap.get(p.symbol)?.date}
                           size="xs"
                         />
-                        <div className="text-right">
-                          <div className="tnum text-[11px] text-text-dim">
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-[132px] shrink-0 text-right">
+                          <div className="tnum text-[12px] text-text-dim">
                             {fmtPrice(p.entry_price)} → {fmtPrice(p.target_price)}
                           </div>
                           {p.entry_price && p.stop_loss && p.target_price && (
@@ -387,7 +391,13 @@ export default async function DashboardPage() {
                             </div>
                           )}
                         </div>
-                        <span className="tnum text-sm font-extrabold text-accent">
+                        {/* 확신도 — 숫자만으로는 77 과 75 의 차이가 안 보인다.
+                            얇은 막대를 붙여 종목 간 비교가 눈으로 되게 한다. */}
+                        {/* 확신도 — 막대를 붙여봤지만 홈 미리보기는 상위 5건이라
+                            값이 거의 같게 뭉쳐(77·77·77·77·75) 변별이 안 되고 잡음만 됐다.
+                            목록이 이미 점수 내림차순이라 순서가 그 역할을 한다.
+                            옐로를 뺀 것만으로 강조 예산은 회수된다. */}
+                        <span className="tnum w-7 shrink-0 text-right text-sm font-bold text-text">
                           {Math.round(p.conviction * 100)}
                         </span>
                       </div>
@@ -398,10 +408,9 @@ export default async function DashboardPage() {
             </section>
 
             {/* 최신 분석 리포트 — flex-1: 우측 레일과 하단 라인 정렬 */}
-            <section className="flex-1 rounded-[20px] border border-border bg-surface">
-              <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-text">
-                  <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
+            <section className="flex-1">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border-soft pb-3">
+                <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
                   최신 분석 리포트
                   {/* 픽이 0건인 날 바로 위에 "살 종목 없음"이 뜨는데 여기엔 '매수' 리포트가
                       줄줄이 있어 모순처럼 읽힌다. 리포트=판정, 픽=실행 계획임을 명시. */}
@@ -412,13 +421,13 @@ export default async function DashboardPage() {
                     판정만 · 점수순 — 매매 계획은 &lsquo;추천&rsquo;에
                   </span>
                 </h2>
-                <Link href="/reports" className="text-xs text-accent hover:underline">
+                <Link href="/reports" className="text-xs text-text-dim transition-colors hover:text-text">
                   전체 보기 →
                 </Link>
               </div>
               <div className="divide-y divide-border">
                 {topReports.length === 0 ? (
-                  <div className="px-5 py-8 text-center text-sm text-text-mute">
+                  <div className="px-1 py-8 text-center text-sm text-text-mute">
                     발행된 리포트가 없습니다
                   </div>
                 ) : (
@@ -426,7 +435,7 @@ export default async function DashboardPage() {
                     <Link
                       key={r.id}
                       href={`/reports/${r.id}`}
-                      className="flex items-center gap-3 px-5 py-3 hover:bg-surface-2 transition-colors"
+                      className="flex items-center gap-3 px-1 py-3 hover:bg-surface transition-colors"
                     >
                       <RatingBadge rating={r.rating} />
                       <div className="min-w-0 flex-1">
@@ -446,8 +455,19 @@ export default async function DashboardPage() {
                           </p>
                         )}
                       </div>
+                      {/* 현재가 — 종목이 나열되는 곳이면 지금 주가가 얼마인지 보여야 한다.
+                          판정·점수만 있으면 "그래서 지금 얼마인데?"가 남는다. */}
+                      <span className="hidden shrink-0 text-right sm:block">
+                        <PriceNow
+                          close={r.symbol ? priceMap.get(r.symbol)?.close : undefined}
+                          changePct={r.symbol ? priceMap.get(r.symbol)?.changePct : undefined}
+                          date={r.symbol ? priceMap.get(r.symbol)?.date : undefined}
+                          size="xs"
+                        />
+                      </span>
+                      {/* 포커스 점수와 같은 규칙 — 점수는 옐로가 아니라 굵기로 세운다. */}
                       {r.score != null && (
-                        <span className="tnum shrink-0 text-sm font-extrabold text-accent">
+                        <span className="tnum w-7 shrink-0 text-right text-sm font-bold text-text">
                           {r.score}
                         </span>
                       )}
@@ -461,7 +481,7 @@ export default async function DashboardPage() {
           {/* 우측 레일 */}
           <div className="flex flex-col gap-6">
             {/* 판정 분포 */}
-            <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+            <section className="border-t border-border-soft pt-4">
               <h2 className="mb-3 text-sm font-bold text-text">판정 분포</h2>
               {dist.total === 0 ? (
                 <p className="text-sm text-text-mute">데이터 없음</p>
@@ -512,7 +532,7 @@ export default async function DashboardPage() {
             </section>
 
             {/* 픽 트랙레코드 미니 */}
-            <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+            <section className="border-t border-border-soft pt-4">
               <h2 className="mb-3 text-sm font-bold text-text">픽 트랙레코드</h2>
               <div className="grid grid-cols-2 gap-2.5">
                 {[
@@ -527,9 +547,11 @@ export default async function DashboardPage() {
                     color: "text-bad",
                   },
                   {
+                    // '진행중'은 경고가 아니라 중립 상태다. warn(옐로)을 쓰면
+                    // 색이 의미를 잃고 화면의 옐로만 늘어난다.
                     label: "진행중",
                     value: activePicks.length,
-                    color: "text-warn",
+                    color: "text-text",
                   },
                   {
                     label: "총 픽",
@@ -537,17 +559,27 @@ export default async function DashboardPage() {
                     color: "text-text",
                   },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className="rounded-[10px] bg-surface-2 px-3 py-2.5">
+                  <div key={label} className="border-l border-border-soft pl-3">
                     <p className="text-[10px] text-text-mute">{label}</p>
                     <p className={`tnum mt-0.5 text-lg font-extrabold ${color}`}>{value}</p>
                   </div>
                 ))}
               </div>
               {avgReturn != null && (
-                <div className="mt-3 rounded-[10px] bg-accent-soft border border-accent/20 px-3 py-2.5">
+                <div className="mt-3 border-t border-border-soft pt-3">
+                  {/* 수동적인 통계에 accent 배경을 깔면 강조 예산이 새고, 옐로가
+                      '중요'가 아니라 '기본값'으로 읽힌다. 부호로만 색을 준다. */}
                   <p className="text-[10px] text-text-mute">진행중 평균 수익</p>
+                  {/* 색은 '보이는 값' 기준으로 정한다. 원값(-0.0002)으로 판정하면
+                      화면에 0.0% 가 빨갛게 떠서 고장으로 읽힌다 — fmtPct 의 -0.0% 와 같은 부류. */}
                   <p
-                    className={`tnum mt-0.5 text-xl font-extrabold ${avgReturn >= 0 ? "text-accent" : "text-bad"}`}
+                    className={`tnum mt-0.5 text-xl font-bold ${
+                      Number((avgReturn * 100).toFixed(1)) > 0
+                        ? "text-good"
+                        : Number((avgReturn * 100).toFixed(1)) < 0
+                          ? "text-bad"
+                          : "text-text"
+                    }`}
                   >
                     {fmtPct(avgReturn)}
                   </p>
@@ -555,17 +587,17 @@ export default async function DashboardPage() {
               )}
               <Link
                 href="/picks"
-                className="mt-2.5 block text-xs text-accent hover:underline"
+                className="mt-2.5 block text-xs text-text-dim transition-colors hover:text-text"
               >
                 전체 기록 →
               </Link>
             </section>
 
             {/* 전략 검증 현황 */}
-            <section className="rounded-[20px] border border-border bg-surface px-5 py-4">
+            <section className="border-t border-border-soft pt-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-bold text-text">전략 검증 현황</h2>
-                <Link href="/strategies" className="text-xs text-accent hover:underline">
+                <Link href="/strategies" className="text-xs text-text-dim transition-colors hover:text-text">
                   검증 상세 →
                 </Link>
               </div>
@@ -576,7 +608,7 @@ export default async function DashboardPage() {
                   {passedBt.map((bt) => (
                     <div
                       key={`${bt.setup}-${bt.style}`}
-                      className="flex items-center justify-between rounded-[10px] bg-surface-2 px-3 py-2"
+                      className="flex items-center justify-between border-b border-border-soft py-2 last:border-b-0"
                     >
                       <div>
                         <span className="text-xs font-semibold text-text">
