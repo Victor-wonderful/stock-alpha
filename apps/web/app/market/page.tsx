@@ -125,6 +125,58 @@ export default async function MarketPage() {
       subtitle="매크로 · 레짐 · 섹터 로테이션"
       badge={isSample ? <SampleBadge /> : undefined}
     >
+      {/* ── 주요 공시 ──
+          엔진이 DART 에서 매일 긁어 event_type/direction 까지 붙여두는데
+          웹이 여태 안 보여주고 있었다. 거래정지·상장폐지 같은 건 늦게 보면 의미가 없어
+          악재를 위로 정렬한다. */}
+      <div className="mb-5 rounded-[12px] border border-border bg-surface p-5">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
+          <h2 className="flex items-baseline gap-2 text-[13px] font-bold">
+            주요 공시
+            <span className="text-[11px] font-medium text-text-mute">
+              {disclosures.asOf ? `${disclosures.asOf} 접수` : "접수일 미상"} · 악재{" "}
+              {disclosures.counts.negative} · 호재 {disclosures.counts.positive} · 중립{" "}
+              {disclosures.counts.neutral}
+            </span>
+          </h2>
+          <span className="text-[11px] text-text-mute">
+            정기공시 제외 · 이벤트 공시만 · 아래는 악재·호재 각 {Math.ceil(12 / 2)}건
+          </span>
+        </div>
+        {disclosures.rows.length === 0 ? (
+          <p className="py-4 text-sm text-text-mute">표시할 공시가 없습니다.</p>
+        ) : (
+          <div className="divide-y divide-border-soft">
+            {disclosures.rows.map((d) => (
+              <div key={d.id} className="flex items-baseline gap-3 py-2.5">
+                <span
+                  className={`shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-semibold ${
+                    d.direction === "negative"
+                      ? "bg-bad-soft text-bad"
+                      : d.direction === "positive"
+                        ? "bg-good-soft text-good"
+                        : "bg-surface-2 text-text-dim"
+                  }`}
+                >
+                  {d.direction === "negative" ? "악재" : d.direction === "positive" ? "호재" : "중립"}
+                </span>
+                <span className="w-[150px] shrink-0 truncate text-[13px] font-semibold text-text">
+                  {d.symbol ? (
+                    <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
+                      {d.name ?? d.symbol}
+                    </Link>
+                  ) : (
+                    d.name ?? "—"
+                  )}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-text-dim">
+                  {d.reportName}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="space-y-4">
         {/* ── 레짐 히어로 ── */}
         <div className="rounded-[12px] border border-accent/30 bg-surface p-5">
@@ -368,54 +420,6 @@ export default async function MarketPage() {
         </div>
       </div>
 
-      {/* ── 주요 공시 ──
-          엔진이 DART 에서 매일 긁어 event_type/direction 까지 붙여두는데
-          웹이 여태 안 보여주고 있었다. 거래정지·상장폐지 같은 건 늦게 보면 의미가 없어
-          악재를 위로 정렬한다. */}
-      <div className="mt-6 rounded-[12px] border border-border bg-surface p-5">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
-          <h2 className="flex items-baseline gap-2 text-[13px] font-bold">
-            주요 공시
-            <span className="text-[11px] font-medium text-text-mute">
-              {disclosures.asOf ? `${disclosures.asOf} 접수` : "접수일 미상"} · 악재 먼저
-            </span>
-          </h2>
-          <span className="text-[11px] text-text-mute">정기공시 제외 · 이벤트 공시만</span>
-        </div>
-        {disclosures.rows.length === 0 ? (
-          <p className="py-4 text-sm text-text-mute">표시할 공시가 없습니다.</p>
-        ) : (
-          <div className="divide-y divide-border-soft">
-            {disclosures.rows.map((d) => (
-              <div key={d.id} className="flex items-baseline gap-3 py-2.5">
-                <span
-                  className={`shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-semibold ${
-                    d.direction === "negative"
-                      ? "bg-bad-soft text-bad"
-                      : d.direction === "positive"
-                        ? "bg-good-soft text-good"
-                        : "bg-surface-2 text-text-dim"
-                  }`}
-                >
-                  {d.direction === "negative" ? "악재" : d.direction === "positive" ? "호재" : "중립"}
-                </span>
-                <span className="w-[150px] shrink-0 truncate text-[13px] font-semibold text-text">
-                  {d.symbol ? (
-                    <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
-                      {d.name ?? d.symbol}
-                    </Link>
-                  ) : (
-                    d.name ?? "—"
-                  )}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[12px] text-text-dim">
-                  {d.reportName}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </AppShell>
   );
 }
