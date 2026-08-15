@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { SampleBadge } from "@/components/ui";
 import { Sparkline } from "@/components/ui/Sparkline";
-import { getMarket, getMarketQuotes, getSignalSectorCounts } from "@/lib/data";
+import { getMarket, getMarketQuotes, getSignalSectorCounts, getLatestDisclosures } from "@/lib/data";
 import { fmtNum } from "@/lib/format";
 import type { Regime, SectorRotationView } from "@/lib/types";
 
@@ -101,10 +102,12 @@ export default async function MarketPage() {
     { data, isSample },
     { data: quotes },
     { data: signalSectors },
+    { data: disclosures },
   ] = await Promise.all([
     getMarket(),
     getMarketQuotes(),
     getSignalSectorCounts(),
+    getLatestDisclosures(12),
   ]);
   const { regime, macro, sectors } = data;
   const rm = REGIME_META[regime.regime];
@@ -363,6 +366,55 @@ export default async function MarketPage() {
             </table>
           </div>
         </div>
+      </div>
+
+      {/* ── 주요 공시 ──
+          엔진이 DART 에서 매일 긁어 event_type/direction 까지 붙여두는데
+          웹이 여태 안 보여주고 있었다. 거래정지·상장폐지 같은 건 늦게 보면 의미가 없어
+          악재를 위로 정렬한다. */}
+      <div className="mt-6 rounded-[12px] border border-border bg-surface p-5">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
+          <h2 className="flex items-baseline gap-2 text-[13px] font-bold">
+            주요 공시
+            <span className="text-[11px] font-medium text-text-mute">
+              {disclosures.asOf ? `${disclosures.asOf} 접수` : "접수일 미상"} · 악재 먼저
+            </span>
+          </h2>
+          <span className="text-[11px] text-text-mute">정기공시 제외 · 이벤트 공시만</span>
+        </div>
+        {disclosures.rows.length === 0 ? (
+          <p className="py-4 text-sm text-text-mute">표시할 공시가 없습니다.</p>
+        ) : (
+          <div className="divide-y divide-border-soft">
+            {disclosures.rows.map((d) => (
+              <div key={d.id} className="flex items-baseline gap-3 py-2.5">
+                <span
+                  className={`shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-semibold ${
+                    d.direction === "negative"
+                      ? "bg-bad-soft text-bad"
+                      : d.direction === "positive"
+                        ? "bg-good-soft text-good"
+                        : "bg-surface-2 text-text-dim"
+                  }`}
+                >
+                  {d.direction === "negative" ? "악재" : d.direction === "positive" ? "호재" : "중립"}
+                </span>
+                <span className="w-[150px] shrink-0 truncate text-[13px] font-semibold text-text">
+                  {d.symbol ? (
+                    <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
+                      {d.name ?? d.symbol}
+                    </Link>
+                  ) : (
+                    d.name ?? "—"
+                  )}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-text-dim">
+                  {d.reportName}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </AppShell>
   );

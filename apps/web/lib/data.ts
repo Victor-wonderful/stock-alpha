@@ -99,6 +99,60 @@ function mapSignal(row: Record<string, unknown>, riskPct: number): SignalView {
   };
 }
 
+export type DisclosureView = {
+  id: number;
+  symbol: string | null;
+  name: string | null;
+  reportName: string;
+  eventType: string | null;
+  direction: "positive" | "negative" | "neutral" | null;
+  receiptDate: string;
+};
+
+// 최신 공시일의 이벤트 공시. 엔진(engine/ingest/dart.py)이 DART 에서 매일 긁어
+// 정기·미분류를 걸러내고 event_type/direction 까지 붙여 disclosures 에 적재한다.
+// 2,845건이 쌓여 있는데 웹이 여태 한 번도 읽지 않았다 — 이 함수가 첫 소비자다.
+export async function getLatestDisclosures(
+  limit = 12,
+): Promise<Loaded<{ asOf: string | null; rows: DisclosureView[] }>> {
+  try {
+    const supabase = createPublicClient();
+    // 최신 접수일 먼저 확정 — '오늘' 이 휴장일 수 있어 날짜를 가정하지 않는다.
+    const { data: head } = await supabase
+      .from("disclosures")
+      .select("rcept_dt")
+      .order("rcept_dt", { ascending: false })
+      .limit(1);
+    const asOf = head?.[0]?.rcept_dt ?? null;
+    if (!asOf) return { data: { asOf: null, rows: [] }, isSample: false };
+
+    // 악재를 먼저 — 거래정지·상장폐지 같은 건 늦게 보면 의미가 없다.
+    const { data } = await supabase
+      .from("disclosures")
+      .select("id,report_nm,event_type,direction,rcept_dt,instruments(symbol,name)")
+      .eq("rcept_dt", asOf)
+      .order("direction", { ascending: true })
+      .limit(limit);
+
+    const rows: DisclosureView[] = (data ?? []).map((r) => {
+      const inst = (r.instruments ?? {}) as { symbol?: string; name?: string };
+      return {
+        id: Number(r.id),
+        symbol: inst.symbol ?? null,
+        name: inst.name ?? null,
+        // DART report_nm 은 뒤에 공백이 잔뜩 붙어 온다.
+        reportName: String(r.report_nm ?? "").trim(),
+        eventType: (r.event_type as string) ?? null,
+        direction: (r.direction as DisclosureView["direction"]) ?? null,
+        receiptDate: String(r.rcept_dt),
+      };
+    });
+    return { data: { asOf, rows }, isSample: false };
+  } catch {
+    return { data: { asOf: null, rows: [] }, isSample: false };
+  }
+}
+
 // 셋업별 상위 N건 — 스크리너 기본 화면(셋업 섹션 뷰)용.
 // 1000행 표 하나를 훑게 하는 대신 "오늘 어떤 셋업이 떴나"를 셋업별로 보여준다.
 // 셋업당 소량이라 병렬 조회해도 가볍고, 60초 fetch 캐시가 걸린다.
