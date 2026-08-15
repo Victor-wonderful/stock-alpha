@@ -146,4 +146,28 @@ def run_indepth(symbols: list[str] | None = None, *, top: int = 3,
         r = publish_indepth(sym, use_llm=use_llm, publish=publish)
         if r:
             results.append(r)
+
+    # LLM 실패를 배치 요약에 남긴다.
+    # 2026-08-14 배치는 90건 전원 reports.llm.error 로 템플릿 폴백 발행됐는데,
+    # 실패가 종목별 로그에만 흩어져 있고 요약이 없어 "정상 발행 90건"으로만 보였다.
+    # 폴백은 안전장치이지 정상 상태가 아니므로 비율이 드러나야 한다.
+    if results:
+        n = len(results)
+        llm_ok = sum(1 for r in results if r.get("llm"))
+        fell_back = n - llm_ok
+        log.info(
+            "reports.indepth.batch_done",
+            published=n,
+            llm_ok=llm_ok,
+            template_fallback=fell_back,
+        )
+        if use_llm and fell_back:
+            # 일부라도 폴백이면 경고 — 전량 폴백이면 사실상 LLM 미가동이다.
+            log.warning(
+                "reports.indepth.llm_degraded",
+                template_fallback=fell_back,
+                published=n,
+                ratio=round(fell_back / n, 3),
+                all_failed=(llm_ok == 0),
+            )
     return results
