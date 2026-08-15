@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
-import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols } from "@/lib/data";
+import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
 import type { SignalView } from "@/lib/types";
 
@@ -123,6 +123,18 @@ function computeHighlights(signals: SignalView[]) {
   return { today, topSetup, topAlpha, avgRr };
 }
 
+// 게이트 통과·발행 중인 셋업만(유령 필터 금지). ScreenerFilters.ACTIVE_SETUPS 와 동일 기준.
+// 카운트 조회가 컴포넌트 상단에서 필요해 모듈 상수로 둔다.
+const ALL_SETUPS: Array<{ key: string; label: string }> = [
+  { key: "leader_trend", label: "주도주 추세" },
+  { key: "flow_accumulation", label: "수급 매집" },
+  { key: "pullback", label: "눌림목" },
+  { key: "breakout", label: "돌파" },
+  { key: "high_52w", label: "52주 신고가" },
+  { key: "vol_squeeze", label: "변동성 수축" },
+  { key: "pead", label: "실적 서프라이즈" },
+];
+
 export default async function ScreenerPage({
   searchParams,
 }: {
@@ -135,23 +147,28 @@ export default async function ScreenerPage({
   const search = sp.q ?? "";
   const near = sp.near === "1"; // 진입 가능 — 현재가가 진입가 ±3% (알파존 흡수)
 
-  // 셋업 칩 건수·하이라이트 집계가 전체 기준이어야 함 — 오늘만 271건이라 200 한도는 잘림(2026-06-12 점검)
-  const { data: allSignals, isSample, total } = await getSignals({}, 1000);
+  // 필터를 DB 로 내린다. 예전엔 강도 상위 1000건을 받아 JS 로 걸렀는데, 전체가
+  // 2530건이라 표본에 없는 셋업은 필터를 눌러도 0건으로 보였다(수급 매집 실제 303건).
+  // 표시 상한(MAX_ROWS)만큼만 받고, 정확한 건수는 count 로 따로 받는다.
+  const MAX_ROWS = 100;
+  const {
+    data: rows,
+    isSample,
+    total: filteredTotal,
+  } = await getSignals(
+    {
+      setup: activeSetup ?? undefined,
+      style: activeStyle ?? undefined,
+      market: activeMarket ?? undefined,
+    },
+    MAX_ROWS,
+  );
 
-  // 셋업별 건수 집계 (필터 전 전체 기준)
-  const setupCounts = new Map<string, number>();
-  for (const s of allSignals) {
-    setupCounts.set(s.setup, (setupCounts.get(s.setup) ?? 0) + 1);
-  }
-
-  // 필터 적용
-  let filtered = allSignals;
-  if (activeSetup) filtered = filtered.filter((s) => s.setup === activeSetup);
-  if (activeStyle) filtered = filtered.filter((s) => s.style === activeStyle);
-  if (activeMarket) filtered = filtered.filter((s) => s.exchange === activeMarket);
+  // 종목명·코드 검색만 클라이언트에서 — DB 필터에 없는 조건이라 받은 페이지 안에서 거른다.
+  let visibleRows = rows;
   if (search) {
     const q = search.toLowerCase();
-    filtered = filtered.filter(
+    visibleRows = visibleRows.filter(
       (s) => s.name.toLowerCase().includes(q) || s.symbol.includes(q),
     );
   }
@@ -159,22 +176,24 @@ export default async function ScreenerPage({
   if (near) {
     const { data: zoneCards } = await getAlphaZoneStocks(500);
     const zoneSet = new Set(zoneCards.map((c) => c.symbol));
-    filtered = filtered.filter((s) => zoneSet.has(s.symbol));
+    visibleRows = visibleRows.filter((s) => zoneSet.has(s.symbol));
   }
 
-  // 표시 상한 — 필터 없이 들어오면 1000건이 통째로 렌더돼 HTML 이 9.6MB, 응답 15초였다.
-  // 아무도 1000행을 읽지 않는다. 합성알파 내림차순 상위 100건만 그리고,
-  // 잘린 사실은 아래 표 머리에 명시한다(조용히 자르면 "전부 봤다"로 읽힌다).
-  const MAX_ROWS = 100;
-  const ranked = [...filtered].sort((a, b) => b.strength - a.strength);
-  const visible = ranked.slice(0, MAX_ROWS);
-  const truncated = ranked.length - visible.length;
+  const visible = visibleRows;
+  // 조건에 맞는 전체 건수(DB count)와 화면에 그린 수의 차이 — 잘린 사실을 밝히기 위함.
+  const truncated = Math.max(0, filteredTotal - visible.length);
 
   // 현재가 — 진입가만 보여주면 "지금 사도 되는 자리인가"를 판단할 수 없다.
   // 그리는 행만 벌크 1회로 가져온다(종목당 조회는 행 수만큼 왕복이 된다).
   const priceMap = await getLatestPricesBySymbols(visible.map((s) => s.symbol));
 
-  const hl = computeHighlights(allSignals);
+  // 칩 건수·전체 건수는 표본이 아니라 DB count 로 — 셋업 7개를 병렬 head-count.
+  const { total: grandTotal, bySetup: setupCounts } = await getSignalCounts(
+    ALL_SETUPS.map((x) => x.key),
+  );
+  const hl = computeHighlights(visible);
+  // 최다 셋업도 표본이 아니라 전체 카운트에서 뽑는다.
+  const topSetupEntry = [...setupCounts.entries()].sort((a, b) => b[1] - a[1])[0];
 
   const buildHref = (key: string, value: string | null) => {
     const p = new URLSearchParams();
@@ -188,21 +207,11 @@ export default async function ScreenerPage({
     return qs ? `?${qs}` : "/screener";
   };
 
-  // 게이트 통과·발행 중인 셋업만(유령 필터 금지). ScreenerFilters.ACTIVE_SETUPS 와 동일 기준.
-  const ALL_SETUPS: Array<{ key: string; label: string }> = [
-    { key: "leader_trend", label: "주도주 추세" },
-    { key: "flow_accumulation", label: "수급 매집" },
-    { key: "pullback", label: "눌림목" },
-    { key: "breakout", label: "돌파" },
-    { key: "high_52w", label: "52주 신고가" },
-    { key: "vol_squeeze", label: "변동성 수축" },
-    { key: "pead", label: "실적 서프라이즈" },
-  ];
 
   return (
     <AppShell
       title="스크리너"
-      subtitle={`발행 중 전체 시그널 ${total ?? allSignals.length}건을 조건으로 탐색 — 백테스트 게이트 통과 셋업만 발행 · 클릭하면 종목 상세로 · 매일 16:30 갱신`}
+      subtitle={`발행 중 전체 시그널 ${grandTotal}건을 조건으로 탐색 — 백테스트 게이트 통과 셋업만 발행 · 클릭하면 종목 상세로 · 매일 16:30 갱신`}
       badge={
         <span className="flex items-center gap-1.5 rounded-[999px] bg-good-soft px-3 py-1 text-[11px] font-bold text-good">
           검증 통과 셋업만 — 미통과 발행 금지
@@ -219,10 +228,16 @@ export default async function ScreenerPage({
       {/* 하이라이트 카드 4 */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "오늘 신규 시그널", value: `${hl.today}건`, sub: "백테스트 게이트 통과" },
-          { label: "최다 셋업", value: hl.topSetup ? SETUP_LABELS[hl.topSetup[0]] ?? hl.topSetup[0] : "—", sub: hl.topSetup ? `${hl.topSetup[1]}건` : "" },
-          { label: "최고 합성알파", value: fmtNum(hl.topAlpha, 2), sub: "강도 기준" },
-          { label: "평균 손익비", value: hl.avgRr != null ? `${fmtNum(hl.avgRr, 1)} R:R` : "—", sub: "전략 평균" },
+          // 값의 근거를 부제에 명시한다. 예전엔 전부 '강도 상위 1000건 표본' 기준이면서
+          // 라벨은 전체인 것처럼 적혀 있었다(오늘 신규 1000건 vs 실제 2530건).
+          { label: "발행 중 시그널", value: `${grandTotal}건`, sub: "백테스트 게이트 통과 · 전체" },
+          {
+            label: "최다 셋업",
+            value: topSetupEntry ? SETUP_LABELS[topSetupEntry[0]] ?? topSetupEntry[0] : "—",
+            sub: topSetupEntry ? `${topSetupEntry[1]}건 · 전체 기준` : "",
+          },
+          { label: "최고 합성알파", value: fmtNum(hl.topAlpha, 2), sub: "강도 최상위" },
+          { label: "평균 손익비", value: hl.avgRr != null ? `${fmtNum(hl.avgRr, 1)} R:R` : "—", sub: `표시된 ${visible.length}건 평균` },
         ].map(({ label, value, sub }) => (
           <div
             key={label}
@@ -276,7 +291,7 @@ export default async function ScreenerPage({
               : "border border-border bg-surface text-text-dim hover:border-border-strong hover:text-text"
           }`}
         >
-          전체 {allSignals.length}
+          전체 {grandTotal}
         </Link>
         {ALL_SETUPS.map(({ key, label }) => {
           const cnt = setupCounts.get(key) ?? 0;
@@ -371,7 +386,7 @@ export default async function ScreenerPage({
       </div>
 
       {/* 시그널 테이블 */}
-      {filtered.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="rounded-[12px] border border-border bg-surface px-6 py-12 text-center">
           <p className="text-sm text-text-mute">조건에 맞는 시그널이 없습니다. 필터를 바꿔보세요.</p>
         </div>
@@ -385,7 +400,7 @@ export default async function ScreenerPage({
             </span>
             {truncated > 0 && (
               <span className="text-text-mute">
-                (조건에 맞는 <span className="tnum">{ranked.length}</span>건 중{" "}
+                (조건에 맞는 <span className="tnum">{filteredTotal}</span>건 중{" "}
                 <span className="tnum">{truncated}</span>건은 생략 — 필터로 좁혀 보세요)
               </span>
             )}

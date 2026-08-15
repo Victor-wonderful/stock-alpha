@@ -99,6 +99,38 @@ function mapSignal(row: Record<string, unknown>, riskPct: number): SignalView {
   };
 }
 
+// 셋업별 정확한 시그널 건수 + 전체 건수.
+//
+// 왜 필요한가: 스크리너가 getSignals({},1000) 로 '강도 상위 1000건'만 받아 그 안에서
+// 세었다. 전체는 2530건이라 강도가 낮은 셋업은 표본에서 통째로 잘려 0 으로 표시됐다
+// (실측: 수급 매집 화면 0 vs 실제 303, 변동성 수축 20 vs 137, 돌파 263 vs 344).
+// 사용자는 "오늘 그 셋업은 없구나" 로 읽고 실재하는 시그널을 놓친다.
+//
+// PostgREST 는 GROUP BY 가 없으므로 셋업별 head-count 를 병렬로 던진다.
+// 칩에 실제로 그리는 셋업(7개)만 조회하고, 60초 fetch 캐시가 걸려 있어 반복 비용은 없다.
+export async function getSignalCounts(
+  setups: string[],
+): Promise<{ total: number; bySetup: Map<string, number> }> {
+  const bySetup = new Map<string, number>();
+  try {
+    const supabase = createPublicClient();
+    const countOf = async (setup?: string) => {
+      let q = supabase.from("signals").select("id", { count: "exact", head: true });
+      if (setup) q = q.eq("setup", setup);
+      const { count } = await q;
+      return count ?? 0;
+    };
+    const [total, ...counts] = await Promise.all([
+      countOf(),
+      ...setups.map((st) => countOf(st)),
+    ]);
+    setups.forEach((st, i) => bySetup.set(st, counts[i]));
+    return { total, bySetup };
+  } catch {
+    return { total: 0, bySetup };
+  }
+}
+
 export async function getSignals(
   filters: SignalFilters = {},
   limit = 100,
