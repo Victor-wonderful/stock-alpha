@@ -6,12 +6,19 @@ import {
   getRecommendations,
   getReports,
   getBacktests,
-  getPickHistory,
   getMorningBrief,
   getLatestPricesBySymbols,
   getNewsEvents,
+  getOpenPicks,
+  getNextTradingDay,
 } from "@/lib/data";
-import { fmtPrice, fmtPct, nextTradingDayLabel, nextTradingDayIsCertain } from "@/lib/format";
+import {
+  fmtPrice,
+  fmtPct,
+  tradingDayLabel,
+  nextTradingDayLabel,
+  nextTradingDayIsCertain,
+} from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { SampleBadge } from "@/components/ui";
 import { PriceNow } from "@/components/PriceNow";
@@ -22,20 +29,6 @@ import { PriceNow } from "@/components/PriceNow";
 // 60초 fetch 캐시가 담당한다(lib/supabase/public.ts).
 
 // ── 셋업 키 → 한국어 표기 (검증 현황 카드)
-const SETUP_NAMES: Record<string, string> = {
-  leader_trend: "주도주 추세",
-  oversold_bounce: "과대낙폭 반등",
-  breakout: "돌파",
-  close_betting: "종가베팅",
-  flow_accumulation: "수급 동반 매집",
-  pullback: "눌림목",
-  high_52w: "52주 신고가",
-  vol_squeeze: "변동성 수축 돌파",
-  pead: "실적 모멘텀(PEAD)",
-  double_bottom: "쌍바닥(W) 반등",
-  anchor_pullback: "기준봉 눌림",
-  factor_composite: "멀티팩터 종합",
-};
 
 // ── 마켓 스트립 카드
 function MarketCard({
@@ -75,14 +68,14 @@ function MarketCard({
     // 흐르는 밴드라 셀은 고정폭이어야 한다(flex-1 이면 두 벌의 폭이 달라져 이음매가 튄다).
     <div className="flex w-[210px] shrink-0 items-baseline gap-2 whitespace-nowrap border-r border-border-soft px-4 py-2.5">
       <span className="text-[11px] text-text-mute">{label}</span>
-      <span className="tnum text-[12px] font-medium text-text">
+      <span className="tnum text-[14px] font-medium text-text">
         {value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
-        {unit && <span className="ml-0.5 text-[10px] text-text-mute">{unit}</span>}
+        {unit && <span className="ml-0.5 text-[11px] text-text-mute">{unit}</span>}
       </span>
       {changePct != null && (
         <span className={`tnum text-[11px] ${changeColor}`}>{fmtPct(changePct)}</span>
       )}
-      {sample && <span className="text-[9px] text-text-mute">예시</span>}
+      {sample && <span className="text-[11px] text-text-mute">예시</span>}
       <svg
         width="40"
         height="12"
@@ -122,13 +115,12 @@ function RatingBadge({ rating }: { rating: string | null }) {
 }
 
 export default async function DashboardPage() {
-  const [kpi, quotes, recs, reports, backtests, history, brief] = await Promise.all([
+  const [kpi, quotes, recs, reports, backtests, brief] = await Promise.all([
     getDashboardKpi(),
     getMarketQuotes(),
     getRecommendations(),
     getReports(150), // 판정 분포 표본 — 일 발행 상한(100) 이상으로 가져와야 분포가 안 잘림
     getBacktests(),
-    getPickHistory(300), // 트랙레코드 누적 집계 — 잘리면 수치가 거짓이 됨
     getMorningBrief(),
   ]);
 
@@ -172,11 +164,18 @@ export default async function DashboardPage() {
   // (픽에서만 뽑으면 빈 날에 헤더가 "장마감 데이터 기준"으로만 떠 날짜가 사라졌다)
   const asOf = picks[0]?.as_of ?? latestDay;
   // 픽은 종가 분석 → 다음 거래일 플랜이다. 대상일을 함께 적어야 오해가 없다.
-  // 공휴일이 낄 수 있는 구간이면 특정 날짜를 단정하지 않는다.
-  // 주말만 건너뛰는 계산이라 대체공휴일(예: 광복절이 토요일이면 다음 월요일)을 못 걸러낸다.
-  // 틀린 날짜를 자신 있게 쓰는 것보다 "다음 거래일"로 두는 편이 정직하다.
-  const planDay =
-    asOf && nextTradingDayIsCertain(asOf) ? nextTradingDayLabel(asOf) : null;
+  // 1순위는 DB 휴장일 표(market_calendar) — 공휴일까지 반영해 날짜를 확정한다.
+  // 표가 아직 그 구간을 못 덮으면 기존 추정(주말만 건너뜀 + 고정공휴일 회피)으로 물러서고,
+  // 그것도 미심쩍으면 날짜를 단정하지 않는다. 틀린 날짜보다 "다음 거래일"이 정직하다.
+  const nextDay = asOf ? await getNextTradingDay(asOf) : null;
+  const planDay = nextDay
+    ? tradingDayLabel(nextDay)
+    : asOf && nextTradingDayIsCertain(asOf)
+      ? nextTradingDayLabel(asOf)
+      : null;
+
+  // 진행중인 픽 — 어제·그제 추천이 지금 어디쯤 와 있나. 홈에 없던 블록이다.
+  const openPicks = await getOpenPicks(30);
 
   // 현재가·전일대비 — 추천 5건을 벌크 1회로 가져온다(예전엔 종목당 1회, 5왕복).
   // 홈에서 '분석한 종목 전체' 목록을 걷어내며 리포트 심볼 조회도 함께 뺐다.
@@ -192,16 +191,6 @@ export default async function DashboardPage() {
     관망: todayReps.filter((r) => r.rating === "관망").length,
     total: todayReps.length,
   };
-
-  // 백테스트 PASS 전략 리스트 (상위 4)
-  const passedBt = backtests.data.filter((b) => b.passed).slice(0, 4);
-
-  // 진행중 픽 평균 수익
-  const activePicks = history.data.filter((h) => h.status === "진행중" && h.return_pct != null);
-  const avgReturn =
-    activePicks.length > 0
-      ? activePicks.reduce((s, h) => s + (h.return_pct ?? 0), 0) / activePicks.length
-      : null;
 
   // KPI 오버라이드 — '오늘의 픽'은 아래 포커스 목록(picks)과 반드시 일치해야 한다.
   // 과거: picks.length || kpi.picksToday → picks 0건(하락장)일 때 0이 falsy 라
@@ -267,7 +256,7 @@ export default async function DashboardPage() {
                 <>{picks.length}종목</>
               )}
             </h1>
-            <p className="mt-2 text-[13px] text-text-dim">
+            <p className="mt-2 text-[14px] text-text-dim">
               {/* 분석 시점을 못 박는다. '오늘'로 뭉뚱그리면 토요일에 보는 사람에게
                   금요일 장마감 산출물이 오늘 것처럼 읽힌다. */}
               {asOf ? `${asOf} 장마감(16:30) 분석` : "장마감 분석"}
@@ -278,32 +267,15 @@ export default async function DashboardPage() {
 
           <Link
             href="/focus"
-            className="whitespace-nowrap rounded-[12px] bg-accent px-5 py-2.5 text-[13px] font-semibold text-[#0B0C10] transition-colors hover:bg-accent-2"
+            className="whitespace-nowrap rounded-[12px] bg-accent px-5 py-2.5 text-[14px] font-semibold text-[#0B0C10] transition-colors hover:bg-accent-2"
           >
             추천 종목 전체 보기
           </Link>
         </div>
 
-        {/* ── 보조 지표 ──
-            KPI 상자 4개를 한 줄 텍스트로 내렸다. 이건 오늘의 판단을 뒷받침하는
-            각주이지 헤드라인이 아니다. */}
-        <dl className="mb-8 flex flex-wrap items-baseline gap-x-7 gap-y-2 border-y border-border-soft py-3 text-[13px]">
-          {[
-            { k: "발행 리포트", v: `${kpiDisplay.reportsTotal}건` },
-            { k: "검증 통과 전략", v: `${kpiDisplay.backtestPassed}/${kpiDisplay.backtestTotal}` },
-            {
-              k: "진행중 픽",
-              v: avgReturn != null ? fmtPct(avgReturn) : "없음",
-              sub: activePicks.length > 0 ? `${activePicks.length}종목` : undefined,
-            },
-          ].map(({ k, v, sub }) => (
-            <div key={k} className="flex items-baseline gap-2">
-              <dt className="text-text-mute">{k}</dt>
-              <dd className="tnum font-semibold text-text">{v}</dd>
-              {sub && <span className="tnum text-[11px] text-text-mute">{sub}</span>}
-            </div>
-          ))}
-        </dl>
+        {/* 보조 지표 한 줄 띠(발행 리포트 건수·검증 통과 전략)는 맨 아래로 내렸다.
+            "리포트 100건 발행"은 우리가 한 일이지 사용자가 얻는 것이 아니다 —
+            첫 화면에서 자랑을 하면 정작 상품인 추천이 뒤로 밀린다. */}
 
         {/* ── 본문 ──
             예전엔 좌(픽·리포트) / 우(메타 3종) 2컬럼이었다. 두 컬럼의 콘텐츠 길이가
@@ -311,11 +283,15 @@ export default async function DashboardPage() {
             가로줄 두 세트가 따로 노는 게 "높이가 안 맞는다"로 읽혔다.
             컬럼을 없애면 어긋날 짝이 사라진다 — 픽·리포트는 전체 폭으로 세우고,
             보조 지표 3종은 맨 아래 한 줄 띠로 내린다(세로 헤어라인으로만 분할). */}
-        <div className="flex flex-col gap-8">
+        {/* ── 본문 2단 ──
+            세로로만 쌓으니 "아래로 쭉 연결된" 하나의 긴 목록으로 읽혔다. 왼쪽은
+            돈이 걸린 것(추천·보유), 오른쪽은 참고 정보(보도·요약)로 나눈다.
+            items-start — 높이가 다른 블록이 억지로 늘어나지 않게. */}
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             {/* 장전 플랜 — 카드 상자를 걷고 표로 세운다.
                 밀도 8 짜리 데이터에 카드 컨테이너를 씌우면 정보가 상자 안에 갇혀
                 옆 패널과 같은 무게로 읽힌다. 여기선 헤어라인과 여백만 쓴다. */}
-            <section>
+            <section className="rounded-[12px] border border-border-soft bg-surface/40 p-5">
               <div className="flex items-baseline justify-between pb-3">
                 {/* "오늘의 포커스"였다. 오늘(8/15)과 무관하게 8/14 종가로 만든
                     8/17 플랜이라 '오늘'은 틀린 말이었고, 아래 '최신 분석 리포트'와
@@ -328,28 +304,19 @@ export default async function DashboardPage() {
                     {picks.length}종목 · 진입가·목표가·손절가까지 계산 완료
                   </span>
                 </h2>
-                <Link
-                  href="/focus"
-                  className="text-xs text-text-dim transition-colors hover:text-text"
-                >
-                  전체 보기 →
-                </Link>
               </div>
               {/* 컬럼 헤더 — 어느 숫자가 무엇인지 표가 스스로 말하게 한다.
                   예전엔 진입가·목표가·R:R 이 라벨 없이 우측에 뭉쳐 있었다. */}
               {picks.length > 0 && (
                 <div className="no-scrollbar overflow-x-auto border-b border-border-soft">
-                  <div className="grid grid-cols-[2rem_minmax(140px,2.4fr)_4.5rem_3.5rem_minmax(100px,1.3fr)_minmax(92px,1.1fr)_minmax(104px,1.2fr)_minmax(104px,1.2fr)_3rem_2.5rem] items-center gap-2.5 min-w-[860px] px-1 pb-2 text-[10px] tracking-[0.04em] text-text-mute">
-                    <span>순위</span>
+                  <div className="grid grid-cols-[minmax(110px,1.3fr)_3.5rem_minmax(96px,1fr)_minmax(88px,1fr)_minmax(100px,1.1fr)_minmax(100px,1.1fr)_3.5rem] items-center gap-2.5 min-w-[700px] px-1 pb-2 text-[11px] tracking-[0.04em] text-text-mute">
                     <span>종목</span>
-                    <span>스타일</span>
                     <span>판정</span>
                     <span className="text-right">현재가</span>
                     <span className="text-right">진입가</span>
                     <span className="text-right">목표가</span>
                     <span className="text-right">손절가</span>
-                    <span className="text-right">R:R</span>
-                    <span className="text-right">점수</span>
+                    <span className="text-right">손익비</span>
                   </div>
                 </div>
               )}
@@ -361,31 +328,23 @@ export default async function DashboardPage() {
                       : `${planDay ? `${planDay} 장전 — ` : ""}기준을 통과한 종목이 없습니다`}
                   </div>
                 ) : (
-                  previewPicks.map((p, i) => (
+                  previewPicks.map((p) => (
                     // 한 행에 이름·스타일·판정·현재가·계획가·R:R·점수가 들어간다.
                     // 좁은 화면에서 잘려나가지 않도록 이 코드베이스의 표 관례대로
                     // min-w 를 주고 가로 스크롤에 맡긴다(정보를 숨기지 않는다).
                     <div
                       key={p.symbol}
-                      className="grid grid-cols-[2rem_minmax(140px,2.4fr)_4.5rem_3.5rem_minmax(100px,1.3fr)_minmax(92px,1.1fr)_minmax(104px,1.2fr)_minmax(104px,1.2fr)_3rem_2.5rem] items-center gap-2.5 min-w-[860px] px-1 py-3.5 transition-colors hover:bg-surface"
+                      className="grid grid-cols-[minmax(110px,1.3fr)_3.5rem_minmax(96px,1fr)_minmax(88px,1fr)_minmax(100px,1.1fr)_minmax(100px,1.1fr)_3.5rem] items-center gap-2.5 min-w-[700px] px-1 py-3.5 transition-colors hover:bg-surface"
                     >
-                      {/* 순위 — 1위에 옐로 배지를 쓰면 화면의 accent 예산을 여기서 태운다.
-                          순위는 이미 위에서 아래 순서로 드러나므로 조용한 모노 숫자면 족하다. */}
-                      <span className="mono text-[11px] tabular-nums text-text-mute">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
                       <div className="flex min-w-0 items-baseline gap-2">
                         <Link
                           href={`/stocks/${p.symbol}`}
-                          className="truncate text-sm font-semibold text-text hover:text-accent"
+                          className="truncate text-[16px] font-semibold text-text hover:text-accent"
                         >
                           {p.name}
                         </Link>
-                        <span className="mono shrink-0 text-[10px] text-text-mute">{p.symbol}</span>
+                        <span className="mono shrink-0 text-[11px] text-text-mute">{p.symbol}</span>
                       </div>
-                      <span className="truncate text-[10px] text-text-dim">
-                        {p.style}
-                      </span>
                       <span>
                         <RatingBadge rating={ratingBySymbol.get(p.symbol) ?? null} />
                       </span>
@@ -396,6 +355,7 @@ export default async function DashboardPage() {
                           changePct={priceMap.get(p.symbol)?.changePct}
                           date={priceMap.get(p.symbol)?.date}
                           size="xs"
+                          label={null}
                         />
                       </span>
                       {/* 진입·목표·손절을 각각 세운다. 예전엔 "진입 → 목표"만 붙여 놓고
@@ -403,21 +363,21 @@ export default async function DashboardPage() {
                           가장 먼저 보여야 하는 숫자다(2026-08-14 NHN 은 손절이 -47.4% 였는데
                           화면에 없어서 드러나지 않았다). 진입가 대비 %를 함께 적어
                           거리가 눈에 들어오게 한다. */}
-                      <span className="tnum text-right text-[12px] text-text-dim">
+                      <span className="tnum text-right text-[14px] text-text-dim">
                         {fmtPrice(p.entry_price)}
                       </span>
-                      <span className="tnum text-right text-[12px]">
+                      <span className="tnum text-right text-[14px]">
                         <span className="text-good">{fmtPrice(p.target_price)}</span>
                         {p.entry_price && p.target_price && (
-                          <span className="block text-[10px] text-good/70">
+                          <span className="block text-[11px] text-good">
                             {fmtPct((p.target_price - p.entry_price) / p.entry_price)}
                           </span>
                         )}
                       </span>
-                      <span className="tnum text-right text-[12px]">
+                      <span className="tnum text-right text-[14px]">
                         <span className="text-bad">{fmtPrice(p.stop_loss)}</span>
                         {p.entry_price && p.stop_loss && (
-                          <span className="block text-[10px] text-bad/70">
+                          <span className="block text-[11px] text-bad">
                             {fmtPct((p.stop_loss - p.entry_price) / p.entry_price)}
                           </span>
                         )}
@@ -427,28 +387,31 @@ export default async function DashboardPage() {
                           ? `${((p.target_price - p.entry_price) / (p.entry_price - p.stop_loss)).toFixed(1)}`
                           : "—"}
                       </span>
-                      {/* 확신도 — 막대를 붙여봤지만 홈 미리보기는 상위 5건이라 값이
-                          거의 같게 뭉쳐(77·77·77·77·75) 변별이 안 되고 잡음만 됐다.
-                          목록이 이미 점수 내림차순이라 순서가 그 역할을 한다. */}
-                      <span className="tnum text-right text-sm font-bold text-text">
-                        {Math.round(p.conviction * 100)}
-                      </span>
                     </div>
                   ))
                 )}
               </div>
+              {/* ── 진행중인 픽 ──
+                  홈에 없던 블록이다. 추천 목록만 있고, 그 추천들이 지금 어디쯤 와
+                  있는지는 다른 페이지로 가야 볼 수 있었다. 매일 오는 사용자에게는
+                  새 추천만큼 중요하다 — "어제 산 게 지금 어떻게 됐나".
+
+                  손절에 가까운 순으로 세운다. 목표에 가까운 픽은 기다리면 되지만
+                  손절에 가까운 픽은 지금 봐야 하는 것이기 때문이다. */}
+            </section>
+
               {/* ── 최근 보도 ──
                   기사 제목·본문을 쓰지 않는다(언론사 저작물). 외부로 나가는 링크도 없다.
                   '같은 날 여러 매체가 동시에 다뤘다'는 사실만 세고, 그 옆에 VECTA 가
                   실제로 잰 그날 등락을 붙인다. 조용한 종목은 조용하다고 적는다 —
                   그것도 정보다. 상세는 종목명을 눌러 내부 상세로 간다. */}
-              <div className="mt-5 border-t border-border-soft pt-4">
-                <h3 className="mb-2 flex items-baseline gap-2 text-[12px] font-bold text-text">
+              <section className="rounded-[12px] border border-border-soft bg-surface/40 p-5">
+                <h2 className="mb-2 flex items-baseline gap-2 text-sm font-bold text-text">
                   최근 보도
-                  <span className="text-[10px] font-medium text-text-mute">
+                  <span className="text-[11px] font-medium text-text-mute">
                     최근 10일 · 같은 날 2개 매체 이상 다룬 건만
                   </span>
-                </h3>
+                </h2>
                 <div className="divide-y divide-border-soft">
                   {previewPicks.map((p) => {
                     const evs = eventMap.get(p.symbol) ?? [];
@@ -456,7 +419,7 @@ export default async function DashboardPage() {
                       <div key={p.symbol} className="flex flex-wrap items-baseline gap-x-3 py-2">
                         <Link
                           href={`/stocks/${p.symbol}`}
-                          className="w-[104px] shrink-0 truncate text-[12px] font-semibold text-text transition-colors hover:text-accent"
+                          className="w-[120px] shrink-0 truncate text-[16px] font-semibold text-text transition-colors hover:text-accent"
                         >
                           {p.name}
                         </Link>
@@ -471,7 +434,7 @@ export default async function DashboardPage() {
                                 <span className="tnum text-[11px] text-text-mute">
                                   {e.date.slice(5).replace("-", "/")}
                                 </span>
-                                <span className="rounded-[4px] border border-border-strong px-1.5 py-px text-[10px] font-semibold text-text-dim">
+                                <span className="rounded-[4px] border border-border-strong px-1.5 py-px text-[11px] font-semibold text-text-dim">
                                   {e.outletCount}개 매체
                                 </span>
                                 {e.changePct != null && (
@@ -491,7 +454,6 @@ export default async function DashboardPage() {
                     );
                   })}
                 </div>
-              </div>
 
               {/* 분석 전체 목록은 홈에서 걷어냈다(추천과 뒤섞여 혼란만 키움).
                   접근 경로까지 막지는 않도록 링크 하나만 남긴다. */}
@@ -503,163 +465,124 @@ export default async function DashboardPage() {
               </Link>
             </section>
 
-          {/* ── 보조 지표 띠 ──
-              엔진이 얼마나 잘 하고 있는지를 말하는 메타 정보 3종. 상품(픽) 아래에
-              한 줄로 눕히고 세로 헤어라인으로만 나눈다. 위쪽 가로줄이 하나뿐이라
-              어긋날 구분선이 없다. 높이는 내용에 따라 달라도 상단이 맞으니 정돈돼 보인다. */}
-          <div className="grid gap-x-8 gap-y-8 border-t border-border-soft pt-5 lg:grid-cols-3 lg:divide-x lg:divide-border-soft">
-            {/* 판정 분포 */}
-            <section className="lg:pr-8">
-              <h2 className="mb-3 text-sm font-bold text-text">판정 분포</h2>
-              {dist.total === 0 ? (
-                <p className="text-sm text-text-mute">데이터 없음</p>
-              ) : (
-                <>
-                  {/* 누적 바 */}
-                  <div className="flex h-2.5 w-full overflow-hidden rounded-full">
-                    {dist.매수 > 0 && (
-                      <div
-                        className="bg-good"
-                        style={{ width: `${(dist.매수 / dist.total) * 100}%` }}
-                      />
-                    )}
-                    {dist.중립 > 0 && (
-                      <div
-                        className="bg-warn"
-                        style={{ width: `${(dist.중립 / dist.total) * 100}%` }}
-                      />
-                    )}
-                    {dist.관망 > 0 && (
-                      <div
-                        className="bg-surface-3"
-                        style={{ width: `${(dist.관망 / dist.total) * 100}%` }}
-                      />
-                    )}
-                  </div>
-                  {/* 범례 */}
-                  <div className="mt-2.5 flex items-center gap-4">
-                    {[
-                      { label: "매수", count: dist.매수, color: "bg-good" },
-                      { label: "중립", count: dist.중립, color: "bg-warn" },
-                      { label: "관망", count: dist.관망, color: "bg-surface-3" },
-                    ].map(({ label, count, color }) => (
-                      <div key={label} className="flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${color}`} />
-                        <span className="text-[11px] text-text-mute">{label}</span>
-                        <span className="tnum text-[11px] font-bold text-text">{count}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-1.5 text-[10px] text-text-mute">
-                    {latestDay ?? "—"} 발행 {dist.total}건
-                    {kpiDisplay.reportsTotal > dist.total &&
-                      ` · 거래 부적합 ${kpiDisplay.reportsTotal - dist.total}건 제외`}
-                  </p>
-                </>
-              )}
-            </section>
-
-            {/* 픽 트랙레코드 미니 */}
-            <section className="lg:px-8">
-              <h2 className="mb-3 text-sm font-bold text-text">픽 트랙레코드</h2>
-              <div className="grid grid-cols-2 gap-2.5">
-                {[
-                  {
-                    label: "목표 도달",
-                    value: history.data.filter((h) => h.status === "목표 도달").length,
-                    color: "text-good",
-                  },
-                  {
-                    label: "손절",
-                    value: history.data.filter((h) => h.status === "손절").length,
-                    color: "text-bad",
-                  },
-                  {
-                    // '진행중'은 경고가 아니라 중립 상태다. warn(옐로)을 쓰면
-                    // 색이 의미를 잃고 화면의 옐로만 늘어난다.
-                    label: "진행중",
-                    value: activePicks.length,
-                    color: "text-text",
-                  },
-                  {
-                    label: "총 픽",
-                    value: history.data.length,
-                    color: "text-text",
-                  },
-                ].map(({ label, value, color }) => (
-                  <div key={label}>
-                    <p className="text-[10px] text-text-mute">{label}</p>
-                    <p className={`tnum mt-0.5 text-lg font-extrabold ${color}`}>{value}</p>
-                  </div>
-                ))}
-              </div>
-              {avgReturn != null && (
-                <div className="mt-3 border-t border-border-soft pt-3">
-                  {/* 수동적인 통계에 accent 배경을 깔면 강조 예산이 새고, 옐로가
-                      '중요'가 아니라 '기본값'으로 읽힌다. 부호로만 색을 준다. */}
-                  <p className="text-[10px] text-text-mute">진행중 평균 수익</p>
-                  {/* 색은 '보이는 값' 기준으로 정한다. 원값(-0.0002)으로 판정하면
-                      화면에 0.0% 가 빨갛게 떠서 고장으로 읽힌다 — fmtPct 의 -0.0% 와 같은 부류. */}
-                  <p
-                    className={`tnum mt-0.5 text-xl font-bold ${
-                      Number((avgReturn * 100).toFixed(1)) > 0
-                        ? "text-good"
-                        : Number((avgReturn * 100).toFixed(1)) < 0
-                          ? "text-bad"
-                          : "text-text"
-                    }`}
-                  >
-                    {fmtPct(avgReturn)}
-                  </p>
-                </div>
-              )}
-              <Link
-                href="/picks"
-                className="mt-2.5 block text-xs text-text-dim transition-colors hover:text-text"
-              >
-                전체 기록 →
-              </Link>
-            </section>
-
-            {/* 전략 검증 현황 */}
-            <section className="lg:pl-8">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-bold text-text">전략 검증 현황</h2>
-                <Link href="/strategies" className="text-xs text-text-dim transition-colors hover:text-text">
-                  검증 상세 →
-                </Link>
-              </div>
-              {passedBt.length === 0 ? (
-                <p className="text-sm text-text-mute">검증 데이터 없음</p>
-              ) : (
-                <div className="space-y-2">
-                  {passedBt.map((bt) => (
-                    <div
-                      key={`${bt.setup}-${bt.style}`}
-                      className="flex items-center justify-between border-b border-border-soft py-2 last:border-b-0"
-                    >
-                      <div>
-                        <span className="text-xs font-semibold text-text">
-                          {SETUP_NAMES[bt.setup] ?? bt.setup}
-                        </span>
-                        {bt.style && (
-                          <span className="ml-1.5 text-[10px] text-text-mute">{bt.style}</span>
-                        )}
-                        {bt.expectancy_r != null && (
-                          <p className="tnum text-[10px] text-text-mute">
-                            기대값 {bt.expectancy_r.toFixed(2)}R
-                          </p>
-                        )}
-                      </div>
-                      <span className="rounded-[6px] bg-good-soft px-2 py-0.5 text-[10px] font-bold text-good">
-                        PASS
-                      </span>
+            {/* 추천 섹션 안에 넣었더니 '추천 종목의 부록'처럼 읽혔다. 이건 다른 질문에
+                답하는 블록이다 — 추천은 "뭘 사나", 이건 "산 게 지금 어떤가". 형제로 세운다. */}
+            {openPicks.length > 0 && (
+              <section className="rounded-[12px] border border-border-soft bg-surface/40 p-5">
+                  <h2 className="mb-2 flex items-baseline gap-2 text-sm font-bold text-text">
+                    진행중인 픽
+                    <span className="text-[11px] font-medium text-text-mute">
+                      {openPicks.length}종목 · 손절에 가까운 순
+                    </span>
+                  </h2>
+                  <div className="no-scrollbar overflow-x-auto">
+                    <div className="grid min-w-[640px] grid-cols-[minmax(120px,1.6fr)_3rem_minmax(90px,1fr)_minmax(78px,1fr)_minmax(78px,1fr)_minmax(78px,1fr)] items-center gap-3 border-b border-border-soft px-1 pb-2 text-[11px] tracking-[0.04em] text-text-mute">
+                      <span>종목</span>
+                      <span className="text-right">보유</span>
+                      <span className="text-right">현재가</span>
+                      <span className="text-right">수익률</span>
+                      <span className="text-right">목표까지</span>
+                      <span className="text-right">손절까지</span>
                     </div>
-                  ))}
-                </div>
+                    <div className="divide-y divide-border-soft">
+                      {openPicks.slice(0, 6).map((p) => {
+                        // 손절까지 3% 이내면 눈에 띄게 — 사용자가 지금 결정해야 하는 것.
+                        const nearStop = p.toStopPct != null && p.toStopPct > -0.03;
+                        return (
+                          <div
+                            key={`${p.symbol}-${p.asOf}`}
+                            className="grid min-w-[640px] grid-cols-[minmax(120px,1.6fr)_3rem_minmax(90px,1fr)_minmax(78px,1fr)_minmax(78px,1fr)_minmax(78px,1fr)] items-baseline gap-3 px-1 py-2.5 transition-colors hover:bg-surface"
+                          >
+                            <span className="flex min-w-0 items-baseline gap-1.5">
+                              <Link
+                                href={`/stocks/${p.symbol}`}
+                                className="truncate text-[16px] font-semibold text-text hover:text-accent"
+                              >
+                                {p.name || p.symbol}
+                              </Link>
+                              {p.tp1Hit && (
+                                <span className="shrink-0 rounded-[4px] bg-good-soft px-1 py-px text-[11px] font-semibold text-good">
+                                  1차 익절
+                                </span>
+                              )}
+                            </span>
+                            <span className="tnum text-right text-[11px] text-text-mute">
+                              {p.heldDays}일
+                            </span>
+                            <span className="tnum text-right text-[14px] text-text-dim">
+                              {fmtPrice(p.last)}
+                            </span>
+                            <span
+                              className={`tnum text-right text-[14px] font-semibold ${
+                                (p.returnPct ?? 0) >= 0 ? "text-good" : "text-bad"
+                              }`}
+                            >
+                              {p.returnPct != null ? fmtPct(p.returnPct) : "—"}
+                            </span>
+                            <span className="tnum text-right text-[11px] text-text-dim">
+                              {p.toTargetPct != null ? fmtPct(p.toTargetPct) : "—"}
+                            </span>
+                            <span
+                              className={`tnum text-right text-[11px] ${
+                                nearStop ? "font-semibold text-bad" : "text-text-dim"
+                              }`}
+                            >
+                              {p.toStopPct != null ? fmtPct(p.toStopPct) : "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {openPicks.length > 6 && (
+                    <Link
+                      href="/focus"
+                      className="mt-2 inline-block text-[11px] text-text-dim transition-colors hover:text-text"
+                    >
+                      나머지 {openPicks.length - 6}종목 보기 →
+                    </Link>
+                  )}
+              </section>
+            )}
+
+          {/* ── 아래 띠 ──
+              예전엔 여기에 상자 3개(판정 분포·픽 트랙레코드·전략 검증)가 나란히 있었다.
+              셋 다 "엔진이 얼마나 잘 하고 있나"를 말하는 메타 정보인데, 상자로 세우니
+              상품(추천)과 같은 무게로 읽혔다. 한 줄로 눕힌다.
+
+              트랙레코드는 뺐다 — 손절 로직·가격 데이터·게이트가 최근에 다 바뀌어서
+              지금 남은 기록은 고치기 전 시스템의 성적이다. 그걸 현재 성적처럼 보여주는
+              건 정직한 게 아니라 그냥 틀린 숫자다. 다시 켤 때는 "수정 이후 발행분"
+              기준으로만 센다.
+
+              전략 이름(median·ensemble 같은)도 뺐다. 사용자에게 아무 뜻이 없는 말이다. */}
+          <dl className="rounded-[12px] border border-border-soft bg-surface/40 p-5 text-[14px] flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-mute">오늘 분석</dt>
+              <dd className="tnum font-semibold text-text">{dist.total}종목</dd>
+              {dist.total > 0 && (
+                <span className="tnum text-[11px] text-text-mute">
+                  매수 {dist.매수} · 중립 {dist.중립} · 관망 {dist.관망}
+                </span>
               )}
-            </section>
-          </div>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-mute">검증 통과 전략</dt>
+              <dd className="tnum font-semibold text-text">
+                {kpiDisplay.backtestPassed}/{kpiDisplay.backtestTotal}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-mute">진행중인 픽</dt>
+              <dd className="tnum font-semibold text-text">{openPicks.length}종목</dd>
+            </div>
+            <Link
+              href="/strategies"
+              className="text-[11px] text-text-dim transition-colors hover:text-text"
+            >
+              검증 상세 →
+            </Link>
+          </dl>
         </div>
 
         {/* 면책 고지 */}
