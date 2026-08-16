@@ -90,6 +90,7 @@ def backtest_playbook(
     min_lookback: int = 60,
     flows: pd.DataFrame | None = None,
     earnings: pd.DataFrame | None = None,
+    disclosures: pd.DataFrame | None = None,
     costs: CostModel | None = None,
     style_override: TradeStyle | None = None,
     scaleout: bool = False,
@@ -114,6 +115,9 @@ def backtest_playbook(
     needs_earnings = setup == "pead"
     if needs_earnings and (earnings is None or earnings.empty):
         return []
+    needs_discl = setup in playbooks.DISCLOSURE_SETUPS
+    if needs_discl and (disclosures is None or disclosures.empty):
+        return []
 
     trades: list[Trade] = []
     i = min_lookback
@@ -129,6 +133,14 @@ def backtest_playbook(
             cand = detector(window, flows=fwin)
         elif needs_earnings:
             cand = detector(window, earnings=earnings)
+        elif needs_discl:
+            # 공시는 봉의 ts 로 잘라 넘긴다 — 미래 공시가 과거 봉에 새면 룩어헤드다.
+            if "ts" in df.columns:
+                now_ts = str(df["ts"].iloc[i])[:10]
+                dwin = disclosures[disclosures["date"] <= now_ts]
+            else:
+                dwin = disclosures
+            cand = detector(window, disclosures=dwin)
         else:
             cand = detector(window)
         if cand is None or cand.side != "buy":  # 현재 플레이북은 모두 매수
@@ -140,6 +152,7 @@ def backtest_playbook(
             style=eff_style, side="buy", entry_price=cand.entry_ref,
             atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
             support=cand.support, resistance=cand.resistance,
+            setup=cand.setup,
         )
         entry = lv.entry_price
         stop = lv.stop_loss
