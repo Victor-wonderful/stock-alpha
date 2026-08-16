@@ -24,6 +24,7 @@ def generate_signals(
     setups: list[str] | None = None,
     flows: "pd.DataFrame | None" = None,
     earnings: "pd.DataFrame | None" = None,
+    disclosures: "pd.DataFrame | None" = None,
     now: datetime | None = None,
     market_close: datetime | None = None,
     styles_by_setup: dict[str, list[str]] | None = None,
@@ -34,6 +35,7 @@ def generate_signals(
     rs_rank: 상대강도 분위(0~1) — 주도주 판정 가산용
     flows: [date, foreign_net, inst_net] 오름차순 — 수급 셋업용(없으면 미발동)
     earnings: [date, surprise, turnaround] 오름차순 — PEAD 용(없으면 미발동)
+    disclosures: [date, event_type] 오름차순 — 공시 이벤트 셋업용(없으면 미발동)
     setups: 활성화할 플레이북 키. None=전체.
     styles_by_setup: 셋업별 발행할 스타일 목록(게이트 통과 조합). 주어지면 한 트리거가
         통과 스타일마다 1행 발행(같은 셋업 swing·position 동시 가능). None 이면 단일
@@ -53,6 +55,8 @@ def generate_signals(
             cand = detector(df, flows=flows)
         elif key == "pead":
             cand = detector(df, earnings=earnings)
+        elif key in playbooks.DISCLOSURE_SETUPS:
+            cand = detector(df, disclosures=disclosures)
         else:
             cand = detector(df)
         if cand is None:
@@ -69,6 +73,7 @@ def generate_signals(
                 atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
                 support=cand.support, resistance=cand.resistance,
                 now=now, market_close=market_close,
+                setup=cand.setup,
             )
             # 노이즈 수준 손절폭 배제 — 백테스트(event_backtest)와 동일 기준.
             if abs(lv.entry_price - lv.stop_loss) < min_risk_floor(lv.entry_price, cand.atr):

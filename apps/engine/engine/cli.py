@@ -132,6 +132,61 @@ def ingest_news(
     typer.echo(f"news rows: {nn.ingest_news(syms, pages=pages)} (종목 {len(syms)})")
 
 
+@app.command("repair-prices")
+def repair_prices() -> None:
+    """주식 병합·감자 뒤 옛 가격이 옛 기준으로 남은 종목을 다시 받아 덮어쓴다.
+
+    한국 주식은 하루 ±30% 를 못 넘는다 — 그걸 넘는 등락은 실제 거래가 아니라 기준
+    변경이다. 인제스트가 최근 7일만 덮어쓰기 때문에 병합일에 가짜 점프가 생긴다.
+    """
+    from engine.ingest import price_repair
+
+    r = price_repair.run()
+    typer.echo(
+        f"이상 종목 {r['detected']} · 재수집 {r['repaired']} ({r['rows']}행) · "
+        f"남음 {r['remaining']}"
+    )
+    if r["remaining"]:
+        typer.echo("  남은 건 제한폭이 없는 사례(신규상장·정리매매·감자 소각)로 본다 — 계산에서 제외됨")
+
+
+@app.command("event-study")
+def event_study(
+    since: str = typer.Option("2026-01-01", help="가격 조회 시작일"),
+) -> None:
+    """공시 유형별 성적표 — "이 뉴스 뒤에 실제로 어떻게 됐나"를 세어 적재.
+
+    화면의 모든 "이 뉴스는 어떻다" 문장은 이 표(event_evidence)를 근거로 한다.
+    """
+    from engine.market import event_study as es
+
+    typer.echo(f"event_evidence: {es.run(since=since)} 유형")
+
+
+@app.command("ingest-calendar")
+def ingest_calendar(
+    years_back: int = typer.Option(2, help="휴장일 역산 시작 연도(오늘 기준 N년 전 1/1)"),
+    years_ahead: int = typer.Option(1, help="계산 이벤트를 몇 년 앞까지 만들지"),
+) -> None:
+    """시장 캘린더 적재 — 휴장일(pykrx 역산) + 만기·리밸런싱 계산 + 시드 파일.
+
+    매일 돌릴 필요는 없다(주 1회면 충분). 다만 재실행이 안전하도록 (date, event_key)
+    업서트라, 일일 배치에 붙여도 중복이 쌓이지 않는다.
+    """
+    from engine.ingest.calendar_seed import ingest_calendar as run
+
+    by_kind = run(years_back=years_back, years_ahead=years_ahead)
+    for kind, n in sorted(by_kind.items()):
+        typer.echo(f"  {kind}: {n}")
+
+    # 일정만 띄우면 정보가 아니다 — "그래서 무슨 영향인데"를 우리 데이터로 답한다.
+    from engine.market import calendar_impact as ci
+
+    typer.echo(f"  impact measured: {ci.run()} kinds")
+    if not by_kind.get("rate_decision") and not by_kind.get("macro_release"):
+        typer.echo("주의: 정책 일정(FOMC·금통위)이 비어 있다 — data/calendar_events.json")
+
+
 @app.command("seed-universe")
 def seed_universe(
     markets: str = typer.Option("KOSPI,KOSDAQ", help="쉼표구분 시장: KOSPI,KOSDAQ"),
@@ -334,6 +389,37 @@ def daily(
     else:
         log.warning("daily.freshness.skipped_no_db_direct")
 
+    # 주가 기준 변경 보정 — 팩터·백테스트·성적표가 전부 일봉 수익률 위에 서 있으므로
+    # 분석보다 먼저. 병합·감자 종목의 가짜 등락(실측 149종목)을 그대로 두면 그 위의
+    # 모든 숫자가 오염된다. 실패해도 배치는 계속한다(있는 데이터로라도 돈다).
+    if not skip_ingest:
+        try:
+            from engine.ingest import price_repair
+
+            rp = price_repair.run()
+            if rp["detected"]:
+                typer.echo(
+                    f"      price repair: 이상 {rp['detected']}종목 · "
+                    f"재수집 {rp['repaired']} · 남음 {rp['remaining']}"
+                )
+        except Exception as e:
+            log.warning("daily.price_repair.failed", error=str(e))
+            typer.echo(f"      price repair: 실패 — {e}")
+
+    # 시장 캘린더 — 픽 선정이 억제 이벤트(동시만기 등)를 읽으므로 리포트보다 먼저.
+    # 실패해도 배치를 죽이지 않는다(캘린더가 비면 억제가 안 걸릴 뿐, 기존 동작 그대로).
+    try:
+        from engine.ingest.calendar_seed import ingest_calendar as _ical
+
+        _k = _ical()
+        typer.echo(
+            f"      calendar: 휴장 {_k.get('holiday', 0)} · 만기 {_k.get('expiry', 0)} · "
+            f"정책 {_k.get('rate_decision', 0)}"
+        )
+    except Exception as e:
+        log.warning("daily.calendar.failed", error=str(e))
+        typer.echo(f"      calendar: 실패 — {e}")
+
     # 레짐을 팩터보다 먼저 — 같은 거래일 레짐으로 팩터 가중을 틸트(point-in-time).
     from engine.market import regime as rg
     r0 = rg.run()
@@ -396,6 +482,16 @@ def daily(
     except Exception as e:
         log.warning("daily.news.failed", error=str(e))
         typer.echo(f"      news: 실패 — {e}")
+
+    # 이벤트 성적표 — 그날 새로 들어온 공시까지 반영해 유형별 실측을 갱신한다.
+    # 공시 수집(ingest-disclosures) 뒤에 와야 하루치가 빠지지 않는다.
+    try:
+        from engine.market import event_study as es
+
+        typer.echo(f"      event evidence: {es.run()} 유형")
+    except Exception as e:
+        log.warning("daily.event_study.failed", error=str(e))
+        typer.echo(f"      event evidence: 실패 — {e}")
 
 
 @app.command()

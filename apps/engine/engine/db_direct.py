@@ -166,6 +166,34 @@ def latest_bar_date_by_iid(active_only: bool = True) -> dict[int, str]:
     return out
 
 
+def trading_dates_1d(start: str, end: str, min_instruments: int = 50) -> set[str]:
+    """구간 내 실제 거래일 → {'YYYY-MM-DD'}. 일봉이 있는 날이 곧 거래일이다.
+
+    거래소는 '쉬는 날' 목록을 주지 않고, pykrx 지수 엔드포인트는 2026 현재 빈 응답을
+    낸다(krx.py 의 _safe_krx 주석과 같은 이슈). 대신 우리가 매일 적재하는 ohlcv 를
+    쓴다 — 이미 전 종목 일봉이 있으므로 네트워크도 외부 의존도 없다.
+
+    min_instruments: 그날 봉이 있는 종목 수 하한. 인제스트가 몇 종목만 건드린 날을
+    거래일로 오인하지 않도록 둔다(한국장은 거래일이면 수천 종목에 봉이 생긴다).
+    """
+    import psycopg
+
+    sql = """
+        select (ts at time zone 'UTC')::date d, count(distinct instrument_id) n
+        from ohlcv
+        where interval = '1d' and ts >= %s and ts < (%s::date + 1)
+        group by 1 having count(distinct instrument_id) >= %s
+    """
+    out: set[str] = set()
+    with psycopg.connect(_dsn()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (start, end, min_instruments))
+            for d, _n in cur:
+                out.add(str(d)[:10])
+    log.info("db_direct.trading_dates", days=len(out), start=start, end=end)
+    return out
+
+
 def load_latest_financials_fy(active_only: bool = True) -> dict[int, dict]:
     """전 종목 최신 '연간(FY)' 재무 → {instrument_id: row dict}. 단일 윈도우 쿼리.
 

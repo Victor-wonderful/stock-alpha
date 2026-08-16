@@ -342,6 +342,59 @@ def detect_flow_accumulation(
     )
 
 
+def detect_buyback(
+    df: pd.DataFrame, disclosures: pd.DataFrame | None = None,
+    max_age_days: int = 5,
+) -> Candidate | None:
+    """자사주 매입 공시 직후 매수.
+
+    근거는 통념이 아니라 실측이다(engine.market.event_study, 2026-08-16):
+      자사주 매입 공시 135건 — 시장 대비 1일 +2.8% · 5일 +5.4% · 한 달 +10.9%,
+      승률 81%. 같은 방식으로 잰 공급계약(434건)이 한 달 -3.2%·승률 43% 인 것과
+      대조된다. 회사가 자기 주식을 사는 건 말이 아니라 돈을 쓰는 신호다.
+
+    성격이 다른 축이라는 점이 중요하다 — 나머지 셋업은 전부 차트 패턴(돌파·눌림·
+    평균회귀)이라 같은 국면에서 함께 물린다. 이건 이벤트 기반이라 함께 물리지 않는다.
+
+    가격 확인(MA20 상회 등)을 넣지 않는다. 실측이 '공시 직후 진입'을 잰 값이므로
+    조건을 더하면 게이트가 재는 대상이 실측과 달라진다. 필터가 필요한지도 게이트가
+    판정하게 둔다.
+
+    point-in-time: '현재'는 마지막 봉의 ts(백테스트). 공시일 이후 봉에서만 트리거된다.
+    disclosures: [date, event_type] 오름차순.
+    """
+    from datetime import date as _date
+
+    if disclosures is None or len(disclosures) == 0 or len(df) < 20:
+        return None
+    now = str(df["ts"].iloc[-1])[:10] if "ts" in df.columns else _date.today().isoformat()
+    past = disclosures[
+        (disclosures["date"] <= now) & (disclosures["event_type"] == "buyback")
+    ]
+    if past.empty:
+        return None
+    ev = past.iloc[-1]
+    age = (_date.fromisoformat(now) - _date.fromisoformat(str(ev["date"])[:10])).days
+    if age > max_age_days:
+        return None
+    close = df["close"]
+    c = _last(close)
+    if c <= 0:                                       # 거래정지 이력(0원) 가드
+        return None
+    atr = _last(ind.atr(df))
+    m20 = _last(ind.sma(close, 20))
+    # 공시가 최근일수록 강하게 — 드리프트는 초반이 가파르다(1일 +2.8% → 5일 +5.4%).
+    strength = min(1.0, 0.85 - 0.05 * age)
+    return Candidate(
+        setup="buyback", side="buy", style="position", session="regular",
+        entry_ref=c, atr=atr, support=m20 if m20 > 0 else None,
+        strength=strength,
+        rationale=["자사주 매입 공시", f"공시 {age}일 경과",
+                   "과거 135건 한 달 +10.9%·승률 81%"],
+        payload={"disclosed_at": str(ev["date"])[:10], "age_days": age},
+    )
+
+
 def detect_pead(
     df: pd.DataFrame, earnings: pd.DataFrame | None = None,
     max_age_days: int = 6, min_surprise: float = 0.30,
@@ -851,6 +904,7 @@ ALL_DETECTORS = {
     "vol_squeeze": detect_vol_squeeze,
     "flow_accumulation": detect_flow_accumulation,
     "pead": detect_pead,
+    "buyback": detect_buyback,
     "double_bottom": detect_double_bottom,
     "anchor_pullback": detect_anchor_pullback,
 }
@@ -881,9 +935,15 @@ ALLOWED_STYLES: dict[str, tuple[TradeStyle, ...]] = {
     "vol_squeeze": ("swing", "position"),
     "flow_accumulation": ("swing", "position"),
     "pead": ("position",),
+    "buyback": ("position",),   # 실측 창이 20일(≈한 달) — 장기 드리프트
     "double_bottom": ("swing", "position"),
     "anchor_pullback": ("swing", "position"),
 }
+
+# 공시 이벤트 컨텍스트가 필요한 셋업 — 시그널·백테스트가 같은 목록을 본다.
+# (전에는 `setup == "pead"` 처럼 문자열이 두 파일에 흩어져 새 셋업을 넣을 때
+#  한쪽만 고치면 조용히 미발동됐다.)
+DISCLOSURE_SETUPS: frozenset[str] = frozenset({"buyback"})
 
 # 일봉 OHLCV 로 의미 있게 백테스트 가능한 스타일. day/scalping 은 분봉 필요(2단계).
 DAILY_TESTABLE_STYLES: tuple[TradeStyle, ...] = ("swing", "position")

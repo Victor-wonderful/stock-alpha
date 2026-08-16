@@ -70,9 +70,14 @@ def run(
     frames = filter_liquid_frames(frames)
     log.info("backtest.universe", total=n_all, liquid=len(frames))
 
-    from engine.signals.runner import load_earnings_map, load_flows_map
+    from engine.signals.runner import (
+        load_disclosures_map,
+        load_earnings_map,
+        load_flows_map,
+    )
     flows_map = load_flows_map()
     earnings_map = load_earnings_map()
+    discl_map = load_disclosures_map()
 
     prev = _load_prev_verdicts()
 
@@ -91,6 +96,7 @@ def run(
                         df, setup,
                         flows=flows_map.get(iid),
                         earnings=earnings_map.get(iid),
+                        disclosures=discl_map.get(iid),
                         costs=costs,
                         style_override=style,
                         scaleout=scaleout,

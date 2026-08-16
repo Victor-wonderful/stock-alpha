@@ -80,6 +80,26 @@ def load_earnings_map() -> dict[int, pd.DataFrame]:
     return out
 
 
+def load_disclosures_map() -> dict[int, pd.DataFrame]:
+    """disclosures → 종목별 이벤트 [date, event_type] 오름차순.
+
+    이벤트 셋업(buyback 등)용. 접수일(rcept_dt)이 곧 이벤트일이라 별도 가공이 없다.
+    실측 근거는 event_evidence 테이블(engine.market.event_study).
+    """
+    rows = select_all("disclosures", "instrument_id,event_type,rcept_dt")
+    by_iid: dict[int, list[dict]] = {}
+    for r in rows:
+        if not (r.get("instrument_id") and r.get("event_type") and r.get("rcept_dt")):
+            continue
+        by_iid.setdefault(int(r["instrument_id"]), []).append(
+            {"date": str(r["rcept_dt"])[:10], "event_type": r["event_type"]}
+        )
+    return {
+        iid: pd.DataFrame(sorted(evs, key=lambda e: e["date"]))
+        for iid, evs in by_iid.items()
+    }
+
+
 def _rs_ranks(frames: dict[int, pd.DataFrame], window: int = 60) -> dict[int, float]:
     """종목별 window 수익률 → 횡단면 분위(0~1)."""
     rets: dict[int, float] = {}
@@ -143,6 +163,9 @@ def run(
     earnings_map = (
         load_earnings_map() if (setups is None or "pead" in setups) else {}
     )
+    from engine.signals.playbooks import DISCLOSURE_SETUPS
+    need_discl = setups is None or bool(set(setups) & DISCLOSURE_SETUPS)
+    discl_map = load_disclosures_map() if need_discl else {}
 
     all_rows: list[dict] = []
     for iid, df in frames.items():
@@ -152,6 +175,7 @@ def run(
                 rs_rank=ranks.get(iid), setups=setups,
                 flows=flows_map.get(iid),
                 earnings=earnings_map.get(iid),
+                disclosures=discl_map.get(iid),
                 styles_by_setup=styles_by_setup,
             )
         )

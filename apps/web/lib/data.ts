@@ -8,6 +8,7 @@ import {
   DEFAULT_RISK_PER_TRADE_PCT,
 } from "./position";
 import { computeSnowflake, type SnowflakeResult } from "./snowflake";
+import type { EventEvidence } from "./events";
 import type {
   BacktestView,
   FactorView,
@@ -168,6 +169,35 @@ export async function getLatestDisclosures(perDirection = 40): Promise<
   } catch {
     return { data: empty, isSample: false };
   }
+}
+
+// 공시 유형별 성적표 — "이 소식 뒤에 실제로 어떻게 됐나".
+// 엔진(engine/market/event_study.py)이 매일 계산해 event_evidence 에 적재한다.
+// 화면의 "이 뉴스는 어떻다"는 문장은 전부 이 표를 근거로 한다.
+export async function getEventEvidence(): Promise<Map<string, EventEvidence>> {
+  const out = new Map<string, EventEvidence>();
+  try {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .from("event_evidence")
+      .select("event_type,n,car_1d,car_5d,car_20d,win_20d,verdict")
+      .eq("source", "disclosure")
+      .limit(100);
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      out.set(String(r.event_type), {
+        eventType: String(r.event_type),
+        n: Number(r.n ?? 0),
+        car1d: r.car_1d == null ? null : Number(r.car_1d),
+        car5d: r.car_5d == null ? null : Number(r.car_5d),
+        car20d: r.car_20d == null ? null : Number(r.car_20d),
+        win20d: r.win_20d == null ? null : Number(r.win_20d),
+        verdict: (r.verdict as EventEvidence["verdict"]) ?? "insufficient",
+      });
+    }
+  } catch {
+    /* 근거가 없으면 공시는 그냥 목록으로 보여준다(기존 동작) */
+  }
+  return out;
 }
 
 export type NewsEvent = {
@@ -947,6 +977,137 @@ export async function getMarketState(): Promise<MarketStateView | null> {
   }
 }
 
+// ── 시장 캘린더 ───────────────────────────────────────────────────────
+// 예정된 일정만 담긴다(만기·리밸런싱·정책일). 돌발 뉴스는 여기가 아니라 '사건'이다.
+export type CalendarEvent = {
+  date: string;
+  kind: string;
+  title: string;
+  region: string;
+  severity: number;
+  instrument_id: number | null;
+  block_entry: boolean;
+  block_days_before: number;
+  d_day: number;
+};
+
+// 앞으로 N일 일정. 휴장은 일정이 아니라 달력이라 제외한다.
+export async function getUpcomingEvents(
+  from: string,
+  days = 7,
+): Promise<CalendarEvent[]> {
+  try {
+    const supabase = createPublicClient();
+    const to = new Date(new Date(from + "T00:00:00Z").getTime() + days * 864e5)
+      .toISOString()
+      .slice(0, 10);
+    const { data } = await supabase
+      .from("market_calendar")
+      .select(
+        "date,kind,title,region,severity,instrument_id,block_entry,block_days_before",
+      )
+      .neq("kind", "holiday")
+      .gte("date", from)
+      .lte("date", to)
+      .order("date")
+      .limit(100);
+    const base = Date.parse(from + "T00:00:00Z");
+    return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+      date: String(r.date),
+      kind: String(r.kind),
+      title: String(r.title),
+      region: String(r.region ?? "KR"),
+      severity: Number(r.severity ?? 1),
+      instrument_id: r.instrument_id == null ? null : Number(r.instrument_id),
+      block_entry: Boolean(r.block_entry),
+      block_days_before: Number(r.block_days_before ?? 0),
+      d_day: Math.round((Date.parse(String(r.date) + "T00:00:00Z") - base) / 864e5),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// 이벤트 종류별 실측 반응 — "그래서 무슨 영향인데"의 답.
+// 통념이 아니라 우리 일봉으로 잰 값이다(engine.market.calendar_impact).
+export type CalendarImpact = {
+  kind: string;
+  n: number;
+  dispersion: number | null;
+  baseDispersion: number | null;
+  meanReturn: number | null;
+  baseReturn: number | null;
+};
+
+export async function getCalendarImpacts(): Promise<Map<string, CalendarImpact>> {
+  const out = new Map<string, CalendarImpact>();
+  try {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .from("calendar_impact")
+      .select("kind,n,dispersion,base_dispersion,mean_return,base_return")
+      .limit(50);
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      out.set(String(r.kind), {
+        kind: String(r.kind),
+        n: Number(r.n ?? 0),
+        dispersion: r.dispersion == null ? null : Number(r.dispersion),
+        baseDispersion: r.base_dispersion == null ? null : Number(r.base_dispersion),
+        meanReturn: r.mean_return == null ? null : Number(r.mean_return),
+        baseReturn: r.base_return == null ? null : Number(r.base_return),
+      });
+    }
+  } catch {
+    /* 측정값이 없어도 일정은 보여준다 */
+  }
+  return out;
+}
+
+// 분석일 다음 거래일 — 휴장일 표를 DB 에서 읽어 확정한다.
+//
+// 확정할 수 없으면 null 이고, 호출부는 그때 "다음 거래일"로 뭉뚱그린다. 언제 확정
+// 가능한가: 캘린더의 휴장 목록은 과거를 ohlcv 로 역산해 만든다 — 즉 미래는 모른다.
+// 그래서 "이 날짜까지는 휴장 목록이 완전하다"는 마커(kind='coverage')를 사람이 두고,
+// 그 기한 안에서만 날짜를 단정한다. 마커가 없으면 영영 흐린 채로 둔다 — 틀린 날짜를
+// 자신 있게 쓰는 것보다 낫다(광복절이 토요일이면 월요일이 대체공휴일이 된다).
+export async function getNextTradingDay(asOf: string): Promise<string | null> {
+  try {
+    const supabase = createPublicClient();
+    const to = new Date(Date.parse(asOf + "T00:00:00Z") + 30 * 864e5)
+      .toISOString()
+      .slice(0, 10);
+    const { data: marker } = await supabase
+      .from("market_calendar")
+      .select("date")
+      .eq("event_key", "holiday-coverage")
+      .limit(1);
+    const confirmedThrough = marker?.[0]?.date ? String(marker[0].date) : null;
+    if (!confirmedThrough || confirmedThrough <= asOf) return null;
+
+    const { data } = await supabase
+      .from("market_calendar")
+      .select("date")
+      .eq("kind", "holiday")
+      .gt("date", asOf)
+      .lte("date", to)
+      .limit(60);
+
+    const holidays = new Set(((data ?? []) as { date: string }[]).map((r) => String(r.date)));
+    const d = new Date(Date.parse(asOf + "T00:00:00Z"));
+    for (let i = 0; i < 30; i++) {
+      d.setUTCDate(d.getUTCDate() + 1);
+      const iso = d.toISOString().slice(0, 10);
+      // 확정 기한을 넘어서면 답하지 않는다 — 그 너머의 휴장은 표에 없을 뿐 없는 게 아니다.
+      if (iso > confirmedThrough) return null;
+      const wd = d.getUTCDay();
+      if (wd !== 0 && wd !== 6 && !holidays.has(iso)) return iso;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
   try {
     const supabase = createPublicClient();
@@ -1003,6 +1164,87 @@ const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
   expired: "만료",
   partial: "1차 익절", // 분할익절 후 본전 청산(0022) — 부분 수익 실현
 };
+
+// 진행중인 픽 — "어제 추천 보고 산 게 지금 어떻게 됐나".
+//
+// 홈에 이 블록이 없었다. 추천 목록만 있고 그 추천들이 지금 어디쯤 와 있는지는
+// 다른 페이지로 가야 볼 수 있었는데, 매일 오는 사용자에게는 이게 새 추천만큼 중요하다.
+//
+// getPickHistory 를 쓰지 않는 이유: 그 함수는 픽마다 getLatestPrice 를 따로 부른다
+// (28건이면 왕복 28회). 여기선 종목 가격을 한 번에 가져온다.
+export type OpenPick = {
+  symbol: string;
+  name: string;
+  asOf: string;
+  heldDays: number;          // 발행일로부터 경과 거래일이 아닌 달력일
+  entry: number | null;
+  target: number | null;
+  stop: number | null;
+  last: number | null;
+  returnPct: number | null;  // 진입가 대비
+  toTargetPct: number | null;  // 현재가에서 목표까지 남은 거리
+  toStopPct: number | null;    // 현재가에서 손절까지 남은 거리(양수 = 아직 여유)
+  tp1Hit: boolean;
+};
+
+export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
+  try {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .from("recommendations")
+      .select(
+        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,instruments(symbol,name)",
+      )
+      .eq("basket_type", "daily_focus")
+      .eq("status", "open")
+      .order("as_of", { ascending: false })
+      .limit(limit);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    if (rows.length === 0) return [];
+
+    const picks = rows.map((r) => {
+      const inst = (r.instruments ?? {}) as Record<string, unknown>;
+      return {
+        symbol: (inst.symbol as string) ?? "",
+        name: (inst.name as string) ?? "",
+        asOf: String(r.as_of),
+        entry: (r.entry_price as number) ?? null,
+        // 1차 익절한 픽은 잔량 목표가 tp2 로 바뀐다(0022 스케일아웃).
+        target: (r.tp1_hit ? (r.tp2_price as number) : (r.target_price as number)) ?? null,
+        stop: (r.stop_loss as number) ?? null,
+        tp1Hit: Boolean(r.tp1_hit),
+      };
+    });
+
+    const priceMap = await getLatestPricesBySymbols(picks.map((p) => p.symbol));
+    const today = Date.now();
+    return picks
+      .map((p) => {
+        const last = priceMap.get(p.symbol)?.close ?? null;
+        const pct = (from: number | null, to: number | null) =>
+          from != null && from > 0 && to != null ? to / from - 1 : null;
+        return {
+          ...p,
+          last,
+          heldDays: Math.max(
+            0,
+            Math.round((today - Date.parse(p.asOf + "T00:00:00Z")) / 864e5),
+          ),
+          returnPct: pct(p.entry, last),
+          toTargetPct: pct(last, p.target),
+          toStopPct: pct(last, p.stop),
+        };
+      })
+      // 같은 종목이 여러 날 발행되면 홈에 같은 이름이 두 번 뜬다(NHN 이 2일·3일차로
+      // 나란히 나왔다). 종목당 가장 최근 발행분만 남긴다 — 사용자에겐 한 자리다.
+      .filter((p, _i, all) => all.find((q) => q.symbol === p.symbol) === p)
+      // 손절에 가까운 것부터. toStopPct 는 '현재가에서 손절까지'라 롱에선 음수이고,
+      // 0 에 가까울수록 코앞이다 — 내림차순이 '가까운 순'이다(오름차순은 정반대).
+      .sort((a, b) => (b.toStopPct ?? -99) - (a.toStopPct ?? -99));
+  } catch {
+    return [];
+  }
+}
 
 export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> {
   try {

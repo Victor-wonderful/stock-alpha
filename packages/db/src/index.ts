@@ -23,6 +23,7 @@ export type TradeSetup =
   | 'high_52w'
   | 'vol_squeeze'
   | 'pead'
+  | 'buyback'
   | 'double_bottom'
   | 'anchor_pullback'
   | 'kalman'
@@ -60,6 +61,7 @@ export const TRADE_SETUP_LABELS: Record<TradeSetup, string> = {
   high_52w: '52주 신고가',
   vol_squeeze: '변동성 수축 돌파',
   pead: '실적 모멘텀(PEAD)',
+  buyback: '자사주 매입 공시',
   double_bottom: '쌍바닥(W) 반등',
   anchor_pullback: '기준봉 눌림',
   kalman: '칼만 추세',
