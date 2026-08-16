@@ -1,6 +1,7 @@
 """시장 폭·조건부 실측 — 순수 함수 테스트 (DB 없이)."""
 from __future__ import annotations
 
+from engine.ingest.naver import normalize_world_index
 from engine.market.breadth import (
     CONDITIONS,
     MIN_SAMPLE,
@@ -115,6 +116,31 @@ def test_fallback_says_nothing_special_when_no_condition():
     }
     b = fallback_brief(_ctx(mk))
     assert "특이 조건이 없습니다" in b["market_view"]
+
+
+# ── 해외지수 수집 (네이버) ────────────────────────────────────────────
+def test_world_index_uses_local_trade_date():
+    # localTradedAt 은 미국 현지시각 — 날짜만 뽑아야 '어젯밤 미국장'과 날짜가 맞는다.
+    rows = normalize_world_index(
+        [{"localTradedAt": "2026-08-14T16:15:00-04:00", "closePrice": "14.25"}],
+        "VIX_NAVER",
+    )
+    assert rows == [
+        {"series_id": "VIX_NAVER", "date": "2026-08-14",
+         "value": 14.25, "source": "NAVER"}
+    ]
+
+
+def test_world_index_skips_broken_rows():
+    rows = normalize_world_index(
+        [
+            {"localTradedAt": "", "closePrice": "14.25"},          # 날짜 결손
+            {"localTradedAt": "2026-08-14T16:15:00-04:00"},        # 종가 결손
+            {"localTradedAt": "2026-08-13T16:15:00-04:00", "closePrice": "14.63"},
+        ],
+        "VIX_NAVER",
+    )
+    assert len(rows) == 1 and rows[0]["date"] == "2026-08-13"
 
 
 def test_fallback_degrades_without_market_data():
