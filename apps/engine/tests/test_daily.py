@@ -36,6 +36,21 @@ def _report(iid: int, rating: str, score: float, *, tradable: bool = True,
     }
 
 
+def _move_entry(r: dict, entry: float) -> dict:
+    """플랜 진입가를 옮기되 손절·목표를 같은 비율로 따라가게 한다.
+
+    진입가만 바꾸면 손절폭이 터무니없어져(예: 진입 39,150 / 손절 95 = -99.8%)
+    손절폭 상한(PICKS_MAX_STOP_PCT)에 먼저 걸린다 — 진입가 드리프트 게이트를
+    보려는 테스트가 엉뚱한 필터를 검증하게 된다.
+    """
+    row = r["payload"]["plan"][0]
+    k = entry / float(row["entry_price"])
+    row["entry_price"] = entry
+    row["stop_loss"] = float(row["stop_loss"]) * k
+    row["tp1"] = float(row["tp1"]) * k
+    return r
+
+
 # ── 4국면 레짐 라우팅 ────────────────────────────────────────────────
 def test_regime_router_by_market_state():
     # 상승추세 — 추세추종 허용, 평균회귀 억제
@@ -119,8 +134,7 @@ def test_picks_sector_cap_limits_concentration():
 
 def test_picks_excludes_stale_entry_far_from_close():
     # 진입가가 현재 종가에서 18% 위(낡은 시그널) → 실행 불가능으로 제외.
-    r = _report(1, "매수", 80.0)
-    r["payload"]["plan"][0]["entry_price"] = 39150.0   # 시그널 발생가(며칠 전)
+    r = _move_entry(_report(1, "매수", 80.0), 39150.0)  # 시그널 발생가(며칠 전)
     closes = {1: 33050.0}                               # 현재 종가
     assert select_picks([r], close_by_id=closes) == []
     # 같은 픽이라도 진입가가 현재가 근처면 통과(신선 시그널).
@@ -130,17 +144,43 @@ def test_picks_excludes_stale_entry_far_from_close():
 
 def test_picks_entry_gate_noop_without_close_map():
     # close_by_id 미주입(기본) → 검증 안 함(하위호환).
-    r = _report(1, "매수", 80.0)
-    r["payload"]["plan"][0]["entry_price"] = 39150.0
+    r = _move_entry(_report(1, "매수", 80.0), 39150.0)
     assert len(select_picks([r])) == 1
 
 
 def test_picks_entry_gate_unknown_close_unconstrained():
     # 종가 미상(맵에 없음/None)은 검증 안 함(graceful).
-    r = _report(1, "매수", 80.0)
-    r["payload"]["plan"][0]["entry_price"] = 39150.0
+    r = _move_entry(_report(1, "매수", 80.0), 39150.0)
     assert len(select_picks([r], close_by_id={1: None})) == 1
     assert len(select_picks([r], close_by_id={2: 33050.0})) == 1  # 다른 종목만 있음
+
+
+def test_picks_rejects_wide_stop():
+    # 손절폭 상한 — 손익비가 좋아도 한 번에 잃는 절대 크기가 크면 발행 안 한다.
+    # 2026-08-14 NHN: 진입 74,700 / 손절 39,261(-47.4%) 이 그대로 추천에 올랐다.
+    r = _report(1, "매수", 80.0)
+    r["payload"]["plan"][0].update(entry_price=74700.0, stop_loss=39261.0, tp1=200000.0)
+    assert select_picks([r]) == []          # 손익비 3.5 지만 손절 -47% → 탈락
+    # 같은 종목·같은 목표라도 손절이 상한 안쪽이면 통과.
+    r["payload"]["plan"][0]["stop_loss"] = 63000.0     # -15.7%
+    assert len(select_picks([r])) == 1
+
+
+def test_picks_stop_width_gate_graceful_without_levels():
+    # 진입가·손절가 결손이면 검증 안 함(과도 차단 금지).
+    r = _report(1, "매수", 80.0)
+    r["payload"]["plan"][0]["stop_loss"] = None
+    assert len(select_picks([r])) == 1
+
+
+def test_picks_suppress_republish_while_open():
+    # 이미 열린 픽이 있는 종목은 후보에서 빠진다 — 같은 거래를 두 번 세지 않는다.
+    reports = [_report(i, "매수", 90.0 - i) for i in range(1, 4)]
+    picks = select_picks(reports, open_instrument_ids={2})
+    ids = [p["instrument_id"] for p in picks]
+    assert ids == [1, 3]
+    # 미주입(기본)이면 억제 안 함 — 하위호환.
+    assert len(select_picks(reports)) == 3
 
 
 def test_picks_sector_cap_prefers_diversification_over_filling():

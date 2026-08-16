@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
+
 import pandas as pd
 
 from engine.backtest.costs import default_cost_model
@@ -195,20 +197,53 @@ def passed_setups(thresholds: GateThresholds | None = None) -> list[str]:
     return list(passed_combos(thresholds).keys())
 
 
-def passed_combos_from_db() -> dict[str, list[str]]:
+def passed_combos_from_db(as_of: str | None = None) -> dict[str, list[str]]:
     """backtests 최신 행 기준 통과 (셋업→스타일 목록) — 재백테스트 없이 read.
 
     daily 배치/signals --gate 발행 필터용. 직전 backtest 런이 적재한 안정화 판정 사용.
+
+    as_of: 주면 그 날(KST 종료) 이전에 적재된 행만 본다 — 과거일 픽 백필에서
+      '지금 통과한 조합'을 쓰면 나중에 좋아진 걸 알고 고르는 셈이 된다.
+      backtests 는 매 배치일 적재되므로 당시 게이트가 그대로 복원된다.
     """
+    cutoff = gate_cutoff(as_of)
     latest: dict[tuple[str, str], dict] = {}
     for bt in sorted(
         select_all("backtests", "setup,style,passed,created_at"),
         key=lambda b: b.get("created_at") or "",
     ):
-        if bt.get("setup") and bt.get("style"):
+        if bt.get("setup") and bt.get("style") and _within(bt, cutoff):
             latest[(bt["setup"], bt["style"])] = bt
     out: dict[str, list[str]] = {}
     for (setup, style), bt in latest.items():
         if bt.get("passed"):
             out.setdefault(setup, []).append(style)
     return out
+
+
+def gate_cutoff(as_of: str | None) -> datetime | None:
+    """as_of(KST 날짜) 하루의 끝을 UTC 기준 시각으로. as_of 없으면 None(제한 없음).
+
+    배치는 as_of 당일 백테스트를 돌린 뒤 픽을 고른다 — 그래서 당일 적재분까지 포함이다.
+    """
+    if not as_of:
+        return None
+    kst = timezone(timedelta(hours=9))
+    d = date.fromisoformat(as_of)
+    return datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=kst)
+
+
+def _within(bt: dict, cutoff: datetime | None) -> bool:
+    """행의 created_at 이 cutoff 이하인가. cutoff 없으면 항상 True."""
+    if cutoff is None:
+        return True
+    raw = bt.get("created_at")
+    if not raw:
+        return False
+    try:
+        ts = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts <= cutoff
