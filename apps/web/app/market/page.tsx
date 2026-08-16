@@ -3,7 +3,19 @@ import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { SampleBadge } from "@/components/ui";
 import { Sparkline } from "@/components/ui/Sparkline";
-import { getMarket, getMarketQuotes, getSignalSectorCounts, getLatestDisclosures } from "@/lib/data";
+import {
+  getMarket,
+  getMarketQuotes,
+  getSignalSectorCounts,
+  getLatestDisclosures,
+  getEventEvidence,
+} from "@/lib/data";
+import {
+  VERDICT_CLASS,
+  VERDICT_LABEL,
+  contradictsDirection,
+  evidenceSentence,
+} from "@/lib/events";
 import { fmtNum } from "@/lib/format";
 import type { Regime, SectorRotationView } from "@/lib/types";
 
@@ -103,6 +115,7 @@ export default async function MarketPage() {
     { data: quotes },
     { data: signalSectors },
     { data: disclosures },
+    evidence,
   ] = await Promise.all([
     getMarket(),
     getMarketQuotes(),
@@ -110,6 +123,8 @@ export default async function MarketPage() {
     // 방향당 상한을 넉넉히 — 그날 공시를 전부 보여준다(8/14 기준 호재 36·악재 30·중립 24).
     // 열마다 내부 스크롤이 있어 페이지 길이는 늘지 않는다.
     getLatestDisclosures(60),
+    // 유형별 성적표 — 호재/악재 분류는 추측이라 실측을 함께 붙인다.
+    getEventEvidence(),
   ]);
   const { regime, macro, sectors } = data;
   const rm = REGIME_META[regime.regime];
@@ -141,7 +156,9 @@ export default async function MarketPage() {
               {disclosures.positive.length + disclosures.neutral.length + disclosures.negative.length}건
             </span>
           </h2>
-          <span className="text-[11px] text-text-mute">정기공시 제외 · 이벤트 공시만</span>
+          <span className="text-[11px] text-text-mute">
+            호재·악재는 분류이고, 배지는 실제로 세어본 결과입니다
+          </span>
         </div>
 
         {disclosures.asOf == null ? (
@@ -164,20 +181,46 @@ export default async function MarketPage() {
                   <p className="py-3 text-[12px] text-text-mute">해당 공시가 없습니다.</p>
                 ) : (
                   <div className="no-scrollbar max-h-[320px] divide-y divide-border-soft overflow-y-auto">
-                    {rows.map((d) => (
-                      <div key={d.id} className="py-2">
-                        <div className="truncate text-[12px] font-semibold text-text">
-                          {d.symbol ? (
-                            <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
-                              {d.name ?? d.symbol}
-                            </Link>
-                          ) : (
-                            d.name ?? "—"
+                    {rows.map((d) => {
+                      // 이 유형의 과거 성적. 호재/악재 분류는 보고서 이름을 보고 붙인
+                      // 가설이고, 이건 실제로 세어본 결과다. 둘이 어긋날 때가 가장
+                      // 알려줄 값이 크다(공급계약 = '호재' 분류인데 실측은 '조심').
+                      const ev = d.eventType ? evidence.get(d.eventType) : undefined;
+                      const flips = contradictsDirection(d.direction, ev?.verdict);
+                      return (
+                        <div key={d.id} className="py-2">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-text">
+                              {d.symbol ? (
+                                <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
+                                  {d.name ?? d.symbol}
+                                </Link>
+                              ) : (
+                                d.name ?? "—"
+                              )}
+                            </span>
+                            {ev && (
+                              <span
+                                className={`shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-semibold ${VERDICT_CLASS[ev.verdict]}`}
+                                title={evidenceSentence(ev) ?? undefined}
+                              >
+                                {VERDICT_LABEL[ev.verdict]}
+                              </span>
+                            )}
+                          </div>
+                          <div className="truncate text-[11px] text-text-mute">{d.reportName}</div>
+                          {/* 근거 한 줄 — 판정이 선 유형만. 모르는 건 조용히 둔다. */}
+                          {ev && ev.verdict !== "insufficient" && (
+                            <div className="mt-0.5 text-[10px] leading-relaxed text-text-dim">
+                              {flips && (
+                                <span className="text-warn">분류와 실측이 다름 · </span>
+                              )}
+                              {evidenceSentence(ev)}
+                            </div>
                           )}
                         </div>
-                        <div className="truncate text-[11px] text-text-mute">{d.reportName}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
