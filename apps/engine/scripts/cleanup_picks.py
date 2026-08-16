@@ -108,6 +108,34 @@ def find_duplicates(rows: list[dict]) -> list[dict]:
     return drop
 
 
+def find_regime_violations(rows: list[dict], regime_by_date: dict[str, dict]) -> list[dict]:
+    """발행 당시 하락장이었고, **현 억제 규칙이라면 차단됐을** 픽.
+
+    왜 '하락장 발행 전부'가 아닌가 — 억제는 추세·돌파 계열만 막는다. 하락장에서도
+    역추세(과대낙폭 반등·바닥)와 수급(flow_accumulation)은 허용된다. 국면만 보고
+    싹 지우면 규칙이 허용했을 픽까지 지우게 된다. 그래서 실제 판정 함수
+    (_pick_suppressed)를 그대로 태운다 — 화면·발행과 같은 규칙을 쓴다.
+
+    배경(2026-08-16): 픽 63건 중 48건(76%)이 risk_off 구간 발행이고 그중 79%가
+    손절이다. 상승장 발행분은 손절 3/14 로 확연히 다르다. 그런데 이 억제 로직은
+    2026-06-24 부터 master 에 있었다 — 실행 환경이 61커밋 뒤처져 안 돌았을 뿐이다
+    (stale deploy). 즉 시스템이 몰라서가 아니라 아는 걸 실행하지 못해 나간 픽들이다.
+
+    ⚠️ 이걸 지우면 남은 성적이 실제보다 좋아 보이고, 그 사고의 대가가 장부에서
+    사라진다. 삭제 전/후 성적을 반드시 함께 볼 것(main 이 둘 다 출력한다).
+    """
+    from engine.reports.daily import _pick_suppressed
+
+    out = []
+    for r in rows:
+        reg = regime_by_date.get(str(r.get("as_of"))) or {}
+        if reg.get("regime") != "risk_off":
+            continue
+        if _pick_suppressed(r.get("setup"), reg.get("market_state"), True):
+            out.append(r)
+    return out
+
+
 def find_level_violations(rows: list[dict]) -> list[dict]:
     """손절폭 상한 초과 또는 손익비 하한 미달 픽."""
     out = []
@@ -162,6 +190,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="daily_focus 픽 정리 (중복·레벨 위반 삭제)")
     ap.add_argument("--apply", action="store_true", help="실제 삭제 (기본은 드라이런)")
     ap.add_argument("--backup-dir", default="data/pick_backups", help="삭제 전 덤프 위치")
+    ap.add_argument("--regime", action="store_true",
+                    help="하락장 억제 위반분도 삭제 대상에 포함(find_regime_violations)")
     args = ap.parse_args()
 
     rows = select_all("recommendations", PICK_COLUMNS, eq={"basket_type": BASKET})
@@ -172,7 +202,15 @@ def main() -> None:
 
     dups = find_duplicates(rows)
     viols = find_level_violations(rows)
-    drop_ids = {r["id"] for r in dups} | {r["id"] for r in viols}
+    regime_viols: list[dict] = []
+    if args.regime:
+        regime_by_date = {
+            str(m["date"]): m
+            for m in select_all("market_regime", "date,regime,market_state")
+        }
+        regime_viols = find_regime_violations(rows, regime_by_date)
+    drop_ids = ({r["id"] for r in dups} | {r["id"] for r in viols}
+                | {r["id"] for r in regime_viols})
     keep = [r for r in rows if r["id"] not in drop_ids]
 
     print(f"── ① 중복 발행 (동일 플랜 재발행) — {len(dups)}건 삭제 대상 ──")
@@ -192,6 +230,17 @@ def main() -> None:
         print(f"  {r['as_of']}  {names.get(r['instrument_id'], ''):<22} "
               f"손절 {sp*100 if sp else 0:5.1f}% · 손익비 {rr or 0:4.2f} · "
               f"{r.get('status')}{mark}")
+
+    if args.regime:
+        print(f"\n── ③ 하락장 억제 위반 (현 규칙이면 차단) — {len(regime_viols)}건 삭제 대상 ──")
+        by_setup: dict[str, list[dict]] = defaultdict(list)
+        for r in regime_viols:
+            by_setup[str(r.get("setup"))].append(r)
+        for setup, members in sorted(by_setup.items(), key=lambda kv: -len(kv[1])):
+            stopped = sum(1 for m in members if m.get("status") == "stopped")
+            tot = sum(_f(m.get("close_return_pct")) or 0.0 for m in members)
+            print(f"  {setup:<20} {len(members):>3}건 · 손절 {stopped:>2}건 · "
+                  f"누적 {tot*100:+7.1f}%")
 
     print(f"\n── 합계 ── 삭제 {len(drop_ids)}건 / 잔존 {len(keep)}건")
     print("\n성적 비교(청산분 기준):")
