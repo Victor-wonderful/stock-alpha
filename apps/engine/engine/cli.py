@@ -325,7 +325,9 @@ def morning(
     from engine.ingest import naver as nv
     typer.echo(
         f"[1/3] macro: {fred.ingest_macro(days=10)} rows · "
-        f"kr indices: {kis.ingest_kr_indices(days=10)} rows · fx: {nv.ingest_fx()} rows"
+        f"kr indices: {kis.ingest_kr_indices(days=10)} rows · fx: {nv.ingest_fx()} rows · "
+        # 해외지수는 FRED 가 2~3거래일 늦어 '어젯밤 미국장'을 못 말한다 → 네이버 당일치.
+        f"world: {nv.ingest_world_indices()} rows"
     )
     r = regime.run()
     typer.echo(f"[2/3] regime: {r['regime']} (score {r['score']})")
@@ -362,7 +364,8 @@ def daily(
         from engine.ingest import naver as nv
         typer.echo(
             f"[1/5] ingest prices: {n} rows · kr indices: {kis.ingest_kr_indices(days=10)} rows · "
-            f"fx: {nv.ingest_fx()} rows · flows: {kis.ingest_flows(days=7)} rows"
+            f"fx: {nv.ingest_fx()} rows · world: {nv.ingest_world_indices()} rows · "
+            f"flows: {kis.ingest_flows(days=7)} rows"
         )
     else:
         typer.echo("[1/5] ingest skipped")

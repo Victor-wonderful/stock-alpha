@@ -183,6 +183,81 @@ def ingest_kr_indices(pages: int = 2) -> int:
     return total
 
 
+# ── 해외지수 (VIX·미국 지수) ──
+# FRED 는 이 시리즈들이 2~3 거래일 늦는다(2026-08-16 확인: FRED VIX 최신 8/11,
+# 실제 최신 거래일 8/14). 시황에서 "어젯밤 미국장이 이랬다"를 말하려면 그 지연이
+# 치명적이다 — 사흘 전 공포지수로 오늘을 말할 수 없다.
+#
+# 왜 VIX 를 먼저 붙이나: 실측(합성지수 442거래일)에서 **VIX 가 오른 다음날 한국장
+# 상승 비율이 38.2%** 였다. 기준선 55.4% 대비 -17.2%p 로, 측정한 지표 중 차이가
+# 가장 컸다(n=55). 금리(미10년물)는 -0.7%p 로 사실상 없었다.
+#
+# 네이버 해외지수 API 는 종가 기준 15분 지연이지만 **당일 종가는 그날 들어온다**.
+_WORLD_BASE = "https://api.stock.naver.com/index/{symbol}/price"
+
+# 심볼 → macro.series_id. FRED 와 같은 series_id 를 쓰면 한 시리즈에 두 소스가
+# 섞여 값이 튄다(계산 기준이 다를 수 있음) → 별도 id 로 적재하고 소비처가 고른다.
+WORLD_INDICES: dict[str, tuple[str, str]] = {
+    ".VIX": ("VIX_NAVER", "VIX 변동성지수(네이버)"),
+    ".INX": ("SP500_NAVER", "S&P 500(네이버)"),
+    ".IXIC": ("NASDAQ_NAVER", "나스닥 종합(네이버)"),
+}
+
+
+def normalize_world_index(rows: list[dict], series_id: str) -> list[dict]:
+    """네이버 해외지수 응답 → macro 행 (순수 함수).
+
+    localTradedAt 은 현지시각(예: '2026-08-14T16:15:00-04:00') — 날짜 부분만 쓴다.
+    미국 현지 거래일로 적재해야 '어젯밤 미국장'과 날짜가 맞는다.
+    """
+    out: list[dict] = []
+    for r in rows:
+        ts = str(r.get("localTradedAt") or "")
+        close = _to_float(r.get("closePrice"))
+        if len(ts) < 10 or close is None:
+            continue
+        out.append({
+            "series_id": series_id, "date": ts[:10],
+            "value": close, "source": "NAVER",
+        })
+    return out
+
+
+def fetch_world_index(symbol: str, pages: int = 1, page_size: int = 30) -> list[dict]:
+    import httpx
+
+    headers = {**_HEADERS, "Referer": "https://m.stock.naver.com/"}
+    out: list[dict] = []
+    for p in range(1, pages + 1):
+        try:
+            r = httpx.get(
+                _WORLD_BASE.format(symbol=symbol),
+                params={"pageSize": str(page_size), "page": str(p)},
+                headers=headers, timeout=20,
+            )
+            r.raise_for_status()
+            data = r.json()
+            if not isinstance(data, list):
+                break
+            out.extend(data)
+        except Exception as e:  # noqa: BLE001 — 심볼 단위 실패는 건너뜀
+            log.warning("naver.world.page_fail", symbol=symbol, page=p, error=str(e))
+    return out
+
+
+def ingest_world_indices(pages: int = 1) -> int:
+    """VIX·S&P500·나스닥 → macro. 실패해도 배치를 죽이지 않는다(시황 부가 정보)."""
+    from engine.db import upsert
+
+    total = 0
+    for symbol, (series_id, _label) in WORLD_INDICES.items():
+        rows = normalize_world_index(fetch_world_index(symbol, pages=pages), series_id)
+        if rows:
+            total += upsert("macro", rows, on_conflict="series_id,date")
+    log.info("naver.world.done", rows=total)
+    return total
+
+
 # ── 환율 (원/달러) ──
 # FRED DEXKOUS 는 최대 1주 지연 → 네이버 환율 고시(매매기준율)를 USDKRW 시리즈로 적재.
 

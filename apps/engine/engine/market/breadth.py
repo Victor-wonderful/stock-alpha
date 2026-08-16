@@ -108,6 +108,84 @@ CONDITIONS: dict[str, callable] = {
 }
 
 
+# ── 해외 변수 조건 ──
+# 시장 폭·연속성은 '한국장 자기 이력'이라 밤사이 일어난 일을 못 본다. 실측에서 가장
+# 큰 차이를 낸 건 VIX 였다(오른 다음날 한국장 상승 38.2% vs 기준선 55.4%, n=55).
+# 미10년물은 -0.7%p 로 사실상 없어서 넣지 않는다 — 있는 척하지 않는다.
+#
+# 신선도: FRED(VIXCLS)는 2~3거래일 늦어 '어젯밤'을 못 말한다. 네이버(VIX_NAVER)가
+# 당일 종가를 준다. 과거 빈도는 이력이 긴 FRED 를 쓰고, 오늘 판정은 네이버를 쓴다.
+MACRO_CONDITIONS: dict[str, tuple[str, str]] = {
+    "VIX": ("공포지수(VIX)가 전일보다 상승", "up"),
+}
+
+
+def _load_macro(series_ids: tuple[str, ...]) -> dict[str, dict[str, float]]:
+    from engine import db_direct
+    if not db_direct.available():
+        return {}
+    import psycopg
+
+    with psycopg.connect(db_direct._dsn()) as conn, conn.cursor() as cur:
+        cur.execute(
+            "select series_id, date, value from macro where series_id = any(%s)",
+            (list(series_ids),),
+        )
+        out: dict[str, dict[str, float]] = {}
+        for sid, d, v in cur.fetchall():
+            out.setdefault(sid, {})[str(d)] = float(v)
+    return out
+
+
+def vix_condition(s: list[MarketDay], as_of: str) -> dict | None:
+    """'어젯밤 VIX 상승' 조건 — 오늘 성립 여부 + 과거 빈도. 미성립/데이터부족이면 None.
+
+    과거 이력은 FRED+네이버를 합쳐 쓴다(같은 날은 네이버 우선). FRED 만으론 최근이
+    비고, 네이버만으론 이력이 짧다.
+    """
+    m = _load_macro(("VIXCLS", "VIX_NAVER"))
+    merged = {**m.get("VIXCLS", {}), **m.get("VIX_NAVER", {})}
+    if len(merged) < 60:
+        return None
+    vd = sorted(merged)
+    mkt = {d.date: d for d in s}
+    mkt_days = sorted(mkt)
+
+    def next_kr(after: str) -> str | None:
+        for d in mkt_days:
+            if d > after:
+                return d
+        return None
+
+    # 과거 빈도 — VIX 가 오른 날의 '다음 한국 거래일' 수익률
+    ups: list[float] = []
+    for i in range(1, len(vd)):
+        if merged[vd[i]] <= merged[vd[i - 1]]:
+            continue
+        nk = next_kr(vd[i])
+        if nk and nk <= as_of:
+            ups.append(mkt[nk].ret)
+    if len(ups) < MIN_SAMPLE:
+        return None
+
+    # 오늘 성립? — as_of 이하 최신 두 값 비교
+    recent = [d for d in vd if d <= as_of]
+    if len(recent) < 2 or merged[recent[-1]] <= merged[recent[-2]]:
+        return None
+
+    return {
+        "condition": MACRO_CONDITIONS["VIX"][0],
+        "n": len(ups),
+        "up_rate_1d": round(sum(1 for x in ups if x > 0) / len(ups), 4),
+        "avg_ret_1d": round(sum(ups) / len(ups), 6),
+        "detail": {
+            "series": "VIX", "date": recent[-1],
+            "value": round(merged[recent[-1]], 2),
+            "prev": round(merged[recent[-2]], 2),
+        },
+    }
+
+
 def _forward(s: list[MarketDay], i: int, h: int) -> float | None:
     if i + h >= len(s):
         return None
@@ -161,6 +239,14 @@ def build(as_of: str | None = None) -> dict | None:
         m = measure(s, label, fn)
         if m:                        # 표본 미달 조건은 조용히 제외
             active.append(m)
+
+    # 해외 변수 — 밤사이 일어난 일. 한국장 자기 이력만으론 이걸 못 본다.
+    try:
+        vix = vix_condition(s, today.date)
+        if vix:
+            active.append(vix)
+    except Exception as e:  # noqa: BLE001 — 부가 정보라 실패해도 시황은 나간다
+        log.warning("breadth.vix_failed", error=str(e)[:140])
 
     prev = s[i - 1] if i > 0 else None
     out = {
