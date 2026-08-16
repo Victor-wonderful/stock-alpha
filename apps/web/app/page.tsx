@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GNB } from "@/components/GNB";
+import { MarketBrief } from "@/components/MarketBrief";
 import {
   getDashboardKpi,
   getMarketQuotes,
@@ -283,6 +284,22 @@ export default async function DashboardPage() {
             가로줄 두 세트가 따로 노는 게 "높이가 안 맞는다"로 읽혔다.
             컬럼을 없애면 어긋날 짝이 사라진다 — 픽·리포트는 전체 폭으로 세우고,
             보조 지표 3종은 맨 아래 한 줄 띠로 내린다(세로 헤어라인으로만 분할). */}
+        {/* ── 오늘의 시황 ──
+            2단 그리드 위 전체 폭. 좌(추천)·우(참고) 어느 한쪽에 넣으면 그 컬럼의
+            부속처럼 읽히는데, 시장 맥락은 양쪽 모두의 전제다.
+            내용은 '전망'이 아니라 '오늘 무슨 일이 있었나 + 과거 같은 상황의 빈도'다 —
+            442거래일 측정에서 무조건 "오른다"의 적중률이 55.3%였다. 전망을 쓰면
+            그 55%가 시스템 실력으로 읽힌다(components/MarketBrief 주석). */}
+        {brief.data?.market && (
+          <section className="mb-6 rounded-[12px] border border-border-soft bg-surface/40 p-5">
+            <MarketBrief
+              market={brief.data.market}
+              headline={brief.data.headline}
+              marketView={brief.data.market_view}
+            />
+          </section>
+        )}
+
         {/* ── 본문 2단 ──
             세로로만 쌓으니 "아래로 쭉 연결된" 하나의 긴 목록으로 읽혔다. 왼쪽은
             돈이 걸린 것(추천·보유), 오른쪽은 참고 정보(보도·요약)로 나눈다.

@@ -26,9 +26,17 @@ SYSTEM = """당신은 한국 주식 시장 모닝 브리프를 쓰는 애널리�
 절대 규칙:
 1. JSON 에 없는 수치·사건을 만들어내지 마십시오.
 2. 수익 보장·단정 표현 금지. 특정 개인 대상 표현 금지(불특정 다수 대상).
-3. 출력은 JSON 하나만: {"headline": str, "market_view": str, "watchpoints": [str, ...]}
-   - headline: 오늘 시장을 여는 한 문장
-   - market_view: 밤사이 해외 변수와 국내 레짐을 엮은 3~4문장
+3. **시장 방향을 예측하지 마십시오.** "오를 것", "상승 전망", "반등 예상" 같은 표현을
+   쓰지 마십시오. market.conditions 는 예측이 아니라 **과거 빈도**입니다 —
+   "과거 같은 상황 N회 중 M%가 올랐습니다" 처럼 **과거형·표본 수 포함**으로만 쓰십시오.
+4. **조건부 확률을 쓸 땐 기준선(market.baseline.up_rate_1d)을 반드시 함께** 적으십시오.
+   기준선 없이 "67%"만 쓰면 시스템의 실력으로 오해됩니다 — 아무 조건 없이 세도
+   절반 이상이 오르는 시장입니다.
+5. 조건의 다음날 적중률이 높아도 avg_ret 이 기준선보다 낮으면 그 사실을 함께 쓰십시오
+   (방향이 이어져도 폭은 줄 수 있습니다).
+6. 출력은 JSON 하나만: {"headline": str, "market_view": str, "watchpoints": [str, ...]}
+   - headline: 오늘 시장을 요약하는 한 문장 (수치 기반, 전망 아님)
+   - market_view: 시장 폭·해외 변수·레짐·조건부 실측을 엮은 3~4문장
    - watchpoints: 오늘 픽/시장에서 주시할 점 2~4개 (각 1문장)"""
 
 
@@ -87,9 +95,19 @@ def build_context(as_of: str | None = None) -> dict:
         if r["as_of"] == latest_rep_day:
             dist[r["rating"]] = dist.get(r["rating"], 0) + 1
 
+    # 시장 폭 + 조건부 실측 — 시황을 '전망'이 아니라 '과거 빈도'로 말하기 위한 재료.
+    # 실패해도 브리프를 죽이지 않는다(직접 PG 불가 등) — 그 블록만 빠진다.
+    try:
+        from engine.market import breadth as _breadth
+        market = _breadth.build(today)
+    except Exception as e:  # noqa: BLE001
+        log.warning("reports.morning.breadth_failed", error=str(e)[:140])
+        market = None
+
     return {
         "as_of": today,
         "regime": regime[0],
+        "market": market,
         "macro": _macro_summary(),
         "picks": [
             {
@@ -106,15 +124,55 @@ def build_context(as_of: str | None = None) -> dict:
     }
 
 
+def _condition_sentence(c: dict, base: dict) -> str:
+    """조건 1건을 '과거 빈도' 문장으로. 기준선을 반드시 함께 — 없으면 실력으로 읽힌다."""
+    up = c.get("up_rate_1d")
+    b1 = base.get("up_rate_1d")
+    if up is None or b1 is None:
+        return f"{c['condition']} (과거 {c['n']}회)"
+    diff = (up - b1) * 100
+    tail = "기준선과 사실상 같습니다" if abs(diff) < 3 else (
+        f"기준선보다 {abs(diff):.0f}%p {'높습니다' if diff > 0 else '낮습니다'}")
+    return (f"{c['condition']} — 과거 같은 상황 {c['n']}회 중 다음날도 오른 경우가 "
+            f"{up*100:.0f}%였습니다(조건 없이 세면 {b1*100:.0f}%, {tail}).")
+
+
 def fallback_brief(ctx: dict) -> dict:
+    """LLM 없이도 '오늘'을 말하는 브리프.
+
+    이전 폴백은 레짐 라벨 + 픽 개수뿐이라 5일 연속 같은 문장이 나갔다
+    ("시장 레짐 위험선호 — 오늘의 포커스 5종목 플랜 유지."). 매일 바뀌는 수치
+    (시장 폭·조건부 빈도)를 넣어 폴백만으로도 내용이 서게 한다.
+    """
     rg = ctx.get("regime") or {}
     label = {"risk_on": "위험선호", "neutral": "중립", "risk_off": "위험회피"}.get(
         rg.get("regime", ""), "판단 보류"
     )
     picks = ctx.get("picks") or []
+    mk = ctx.get("market") or {}
+
+    if mk:
+        up, dn = mk.get("advancers"), mk.get("decliners")
+        headline = (f"오른 종목 {up:,}개 · 내린 종목 {dn:,}개 — 시장 레짐 {label}, "
+                    f"오늘의 포커스 {len(picks)}종목.")
+        base = mk.get("baseline") or {}
+        conds = mk.get("conditions") or []
+        view = [f"전 종목 동일가중 {mk['market_ret']*100:+.2f}%, "
+                f"오른 종목 비율 {mk['breadth']*100:.0f}%"
+                + (f"(전일 {mk['prev_breadth']*100:.0f}%)"
+                   if mk.get("prev_breadth") is not None else "") + "."]
+        view += [_condition_sentence(c, base) for c in conds]
+        if not conds:
+            view.append("오늘은 과거 빈도를 말할 만한 특이 조건이 없습니다 "
+                        f"(관측 {mk.get('lookback_days')}거래일 기준).")
+        market_view = " ".join(view)
+    else:
+        headline = f"시장 레짐 {label} — 오늘의 포커스 {len(picks)}종목 플랜 유지."
+        market_view = " · ".join(rg.get("drivers") or []) or "레짐 데이터 없음."
+
     return {
-        "headline": f"시장 레짐 {label} — 오늘의 포커스 {len(picks)}종목 플랜 유지.",
-        "market_view": " · ".join(rg.get("drivers") or []) or "레짐 데이터 없음.",
+        "headline": headline,
+        "market_view": market_view,
         "watchpoints": [
             f"{p['name']} 진입 {p['entry_price']:,.0f}원 / 손절 {p['stop_loss']:,.0f}원"
             for p in picks if p.get("entry_price") and p.get("stop_loss")

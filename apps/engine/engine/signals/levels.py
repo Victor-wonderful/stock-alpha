@@ -161,6 +161,7 @@ def compute_levels(
     market_close: datetime | None = None,
     max_position_pct: float = 25.0,
     setup: str | None = None,      # 손절 하한 적용 여부 판단용(STRUCT_FIRST_SETUPS)
+    tp_r_mults: tuple[float, ...] | None = None,   # 실험: 목표를 R(실제 손절 거리) 배수로
 ) -> Levels:
     if entry_price <= 0:
         raise ValueError("entry_price 는 양수여야 합니다.")
@@ -177,9 +178,21 @@ def compute_levels(
         side, entry_price, atr_stop, support, resistance, atr=atr, setup=setup,
     )
 
-    tps = tuple(entry_price + direction * m * atr for m in cfg.tp_atr_mults)
-
+    # ── 목표를 무엇에 묶을 것인가 ──
+    # 기본(tp_atr_mults): 목표 = 진입 ± ATR×배수. 손절과 **다른 자**를 쓴다.
+    #   실측 문제(2026-08-16, 발행 픽 94건): 포지션 설계는 손절 3.0×ATR·목표 3.0×ATR
+    #   = 손익비 1.0 인데, 손절이 _clamp_stop_to_structure 로 지지선까지 당겨져
+    #   **실제 중앙값 0.99×ATR**이 됐다. 목표는 3.0×ATR 에 묶여 그대로 남아 손익비가
+    #   3.0 으로 부풀었다. 손익비 3.0 은 방향성 없는 시장에서도 75%가 손절로 끝난다
+    #   — 아무도 그렇게 설계하지 않았는데 두 규칙이 각자 옳게 동작한 결과가 그렇다.
+    # tp_r_mults 를 주면: 목표 = 진입 ± R×배수 (R = 실제 손절 거리). 손절이 좁아지면
+    #   목표도 같이 당겨져 **두 레벨이 같은 자**를 쓴다.
     risk_per_share = abs(entry_price - stop)
+    if tp_r_mults and risk_per_share > 0:
+        tps = tuple(entry_price + direction * m * risk_per_share for m in tp_r_mults)
+    else:
+        tps = tuple(entry_price + direction * m * atr for m in cfg.tp_atr_mults)
+
     reward_to_tp1 = abs(tps[0] - entry_price)
     rr = reward_to_tp1 / risk_per_share if risk_per_share > 0 else 0.0
 

@@ -926,12 +926,45 @@ export async function getPortfolioDiagnosis(
 }
 
 // ── 모닝 브리프 (report_type='market') ──
+// 시장 폭 + 조건부 실측 — 엔진 engine/market/breadth.py 산출.
+// '예측'이 아니라 '과거 빈도'다. up_rate 를 보여줄 땐 baseline 을 반드시 함께 —
+// 조건 없이 세도 절반 이상 오르는 시장이라, 기준선이 빠지면 시스템 실력으로 읽힌다.
+export interface MarketCondition {
+  condition: string;
+  n: number;                  // 과거 성립 횟수 (표본)
+  up_rate_1d?: number;
+  avg_ret_1d?: number;
+  up_rate_5d?: number;
+  avg_ret_5d?: number;
+}
+
+export interface MarketBreadth {
+  as_of: string;
+  market_ret: number;         // 전 종목 동일가중 일간 수익률
+  breadth: number;            // 오른 종목 비율 0~1
+  advancers: number;
+  decliners: number;
+  unchanged: number;
+  instruments: number;
+  prev_breadth: number | null;
+  baseline: {
+    n: number;
+    up_rate_1d: number | null;
+    avg_ret_1d: number | null;
+    up_rate_5d: number | null;
+    avg_ret_5d: number | null;
+  };
+  conditions: MarketCondition[];
+  lookback_days: number;
+}
+
 export interface MorningBrief {
   as_of: string;
   headline: string;
   market_view: string;
   watchpoints: string[];
   regime: { regime: string; score: number; drivers: string[] } | null;
+  market: MarketBreadth | null;
   macro: {
     series: string;
     label: string;
@@ -1130,6 +1163,7 @@ export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
         market_view: (n.market_view as string) ?? "",
         watchpoints: (n.watchpoints as string[]) ?? [],
         regime: (p.regime as MorningBrief["regime"]) ?? null,
+        market: (p.market as MarketBreadth) ?? null,
         macro: (p.macro as MorningBrief["macro"]) ?? [],
         created_at: (row.created_at as string) ?? "",
       },
