@@ -98,13 +98,18 @@ def _trend(s: list[MarketDay], i: int, w: int = 20) -> float | None:
     return acc - 1
 
 
+# 라벨은 **완결된 한 문장**으로 쓴다 — 화면이 "{라벨} 과거 이런 날이 N번 있었는데…"
+# 로 이어 붙인다. 전문 용어를 라벨에 넣으면 화면에서 그대로 새어 나온다
+# (2026-08-16: "20거래일 누적 +5% 초과"가 그대로 노출돼 무슨 말인지 알 수 없었다).
 CONDITIONS: dict[str, callable] = {
-    "3거래일 연속 상승": lambda s, i: _streak(s, i, True, 3),
-    "3거래일 연속 하락": lambda s, i: _streak(s, i, False, 3),
-    "오른 종목이 70%를 넘음": lambda s, i: s[i].breadth > 0.70,
-    "내린 종목이 70%를 넘음": lambda s, i: s[i].breadth < 0.30,
-    "20거래일 누적 +5% 초과": lambda s, i: (t := _trend(s, i)) is not None and t > 0.05,
-    "20거래일 누적 -5% 미만": lambda s, i: (t := _trend(s, i)) is not None and t < -0.05,
+    "사흘 연속 올랐습니다": lambda s, i: _streak(s, i, True, 3),
+    "사흘 연속 내렸습니다": lambda s, i: _streak(s, i, False, 3),
+    "열 종목 중 일곱 이상이 올랐습니다": lambda s, i: s[i].breadth > 0.70,
+    "열 종목 중 일곱 이상이 내렸습니다": lambda s, i: s[i].breadth < 0.30,
+    "최근 한 달 시장이 5% 넘게 올랐습니다":
+        lambda s, i: (t := _trend(s, i)) is not None and t > 0.05,
+    "최근 한 달 시장이 5% 넘게 내렸습니다":
+        lambda s, i: (t := _trend(s, i)) is not None and t < -0.05,
 }
 
 
@@ -116,7 +121,7 @@ CONDITIONS: dict[str, callable] = {
 # 신선도: FRED(VIXCLS)는 2~3거래일 늦어 '어젯밤'을 못 말한다. 네이버(VIX_NAVER)가
 # 당일 종가를 준다. 과거 빈도는 이력이 긴 FRED 를 쓰고, 오늘 판정은 네이버를 쓴다.
 MACRO_CONDITIONS: dict[str, tuple[str, str]] = {
-    "VIX": ("공포지수(VIX)가 전일보다 상승", "up"),
+    "VIX": ("간밤에 미국 공포지수가 올랐습니다", "up"),
 }
 
 
@@ -173,10 +178,13 @@ def vix_condition(s: list[MarketDay], as_of: str) -> dict | None:
     if len(recent) < 2 or merged[recent[-1]] <= merged[recent[-2]]:
         return None
 
+    n_up = sum(1 for x in ups if x > 0)
     return {
         "condition": MACRO_CONDITIONS["VIX"][0],
         "n": len(ups),
-        "up_rate_1d": round(sum(1 for x in ups if x > 0) / len(ups), 4),
+        "up_count_1d": n_up,
+        "sample_1d": len(ups),
+        "up_rate_1d": round(n_up / len(ups), 4),
         "avg_ret_1d": round(sum(ups) / len(ups), 6),
         "detail": {
             "series": "VIX", "date": recent[-1],
@@ -215,7 +223,11 @@ def measure(s: list[MarketDay], label: str, fn, horizons=(1, 5)) -> dict | None:
         fw = [x for i in idx if (x := _forward(s, i, h)) is not None]
         if not fw:
             continue
-        rec[f"up_rate_{h}d"] = round(sum(1 for x in fw if x > 0) / len(fw), 4)
+        ups = sum(1 for x in fw if x > 0)
+        # 비율만 주면 화면이 "58%"로만 말하게 된다. 사람은 "55번 중 21번"을 더 잘 센다.
+        rec[f"up_count_{h}d"] = ups
+        rec[f"sample_{h}d"] = len(fw)
+        rec[f"up_rate_{h}d"] = round(ups / len(fw), 4)
         rec[f"avg_ret_{h}d"] = round(sum(fw) / len(fw), 6)
     return rec
 

@@ -930,8 +930,11 @@ export async function getPortfolioDiagnosis(
 // '예측'이 아니라 '과거 빈도'다. up_rate 를 보여줄 땐 baseline 을 반드시 함께 —
 // 조건 없이 세도 절반 이상 오르는 시장이라, 기준선이 빠지면 시스템 실력으로 읽힌다.
 export interface MarketCondition {
+  /** 완결된 한 문장(예: "간밤에 미국 공포지수가 올랐습니다") — 화면이 그대로 이어 붙인다. */
   condition: string;
   n: number;                  // 과거 성립 횟수 (표본)
+  up_count_1d?: number;       // 그중 다음날 오른 횟수 — 비율보다 이게 잘 읽힌다
+  sample_1d?: number;
   up_rate_1d?: number;
   avg_ret_1d?: number;
   up_rate_5d?: number;
