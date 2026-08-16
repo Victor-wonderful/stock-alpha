@@ -1,0 +1,47 @@
+{
+  "_note": [
+    "기관이 매년 새로 정하는 일정 — 규칙으로 계산할 수 없어서 손으로 채운다.",
+    "계산으로 확정되는 것(휴장일·파생 만기·KOSPI200 정기변경·NFP)은 코드가 만들므로",
+    "여기 적지 않는다. engine/market/calendar.py 의 computed_events 참조.",
+    "",
+    "여기에 날짜를 '추정해서' 넣지 말 것. 틀린 날짜는 없는 날짜보다 나쁘다 —",
+    "발행 억제가 엉뚱한 날에 걸리고, 아무도 그걸 눈치채지 못한다.",
+    "출처를 확인한 날짜만 넣고 source 에 어디서 봤는지 남긴다.",
+    "",
+    "필드:",
+    "  date              YYYY-MM-DD (필수)",
+    "  kind              rate_decision | macro_release | index_rebalance | ex_dividend",
+    "  title             화면에 그대로 보이는 이름 (필수)",
+    "  region            KR | US (기본 KR)",
+    "  severity          1 낮음 · 2 중간 · 3 높음 (기본 1)",
+    "  block_entry       true 면 신규 진입 픽을 막는다 (기본 false)",
+    "  block_days_before D-N 부터 막는다. 0 = 당일만. 상한 5 (기본 0)",
+    "  source            확인한 출처",
+    "",
+    "예시 (형식 참고용 — 실제 날짜를 확인해서 events 에 넣을 것):",
+    "  {\"date\": \"2026-01-15\", \"kind\": \"rate_decision\", \"title\": \"한국은행 금통위\",",
+    "   \"region\": \"KR\", \"severity\": 3, \"block_entry\": true, \"block_days_before\": 0,",
+    "   \"source\": \"한국은행 통화정책방향 결정회의 연간일정\"}"
+  ],
+  "_holidays_note": [
+    "거래소 휴장일정(연초 공지)을 여기 붙여넣는다. 과거 휴장일은 코드가 ohlcv 로",
+    "역산하므로 적을 필요가 없다 — 여기 적을 것은 **앞으로의 휴장일**이다.",
+    "",
+    "holidays_confirmed_through 는 '이 날짜까지 휴장 목록이 완전하다'는 선언이다.",
+    "이게 있어야 화면이 '8월 17일(월) 장 시작 전'처럼 날짜를 단정한다. 없으면 계속",
+    "'다음 거래일'로 흐리게 나온다 — 틀린 날짜를 자신 있게 쓰는 것보다 낫기 때문이다.",
+    "",
+    "예: \"holidays\": [\"2026-08-17\", \"2026-09-24\"],",
+    "    \"holidays_confirmed_through\": \"2026-12-31\""
+  ],
+  "holidays": [],
+  "holidays_confirmed_through": null,
+  "_not_holidays_note": [
+    "휴장 역산을 뒤집는 예외 — \"이 날은 장이 열렸다\".",
+    "역산 규칙은 '일봉 없는 평일 = 휴장'인데, 인제스트가 끝내 못 채운 날과 진짜",
+    "휴장이 구분되지 않는다. 잘못 잡힌 날짜를 확인했다면 여기에 넣는다.",
+    "예: [\"2026-07-08\", \"2026-07-09\"]"
+  ],
+  "not_holidays": [],
+  "events": []
+}
