@@ -106,10 +106,15 @@ def load_all_close_1d(bars: int = 160, active_only: bool = True) -> dict[int, li
     return out
 
 
-def load_latest_close_1d(active_only: bool = True) -> dict[int, float]:
+def load_latest_close_1d(
+    active_only: bool = True, as_of: str | None = None
+) -> dict[int, float]:
     """전 종목 최신 일봉 종가 → {instrument_id: close}. 단일 윈도우 쿼리.
 
     fundamental.runner._latest_close 의 종목별 호출(수천 왕복) 벌크 대체.
+
+    as_of: 주면 그 날짜 이하의 최신 종가(과거일 재현). 픽 백필처럼 '그때 알 수
+      있었던 것만' 써야 하는 경로에서 필수 — 최신 종가를 쓰면 미래 정보가 섞인다.
     """
     import psycopg
 
@@ -117,22 +122,23 @@ def load_latest_close_1d(active_only: bool = True) -> dict[int, float]:
         "join instruments i on i.id = o.instrument_id and i.active = true"
         if active_only else ""
     )
+    where_asof = "and o.ts::date <= %s" if as_of else ""
     sql = f"""
         select instrument_id, close from (
           select o.instrument_id, o.close,
                  row_number() over (partition by o.instrument_id order by o.ts desc) rn
           from ohlcv o {join}
-          where o.interval = '1d'
+          where o.interval = '1d' {where_asof}
         ) t where rn = 1
     """
     out: dict[int, float] = {}
     with psycopg.connect(_dsn()) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql)
+            cur.execute(sql, (as_of,) if as_of else ())
             for iid, close in cur:
                 if close is not None:
                     out[int(iid)] = float(close)
-    log.info("db_direct.latest_close", instruments=len(out))
+    log.info("db_direct.latest_close", instruments=len(out), as_of=as_of)
     return out
 
 

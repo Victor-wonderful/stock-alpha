@@ -41,6 +41,28 @@ PICKS_MAX_ENTRY_DRIFT = 0.05
 # 발행량 영향은 작다. 근본 원인(구조 손절 무제한)은 signals/levels.py 에서 고쳤고
 # 이건 그 안전망이다.
 PICKS_MIN_RR = 1.0
+
+# 픽 손절폭 상한. 손익비만으론 부족하다 — 손절 -40%·목표 +45% 는 손익비 1.1 로
+# 통과하지만 한 번 틀리면 원금의 40%가 날아간다. 손익비는 비율만 보고 절대 크기를
+# 안 본다.
+# levels.py 의 구조 손절 상한(1.5×ATR)이 근본 대책이지만 그건 ATR 상대값이라
+# 종목별로 -30% 가 나올 수 있다. 여기서 절대 상한을 한 번 더 건다.
+# 기준 -20% 근거: 전수 점검 999건에서 손절 -20% 초과는 82건(8.2%)이었고, 그
+# 구간이 "손절이 아니라 방치"로 판정된 구간이다(levels.py 주석).
+PICKS_MAX_STOP_PCT = 0.20
+
+# 이미 열려 있는 픽과 같은 종목은 다시 발행하지 않는다.
+# 2026-08-16 전수 점검: 111건 중 31건이 동일 플랜(같은 종목·진입·손절·목표) 재발행.
+# 픽 선정은 매일 후보를 새로 뽑는데 진입가가 아직 살아 있으면(_entry_actionable)
+# 어제 낸 그 플랜이 오늘도 상위에 들어 새 행으로 또 쌓인다. 인바디 48,000 플랜은
+# 5행이 되어 -5.09% 손절이 5번 집계됐다.
+# 더 나쁜 건 판정 불일치다 — resolve_pick_status 는 as_of 다음 봉부터 따라가므로
+# 늦게 실린 행은 앞선 행이 이미 맞은 손절을 건너뛴다. 한국알콜 13,580 동일 플랜
+# 4행 중 3행 손절(-4.55%)·1행 익절(+7.73%). 같은 계획인데 발행일만 다르면 성적이
+# 갈리는 건 트랙레코드가 아니다.
+# 실전에서도 같다 — 이미 들고 있는 종목을 매일 다시 사라고 할 순 없다.
+SUPPRESS_REPUBLISH_WHILE_OPEN = True
+
 # 매수 판정이 아니어도 픽 후보가 되는 점수 하한.
 # 60 → 50 완화(2026-06-11): 판정 체계(매수≥65/중립≥45)에서 50은 "중립 상위".
 # 60 기준으론 하루 후보가 1~2개라 포커스 5슬롯이 비어 다님 — 50이면 거래가능+
@@ -146,14 +168,19 @@ def passed_setups_from_rows(latest: dict[tuple[str, str], dict]) -> set[str]:
     return out
 
 
-def gate_expectancy_from_db() -> dict[tuple[str, str], float]:
-    """backtests 최신 행 기준 (setup,style)→expectancy_r — 복수 통과 스타일 중 선택용."""
+def gate_expectancy_from_db(as_of: str | None = None) -> dict[tuple[str, str], float]:
+    """backtests 최신 행 기준 (setup,style)→expectancy_r — 복수 통과 스타일 중 선택용.
+
+    as_of: 주면 그 날 이전 적재분만 — 과거일 백필의 시점 정합성(passed_combos_from_db 참조).
+    """
+    from engine.backtest.runner import _within, gate_cutoff
+    cutoff = gate_cutoff(as_of)
     latest: dict[tuple[str, str], dict] = {}
     for bt in sorted(
         select_all("backtests", "setup,style,expectancy_r,created_at"),
         key=lambda b: b.get("created_at") or "",
     ):
-        if bt.get("setup") and bt.get("style"):
+        if bt.get("setup") and bt.get("style") and _within(bt, cutoff):
             latest[(bt["setup"], bt["style"])] = bt
     return {
         k: float(bt["expectancy_r"])
@@ -220,6 +247,18 @@ def _rr_ok(row: dict, min_rr: float = PICKS_MIN_RR) -> bool:
     return float(rr) >= min_rr
 
 
+def _stop_width_ok(row: dict, max_pct: float = PICKS_MAX_STOP_PCT) -> bool:
+    """손절폭 절대 상한. 진입가·손절가 중 하나라도 없으면 통과(값 있을 때만 거른다).
+
+    손익비(_rr_ok)와 다른 축이다 — 손익비는 비율만, 이건 한 번 틀렸을 때의 절대
+    손실 크기를 본다. 손절 -40%/목표 +45% 는 손익비 1.1 로 통과하지만 발행하면 안 된다.
+    """
+    entry, stop = row.get("entry_price"), row.get("stop_loss")
+    if entry in (None, 0) or stop is None:
+        return True
+    return abs(float(entry) - float(stop)) / float(entry) <= max_pct
+
+
 def _entry_actionable(row: dict, close: float | None, max_drift: float) -> bool:
     """플랜 진입가가 현재 종가에서 max_drift 안쪽인가 (낡은 시그널 배제).
 
@@ -264,6 +303,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
                  close_by_id: dict[int, float | None] | None = None,
                  max_entry_drift: float = PICKS_MAX_ENTRY_DRIFT,
                  blocking: list[dict] | None = None,
+                 open_instrument_ids: set[int] | None = None,
                  ) -> list[dict]:
     """오늘의 포커스 선정 — 순수 함수. reports: 그날 발행 리포트 행(payload 포함).
 
@@ -277,6 +317,8 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
       넘게 벗어난 플랜(낡은 시그널)을 제외. 종가 미상은 검증 안 함(graceful).
     blocking: 그날 신규 진입을 막는 캘린더 이벤트(engine.market.calendar.blocking_events).
       시장 전체 이벤트(instrument_id 없음)면 그날은 빈 날, 종목 이벤트면 그 종목만 제외.
+    open_instrument_ids: 그 시점에 이미 열려 있는 픽의 종목 — 재발행 중복 방지
+      (SUPPRESS_REPUBLISH_WHILE_OPEN 주석 참조). 미주입이면 억제 안 함(하위호환).
     기준 미달이면 빈 리스트(빈 날 허용).
     """
     # 캘린더 억제 — 알려진 변동성 구간(동시만기 등)에는 신규 진입을 내지 않는다.
@@ -289,10 +331,13 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
     blocked_ids = {e["instrument_id"] for e in (blocking or [])
                    if e.get("instrument_id") is not None}
 
+    # 이미 보유(=열린 픽) 중인 종목은 후보에서 제외. 같은 거래를 매일 다시 세지 않는다.
+    held_ids = set(open_instrument_ids or ()) if SUPPRESS_REPUBLISH_WHILE_OPEN else set()
+
     risk_off = regime == "risk_off"
     cands = []
     for r in reports:
-        if r["instrument_id"] in blocked_ids:
+        if r["instrument_id"] in blocked_ids or r["instrument_id"] in held_ids:
             continue
         p = r.get("payload") or {}
         verdict = p.get("verdict") or {}
@@ -313,6 +358,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             and _plan_gate_ok(row, passed_combos)
             and _entry_actionable(row, close, max_entry_drift)
             and _rr_ok(row)
+            and _stop_width_ok(row)
         ]
         tradable = (p.get("tradability") or {}).get("passed", False)
         if not tradable or not plan:
@@ -499,25 +545,56 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
     return counts
 
 
-def _latest_close_map() -> dict[int, float]:
-    """전 종목 최신 종가 {iid: close} — 진입가 실행가능성 검증용. 직접 PG 우선, REST 폴백."""
+def _latest_close_map(as_of: str | None = None) -> dict[int, float]:
+    """전 종목 최신 종가 {iid: close} — 진입가 실행가능성 검증용. 직접 PG 우선, REST 폴백.
+
+    as_of: 주면 그 날짜 이하 최신 종가. 과거일 백필에서 오늘 종가로 '실행 가능'을
+      판정하면 미래를 보고 고르는 셈이라, 백필 경로는 반드시 as_of 를 넘긴다.
+    """
     from engine import db_direct
     if db_direct.available():
         try:
-            return db_direct.load_latest_close_1d()
+            return db_direct.load_latest_close_1d(as_of=as_of)
         except Exception as e:  # noqa: BLE001
             log.warning("picks.latest_close.direct_failed", error=str(e)[:140])
     out: dict[int, float] = {}
     client = get_client()
     for it in select_all("instruments", "id", eq={"active": True}):
-        px = (
+        q = (
             client.table("ohlcv").select("close")
             .eq("instrument_id", it["id"]).eq("interval", "1d")
-            .order("ts", desc=True).limit(1).execute()
-        ).data
+        )
+        if as_of:
+            q = q.lte("ts", f"{as_of}T23:59:59")
+        px = q.order("ts", desc=True).limit(1).execute().data
         if px and px[0].get("close") is not None:
             out[it["id"]] = float(px[0]["close"])
     return out
+
+
+def _open_instrument_ids(as_of: str) -> set[int]:
+    """as_of 시점에 아직 열려 있던 픽의 종목 id 집합 — 재발행 중복 방지용.
+
+    '그 시점 기준'으로 판정한다(closed_at 비교) — 과거일 백필에서도 당시 보유
+    상태를 그대로 재현하기 위해서다. 오늘 이미 청산된 픽이 과거 백필에서 열려
+    있던 것으로 잡히는 게 정상이다.
+    · as_of 당일 발행분은 제외(< as_of) — 같은 날 자기 자신을 막지 않도록.
+    · closed_at > as_of 만 '보유 중' — as_of 당일 청산됐다면 그날 종가 분석 시점엔
+      이미 나온 상태라 재진입을 막을 이유가 없다.
+    """
+    rows = (
+        get_client().table("recommendations")
+        .select("instrument_id,as_of,status,closed_at")
+        .eq("basket_type", "daily_focus").lt("as_of", as_of)
+        .execute()
+    ).data or []
+    held = {
+        int(r["instrument_id"]) for r in rows
+        if r.get("status") == "open" or (r.get("closed_at") or "") > as_of
+    }
+    if held:
+        log.info("reports.daily.picks.held", as_of=as_of, n=len(held))
+    return held
 
 
 def _calendar_blocking(as_of: str) -> list[dict]:
@@ -572,21 +649,27 @@ def select_and_store_picks(as_of: str) -> int:
     }
 
     # 최신 종가 맵 — 진입가 실행가능성 검증용(낡은 시그널 제외). 직접 PG 벌크 우선.
-    close_by_id = _latest_close_map()
+    # as_of 기준으로 자른다: 당일 배치에선 최신 종가와 같고(무해), 과거일 백필에선
+    # 미래 종가로 '실행 가능'을 판정하는 사고를 막는다.
+    close_by_id = _latest_close_map(as_of)
 
     # 캘린더 억제 — 동시만기처럼 미리 아는 변동성 구간에 신규 진입을 내지 않는다.
     # 캘린더가 비어 있으면 blocking 도 비어서 기존과 동일하게 동작한다(graceful).
     blocking = _calendar_blocking(as_of)
 
+    # 게이트·기대값도 as_of 기준으로 자른다. 당일 배치에선 최신과 같고(백테스트가
+    # 픽보다 먼저 돌아 당일분이 이미 들어 있다), 과거일 백필에선 '나중에 통과하게 된
+    # 조합'을 그때 알았던 것처럼 쓰는 사고를 막는다.
     picks = select_picks(
         rows,
-        passed_combos=passed_combos_from_db(),
-        expectancy_by_combo=gate_expectancy_from_db(),
+        passed_combos=passed_combos_from_db(as_of),
+        expectancy_by_combo=gate_expectancy_from_db(as_of),
         regime=regime,
         market_state=market_state,
         sector_by_id=sector_by_id,
         close_by_id=close_by_id,
         blocking=blocking,
+        open_instrument_ids=_open_instrument_ids(as_of),
     )
     log.info("reports.daily.picks.regime", as_of=as_of, regime=regime,
              market_state=market_state)
