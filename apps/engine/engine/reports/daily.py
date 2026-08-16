@@ -14,7 +14,7 @@
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from engine.backtest.event_backtest import _TIMEOUT_BARS
 from engine.db import get_client, select_all, upsert
@@ -109,6 +109,16 @@ def passed_setups_from_db() -> set[str]:
     """backtests 최신 행 기준 게이트 통과 셋업 집합 (재백테스트 없이 read).
 
     매트릭스(셋업×스타일) 이후: 어떤 스타일로든 통과하면 그 셋업 포함(셋업 단위 소비처용).
+
+    ⚠️ 스타일 없는 옛 행에 구조된 셋업을 걸러낸다. 2026-06-13 이전에는 스타일 구분이
+    없어 style=NULL 로 적재됐는데, 그 행이 (setup, "") 라는 별도 키로 살아남아 **지금
+    모든 스타일에서 탈락한 셋업을 통과로 만들고 있었다**(leader_trend·pullback — 둘 다
+    현재 position·swing 전부 FAIL 인데 두 달 전 행 덕에 트랙 A 리포트가 계속 나갔다).
+    메모리의 '61커밋 뒤처진 배포가 6주간 추세픽을 통과시킨' 사고와 같은 종류다.
+
+    그렇다고 style 없는 행을 통째로 버릴 수는 없다 — factor_composite 는 횡단면 전략이라
+    원래 스타일이 없다(cross_section.py). 그래서 **스타일별 판정이 하나라도 있는 셋업은
+    그것만 보고, 아예 없는 셋업만 스타일 없는 행으로 폴백**한다.
     """
     latest: dict[tuple[str, str], dict] = {}
     for bt in sorted(
@@ -118,7 +128,22 @@ def passed_setups_from_db() -> set[str]:
     ):
         if bt.get("setup"):
             latest[(bt["setup"], bt.get("style") or "")] = bt
-    return {setup for (setup, _s), bt in latest.items() if backtest_passed(bt)}
+    return passed_setups_from_rows(latest)
+
+
+def passed_setups_from_rows(latest: dict[tuple[str, str], dict]) -> set[str]:
+    """{(setup, style): 백테스트행} → 통과 셋업 집합. (순수 함수)
+
+    스타일별 판정이 있는 셋업은 스타일 없는 옛 행을 무시한다(위 docstring 참조).
+    """
+    has_style = {setup for (setup, style) in latest if style}
+    out: set[str] = set()
+    for (setup, style), bt in latest.items():
+        if setup in has_style and not style:
+            continue                       # 매트릭스 이전 행 — 이미 대체됐다
+        if backtest_passed(bt):
+            out.add(setup)
+    return out
 
 
 def gate_expectancy_from_db() -> dict[tuple[str, str], float]:
@@ -238,6 +263,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
                  max_per_sector: int = PICKS_MAX_PER_SECTOR,
                  close_by_id: dict[int, float | None] | None = None,
                  max_entry_drift: float = PICKS_MAX_ENTRY_DRIFT,
+                 blocking: list[dict] | None = None,
                  ) -> list[dict]:
     """오늘의 포커스 선정 — 순수 함수. reports: 그날 발행 리포트 행(payload 포함).
 
@@ -249,11 +275,25 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
       없으면 기존(점수 상위 N)과 동일 동작(graceful). 미주입(기본)이면 상한 미적용.
     close_by_id: {instrument_id: 최신 종가} — 주입 시 진입가가 현재가에서 max_entry_drift
       넘게 벗어난 플랜(낡은 시그널)을 제외. 종가 미상은 검증 안 함(graceful).
+    blocking: 그날 신규 진입을 막는 캘린더 이벤트(engine.market.calendar.blocking_events).
+      시장 전체 이벤트(instrument_id 없음)면 그날은 빈 날, 종목 이벤트면 그 종목만 제외.
     기준 미달이면 빈 리스트(빈 날 허용).
     """
+    # 캘린더 억제 — 알려진 변동성 구간(동시만기 등)에는 신규 진입을 내지 않는다.
+    # 보유 픽 청산은 manage_picks 가 따로 처리하므로 여기서 막아도 출구는 안 막힌다.
+    market_block = [e for e in (blocking or []) if e.get("instrument_id") is None]
+    if market_block:
+        log.info("reports.daily.picks.calendar_blocked",
+                 events=[e.get("title") for e in market_block])
+        return []
+    blocked_ids = {e["instrument_id"] for e in (blocking or [])
+                   if e.get("instrument_id") is not None}
+
     risk_off = regime == "risk_off"
     cands = []
     for r in reports:
+        if r["instrument_id"] in blocked_ids:
+            continue
         p = r.get("payload") or {}
         verdict = p.get("verdict") or {}
         close = (close_by_id or {}).get(r["instrument_id"])
@@ -480,6 +520,28 @@ def _latest_close_map() -> dict[int, float]:
     return out
 
 
+def _calendar_blocking(as_of: str) -> list[dict]:
+    """픽의 **진입일**에 신규 진입을 막는 캘린더 이벤트. 캘린더가 없으면 빈 목록.
+
+    판정 기준일은 as_of(종가일)가 아니라 그 다음 거래일이다 — 픽은 '종가 분석 →
+    다음 거래일 장전 플랜'이라 실제로 사는 날이 하루 뒤다. as_of 로 판정하면 만기일
+    당일에 발행을 막는 대신 만기 전날 발행을 막는 꼴이 된다(하루 어긋남).
+    """
+    from engine.market import calendar as cal
+    from engine.market.calendar_store import load_events, load_holidays
+
+    d = date.fromisoformat(as_of)
+    entry_day = cal.next_trading_day(d, load_holidays())
+    # 억제 선행일 상한만큼 뒤를 본다 — D-N 이벤트가 진입일에 걸릴 수 있으므로.
+    events = load_events(entry_day, entry_day + timedelta(days=cal.MAX_BLOCK_DAYS))
+    blocking = cal.blocking_events(entry_day, events)
+    if blocking:
+        log.info("reports.daily.calendar", as_of=as_of,
+                 entry_day=entry_day.isoformat(),
+                 blocking=[e.get("title") for e in blocking])
+    return blocking
+
+
 def select_and_store_picks(as_of: str) -> int:
     """해당 일자 발행 리포트에서 픽 선정·적재. 단독 재실행 가능(픽만 갱신).
 
@@ -512,6 +574,10 @@ def select_and_store_picks(as_of: str) -> int:
     # 최신 종가 맵 — 진입가 실행가능성 검증용(낡은 시그널 제외). 직접 PG 벌크 우선.
     close_by_id = _latest_close_map()
 
+    # 캘린더 억제 — 동시만기처럼 미리 아는 변동성 구간에 신규 진입을 내지 않는다.
+    # 캘린더가 비어 있으면 blocking 도 비어서 기존과 동일하게 동작한다(graceful).
+    blocking = _calendar_blocking(as_of)
+
     picks = select_picks(
         rows,
         passed_combos=passed_combos_from_db(),
@@ -520,6 +586,7 @@ def select_and_store_picks(as_of: str) -> int:
         market_state=market_state,
         sector_by_id=sector_by_id,
         close_by_id=close_by_id,
+        blocking=blocking,
     )
     log.info("reports.daily.picks.regime", as_of=as_of, regime=regime,
              market_state=market_state)

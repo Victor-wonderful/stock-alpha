@@ -10,6 +10,7 @@ from engine.reports.daily import (
     PICK_EXPIRE_DAYS,
     PICKS_MIN_SCORE,
     _pick_suppressed,
+    passed_setups_from_rows,
     resolve_pick_status,
     select_picks,
 )
@@ -381,3 +382,80 @@ def test_plan_eod_styles_excludes_day():
     plan = build_plan(signals, styles=EOD_STYLES)
     assert len(plan) == 1 and plan[0]["style"] == "swing"
     assert len(build_plan(signals)) == 2  # 필터 없으면 전체
+
+
+# ── 캘린더 억제 ───────────────────────────────────────────────────────
+# 미리 아는 변동성 구간(동시만기 등)에는 신규 진입을 내지 않는다. 보유 픽 청산은
+# manage_picks 가 따로 처리하므로 여기서 막아도 출구는 막히지 않는다.
+
+def _cal_event(*, iid: int | None = None, title: str = "선물·옵션 동시만기") -> dict:
+    return {"date": "2026-06-10", "kind": "expiry", "title": title,
+            "instrument_id": iid, "block_entry": True, "block_days_before": 0}
+
+
+def test_picks_empty_when_market_wide_event_blocks():
+    reports = [_report(1, "매수", 90.0), _report(2, "매수", 80.0)]
+    assert select_picks(reports) != []                      # 평소엔 발행된다
+    assert select_picks(reports, blocking=[_cal_event()]) == []
+
+
+def test_picks_unaffected_without_blocking():
+    """캘린더가 비어 있으면 기존과 동일하게 동작한다(graceful)."""
+    reports = [_report(1, "매수", 90.0)]
+    assert len(select_picks(reports, blocking=[])) == 1
+    assert len(select_picks(reports, blocking=None)) == 1
+
+
+def test_instrument_event_drops_only_that_instrument():
+    reports = [_report(1, "매수", 90.0), _report(2, "매수", 80.0)]
+    picks = select_picks(reports, blocking=[_cal_event(iid=1, title="실적발표")])
+    assert [p["instrument_id"] for p in picks] == [2]
+
+
+# ── 게이트 판정 읽기 ──────────────────────────────────────────────────
+# 스타일 구분이 생기기 전(2026-06-13 이전) 행이 style=NULL 로 남아 있다. 그 행이
+# 별도 키로 살아남아 "지금 모든 스타일에서 탈락한 셋업"을 통과로 만들고 있었다.
+
+def _bt(passed: bool, *, exp: float = 0.2, wr: float = 0.5, rr: float = 2.0,
+        mdd: float = 0.1) -> dict:
+    return {"passed": passed, "expectancy_r": exp, "win_rate": wr,
+            "avg_rr": rr, "mdd": mdd}
+
+
+def test_stale_styleless_row_cannot_rescue_failed_setup():
+    """leader_trend: 두 스타일 모두 탈락인데 두 달 전 style=NULL 행이 통과였다."""
+    rows = {
+        ("leader_trend", "position"): _bt(False),
+        ("leader_trend", "swing"): _bt(False),
+        ("leader_trend", ""): _bt(True),          # 매트릭스 이전 옛 행
+    }
+    assert "leader_trend" not in passed_setups_from_rows(rows)
+
+
+def test_setup_passing_on_one_style_is_included():
+    rows = {
+        ("breakout", "position"): _bt(True),
+        ("breakout", "swing"): _bt(False),
+    }
+    assert passed_setups_from_rows(rows) == {"breakout"}
+
+
+def test_styleless_setup_still_works():
+    """factor_composite 는 횡단면 전략이라 원래 스타일이 없다 — 버리면 안 된다."""
+    rows = {("factor_composite", ""): _bt(True)}
+    assert passed_setups_from_rows(rows) == {"factor_composite"}
+
+
+def test_styleless_setup_failing_is_excluded():
+    rows = {("factor_composite", ""): _bt(False)}
+    assert passed_setups_from_rows(rows) == set()
+
+
+def test_mixed_setups():
+    rows = {
+        ("leader_trend", "position"): _bt(False),
+        ("leader_trend", ""): _bt(True),
+        ("kalman", "position"): _bt(True),
+        ("factor_composite", ""): _bt(True),
+    }
+    assert passed_setups_from_rows(rows) == {"kalman", "factor_composite"}
