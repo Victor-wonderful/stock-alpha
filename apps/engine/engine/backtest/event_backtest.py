@@ -94,6 +94,7 @@ def backtest_playbook(
     costs: CostModel | None = None,
     style_override: TradeStyle | None = None,
     scaleout: bool = False,
+    tp_r_mults: tuple[float, ...] | None = None,
 ) -> list[Trade]:
     """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
 
@@ -152,7 +153,7 @@ def backtest_playbook(
             style=eff_style, side="buy", entry_price=cand.entry_ref,
             atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
             support=cand.support, resistance=cand.resistance,
-            setup=cand.setup,
+            setup=cand.setup, tp_r_mults=tp_r_mults,
         )
         entry = lv.entry_price
         stop = lv.stop_loss
