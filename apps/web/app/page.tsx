@@ -292,11 +292,7 @@ export default async function DashboardPage() {
             그 55%가 시스템 실력으로 읽힌다(components/MarketBrief 주석). */}
         {brief.data?.market && (
           <section className="mb-6 rounded-[12px] border border-border-soft bg-surface/40 p-5">
-            <MarketBrief
-              market={brief.data.market}
-              headline={brief.data.headline}
-              marketView={brief.data.market_view}
-            />
+            <MarketBrief market={brief.data.market} planDay={nextDay} />
           </section>
         )}
 
