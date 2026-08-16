@@ -125,16 +125,25 @@ def build_context(as_of: str | None = None) -> dict:
 
 
 def _condition_sentence(c: dict, base: dict) -> str:
-    """조건 1건을 '과거 빈도' 문장으로. 기준선을 반드시 함께 — 없으면 실력으로 읽힌다."""
+    """조건 1건을 '과거 빈도' 문장으로.
+
+    조건 라벨(breadth.CONDITIONS)이 이미 완결 문장이라 그대로 이어 붙인다.
+    비율만 말하지 않고 **횟수를 함께** 쓴다 — 사람은 "55번 중 21번"을 더 잘 센다.
+    기준선을 반드시 함께 — 없으면 시스템 실력으로 읽힌다.
+    """
     up = c.get("up_rate_1d")
     b1 = base.get("up_rate_1d")
-    if up is None or b1 is None:
-        return f"{c['condition']} (과거 {c['n']}회)"
+    n = c.get("sample_1d") or c.get("n")
+    cnt = c.get("up_count_1d")
+    if up is None or b1 is None or not n:
+        return f"{c['condition']} (과거 {c['n']}번)"
+    if cnt is None:
+        cnt = round(up * n)
     diff = (up - b1) * 100
-    tail = "기준선과 사실상 같습니다" if abs(diff) < 3 else (
-        f"기준선보다 {abs(diff):.0f}%p {'높습니다' if diff > 0 else '낮습니다'}")
-    return (f"{c['condition']} — 과거 같은 상황 {c['n']}회 중 다음날도 오른 경우가 "
-            f"{up*100:.0f}%였습니다(조건 없이 세면 {b1*100:.0f}%, {tail}).")
+    tail = ("아무 날이나 세는 것과 별 차이가 없습니다" if abs(diff) < 3
+            else "평소보다 " + ("높습니다" if diff > 0 else "낮습니다"))
+    return (f"{c['condition']} 과거 이런 날이 {n}번 있었는데, 그다음 한국 시장이 오른 건 "
+            f"{cnt}번({up*100:.0f}%)이었습니다. 아무 날이나 세면 {b1*100:.0f}% — {tail}.")
 
 
 def fallback_brief(ctx: dict) -> dict:
@@ -153,18 +162,14 @@ def fallback_brief(ctx: dict) -> dict:
 
     if mk:
         up, dn = mk.get("advancers"), mk.get("decliners")
-        headline = (f"오른 종목 {up:,}개 · 내린 종목 {dn:,}개 — 시장 레짐 {label}, "
-                    f"오늘의 포커스 {len(picks)}종목.")
+        headline = (f"오른 종목이 {up:,}개, 내린 종목이 {dn:,}개였습니다. "
+                    f"시장 레짐 {label}, 다음 거래일 플랜 {len(picks)}종목.")
         base = mk.get("baseline") or {}
         conds = mk.get("conditions") or []
-        view = [f"전 종목 동일가중 {mk['market_ret']*100:+.2f}%, "
-                f"오른 종목 비율 {mk['breadth']*100:.0f}%"
-                + (f"(전일 {mk['prev_breadth']*100:.0f}%)"
-                   if mk.get("prev_breadth") is not None else "") + "."]
+        view = [f"전 종목 평균 {mk['market_ret']*100:+.2f}%."]
         view += [_condition_sentence(c, base) for c in conds]
         if not conds:
-            view.append("오늘은 과거 빈도를 말할 만한 특이 조건이 없습니다 "
-                        f"(관측 {mk.get('lookback_days')}거래일 기준).")
+            view.append("과거와 뚜렷하게 다른 점은 없는 날입니다.")
         market_view = " ".join(view)
     else:
         headline = f"시장 레짐 {label} — 오늘의 포커스 {len(picks)}종목 플랜 유지."
