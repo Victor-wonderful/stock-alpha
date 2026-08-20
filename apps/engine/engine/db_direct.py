@@ -200,6 +200,34 @@ def trading_dates_1d(start: str, end: str, min_instruments: int = 50) -> set[str
     return out
 
 
+def flows_by_date(start: str, end: str) -> dict[str, dict[str, float]]:
+    """구간의 날짜별 시장 전체 수급 합 → {'YYYY-MM-DD': {'foreign': x, 'institution': y}}.
+
+    flows 는 종목×날짜라 REST 로 읽으면 한 주만 해도 수만 행이다(기존 regime.py 는
+    limit 2000 으로 잘라 최근 5일만 겨우 봤다). 주간 브리핑은 «몇 주째 순매도인가»를
+    세야 해서 여러 주가 필요하므로 합계를 DB 에서 낸다.
+    """
+    import psycopg
+
+    sql = """
+        select date::text,
+               coalesce(sum(foreign_net), 0)     as f,
+               coalesce(sum(inst_net), 0)          as i
+        from flows
+        where date >= %s and date <= %s
+        group by date
+        order by date
+    """
+    out: dict[str, dict[str, float]] = {}
+    with psycopg.connect(_dsn()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (start, end))
+            for d, f, i in cur:
+                out[d] = {"foreign": float(f), "institution": float(i)}
+    log.info("db_direct.flows_by_date", days=len(out), start=start, end=end)
+    return out
+
+
 def load_latest_financials_fy(active_only: bool = True) -> dict[int, dict]:
     """전 종목 최신 '연간(FY)' 재무 → {instrument_id: row dict}. 단일 윈도우 쿼리.
 

@@ -1,5 +1,7 @@
-import type { BlogPost } from "@/lib/data";
-import type { MacroSeriesView } from "@/lib/types";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import type { BlogPost, WeeklyReport } from "@/lib/data";
+import type { MacroSeriesView, ReportListItem } from "@/lib/types";
 import { SectionHead } from "@/components/SectionHead";
 
 /* ────────────────────────────────────────────────────────────
@@ -51,13 +53,64 @@ function PostRows({ posts }: { posts: BlogPost[] }) {
   );
 }
 
-/** 주간 브리핑 — 블로그 `view/weekly`. 매주 한 편. */
-export function WeeklyBriefs({ posts }: { posts: BlogPost[] }) {
-  if (posts.length === 0) return null;
+/** 엔진 주간 브리핑 행 — 블로그 글이 없을 때 이 자리를 채운다.
+ *  제목은 그 주 측정값에서 규칙으로 뽑은 것이라 전부 과거형·실측이다.
+ *  우측 메타는 읽는 시간이 아니라 그 주 시장 수익률 — 기계 요약에 "8분"은 거짓말이다. */
+function WeeklyReportRows({ items }: { items: WeeklyReport[] }) {
+  return (
+    <ul className="mt-6 overflow-hidden rounded-[12px] border border-border bg-surface">
+      {items.map((w, i) => (
+        <li
+          key={w.as_of}
+          className={`flex items-center gap-5 px-5 py-4 ${
+            i > 0 ? "border-t border-border-soft" : ""
+          }`}
+        >
+          <span className="tnum w-[46px] shrink-0 text-[12px] text-text-mute">
+            {w.as_of.slice(5).replace("-", ".")}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14.5px] font-bold leading-[1.5] text-text">{w.title}</p>
+            {w.summary && (
+              <p className="mt-1 truncate text-[12.5px] leading-[1.6] text-text-mute">
+                {w.summary}
+              </p>
+            )}
+          </div>
+          {w.market_ret != null && (
+            <span
+              className={`tnum shrink-0 text-[12.5px] font-semibold ${
+                w.market_ret >= 0 ? "text-good" : "text-bad"
+              }`}
+            >
+              {w.market_ret >= 0 ? "+" : ""}
+              {(w.market_ret * 100).toFixed(1)}%
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** 주간 브리핑 — 블로그 `view/weekly` 글. 없으면 엔진이 낸 주간 브리핑이 자리를 지킨다. */
+export function WeeklyBriefs({
+  posts,
+  reports,
+}: {
+  posts: BlogPost[];
+  reports: WeeklyReport[];
+}) {
+  const hasPosts = posts.length > 0;
+  if (!hasPosts && reports.length === 0) return null;
   return (
     <section className="mt-12">
-      <SectionHead title="주간 브리핑" href={sectionHref(posts)} />
-      <PostRows posts={posts} />
+      <SectionHead
+        title="주간 브리핑"
+        href={hasPosts ? sectionHref(posts) : "/market"}
+        linkLabel={hasPosts ? "전체 보기" : "시장 전체"}
+      />
+      {hasPosts ? <PostRows posts={posts} /> : <WeeklyReportRows items={reports} />}
     </section>
   );
 }
@@ -137,13 +190,77 @@ export function MacroSection({
   );
 }
 
-/** 최근 기업 분석 — 블로그 `stocks/analysis`. */
-export function RecentReports({ posts }: { posts: BlogPost[] }) {
-  if (posts.length === 0) return null;
+const RATING_VARIANT: Record<string, "bull" | "neutral" | "warn"> = {
+  매수: "bull",
+  중립: "neutral",
+  관망: "warn",
+};
+
+/** 엔진 리포트 행 — 블로그 심층분석이 없을 때 이 자리를 채운다.
+ *  블로그 글은 한 달에 한두 편이지만 이 리포트는 매일 100건씩 나온다. 자리를 비워두는 것보다
+ *  매일 갱신되는 판정을 보여주는 게 낫다. 우측 메타는 읽는 시간 대신 판정과 점수. */
+function ReportRows({ items }: { items: ReportListItem[] }) {
+  return (
+    <ul className="mt-6 overflow-hidden rounded-[12px] border border-border bg-surface">
+      {items.map((r, i) => (
+        <li key={r.id} className={i > 0 ? "border-t border-border-soft" : ""}>
+          <Link
+            href={`/reports/${r.id}`}
+            className="group flex items-center gap-5 px-5 py-4 transition-colors hover:bg-surface-2"
+          >
+            <span className="tnum w-[46px] shrink-0 text-[12px] text-text-mute">
+              {r.as_of.slice(5).replace("-", ".")}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14.5px] font-bold leading-[1.5] text-text group-hover:text-accent">
+                {r.name ?? r.title}
+                {r.symbol && (
+                  <span className="tnum ml-2 text-[11.5px] font-normal text-text-mute">
+                    {r.symbol}
+                  </span>
+                )}
+              </p>
+              {r.summary && (
+                <p className="mt-1 truncate text-[12.5px] leading-[1.6] text-text-mute">
+                  {r.summary}
+                </p>
+              )}
+            </div>
+            <span className="flex shrink-0 items-center gap-2.5">
+              {r.rating && (
+                <Badge variant={RATING_VARIANT[r.rating] ?? "neutral"} size="sm">
+                  {r.rating}
+                </Badge>
+              )}
+              {r.score != null && (
+                <span className="tnum text-[12px] text-text-mute">{r.score.toFixed(1)}점</span>
+              )}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** 최근 기업 분석 — 블로그 `stocks/analysis` 글. 없으면 엔진 리포트가 자리를 지킨다. */
+export function RecentReports({
+  posts,
+  reports,
+}: {
+  posts: BlogPost[];
+  reports: ReportListItem[];
+}) {
+  const hasPosts = posts.length > 0;
+  if (!hasPosts && reports.length === 0) return null;
   return (
     <section className="mt-12">
-      <SectionHead title="최근 기업 분석" href={sectionHref(posts)} />
-      <PostRows posts={posts} />
+      <SectionHead
+        title="최근 기업 분석"
+        href={hasPosts ? sectionHref(posts) : "/reports"}
+        linkLabel={hasPosts ? "전체 보기" : "분석 전체"}
+      />
+      {hasPosts ? <PostRows posts={posts} /> : <ReportRows items={reports} />}
     </section>
   );
 }

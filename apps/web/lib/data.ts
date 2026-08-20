@@ -1177,6 +1177,43 @@ export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
   }
 }
 
+// ── 주간 브리핑 (홈 주간 브리핑 섹션의 폴백) ──
+// 블로그의 view/weekly 글이 우선이고, 없으면 엔진이 발행한 주간 브리핑을 쓴다
+// (engine/reports/weekly.py — 제목을 그 주의 측정값에서 규칙으로 뽑는다).
+// 읽는 시간 자리에는 그 주의 시장 수익률을 놓는다 — 기계 요약에 "8분"은 거짓말이다.
+export interface WeeklyReport {
+  as_of: string;       // 그 주의 마지막 거래일
+  title: string;
+  summary: string | null;
+  market_ret: number | null;
+}
+
+export async function getWeeklyReports(limit = 3): Promise<WeeklyReport[]> {
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("reports")
+      .select("as_of,title,summary,payload")
+      .eq("report_type", "weekly")
+      .eq("status", "published")
+      .order("as_of", { ascending: false })
+      .limit(limit);
+    if (error || !data) throw error ?? new Error("none");
+    return (data as Record<string, unknown>[]).map((r) => {
+      const p = (r.payload ?? {}) as Record<string, unknown>;
+      const ret = p.market_ret;
+      return {
+        as_of: (r.as_of as string) ?? "",
+        title: (r.title as string) ?? "",
+        summary: (r.summary as string) ?? null,
+        market_ret: typeof ret === "number" ? ret : null,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 // ── 매크로 지표 (홈 매크로 섹션의 폴백) ──
 // 홈 매크로 섹션은 원래 블로그의 view/macro 글을 진열한다. 다만 그 글이 아직 0편이라
 // 섹션 자체가 사라졌다(2026-08-20). 세 섹션은 홈의 뼈대라 자리가 비면 안 되므로,

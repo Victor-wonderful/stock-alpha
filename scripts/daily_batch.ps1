@@ -24,3 +24,7 @@ Set-Location (Join-Path $root "apps\engine")
 # 공시 이벤트 축적 — DART 공시목록 분류 적재(이벤트 드리븐 알파 피드).
 & .\.venv\Scripts\python.exe -m engine.cli ingest-disclosures --days 3 *>> $log
 "disclosures exit=$LASTEXITCODE at $(Get-Date -Format o)" >> $log
+
+# 주간 브리핑 — 이번 주를 한 문장으로(홈 「주간 브리핑」). 같은 주는 덮어쓴다.
+& .\.venv\Scripts\python.exe -m engine.cli weekly *>> $log
+"weekly exit=$LASTEXITCODE at $(Get-Date -Format o)" >> $log
