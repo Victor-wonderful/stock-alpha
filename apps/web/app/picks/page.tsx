@@ -12,13 +12,16 @@ import { fmtPct, fmtPrice } from "@/lib/format";
 // 상태 → 배지 스타일
 const STATUS_BADGE: Record<string, string> = {
   "목표 도달": "bg-good-soft text-good",
+  // 진입가에 끝내 안 닿아 살 수 없었던 픽 — 이겼든 졌든 «거래가 아니다».
+  // 중립색으로 둔다. 성적처럼 읽히면 안 된다.
+  미체결: "bg-surface-3 text-text-mute",
   손절: "bg-bad-soft text-bad",
   진행중: "bg-warn-soft text-warn",
   만료: "bg-surface-3 text-text-dim",
   "—": "bg-surface-3 text-text-mute",
 };
 
-const FILTERS = ["전체", "진행중", "목표 도달", "손절", "만료"] as const;
+const FILTERS = ["전체", "진행중", "목표 도달", "손절", "만료", "미체결"] as const;
 
 export default async function PicksPage({
   searchParams,

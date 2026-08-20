@@ -443,6 +443,22 @@ def resolve_pick_status(
       블렌디드 = 0.5·tp1수익 + 0.5·잔량수익. 같은 봉서 1·2차 동시 실현 불허(보수적).
     tp2 없는 옛 픽 / 진입가 결손은 단일 tp1 청산.
 
+    ⚠️ **진입 체결을 먼저 확인한다**(2026-08-20 추가). 픽은 전일 종가를 진입가로 적어
+    발행되므로, 다음 날 그 가격 «이하로 내려와야» 실제로 살 수 있다. 예전에는 이 확인
+    없이 목표만 찍으면 승리로 셌다 — 아무도 못 산 승리가 성적표에 올랐다.
+
+    실측(48건): 손절 픽은 24/24 체결됐는데 목표 픽은 1/3 만 체결됐다. 오르는 종목은
+    갭업해 도망가고(목표 픽 다음날 시가 갭 평균 +6.4%), 내리는 종목만 진입가를 통과해
+    체결된 뒤 손절까지 간다. 지정가 진입이 «좋은 픽만 걸러내는» 필터로 작동한 것이다.
+    체결을 확인하면 승률이 11% → 4%(25건 중 1건)로 내려간다. 낮아진 게 아니라
+    원래 그랬던 것을 이제 제대로 세는 것이다.
+
+    체결 대기 기간은 픽 자신의 수명(타임아웃·만료)까지다 — 새 상수를 두지 않는다.
+    끝까지 안 닿으면 'unfilled'(미체결) 로 닫는다. 거래가 없었으므로 손익도 없다(None).
+
+    ⚠️ 남은 질문: 타임아웃을 as_of 부터 세는지 체결일부터 세는지. 지금은 as_of 기준
+    (플랜에는 유통기한이 있다)이지만, 체결 기준이 맞다는 주장도 가능하다. 미결정.
+
     bars: as_of **다음** 거래일부터 오늘까지의 일봉 [{low,high,close}, ...] 오름차순.
     """
     if not bars:
@@ -461,9 +477,18 @@ def resolve_pick_status(
     last_cl = _bar_lhc(bars[-1])[2]
 
     # ── 옛 픽(tp2 없음) 또는 진입가 결손 → 단일 청산 ──
+    # 진입가가 없는 픽은 체결 여부를 물을 수 없다 → 예전 동작 그대로(체결된 셈).
     if t2 is None or e is None:
+        filled = e is None
         for k, bar in enumerate(bars):
             lo, hi, cl = _bar_lhc(bar)
+            if not filled:
+                if lo <= e:
+                    filled = True          # 같은 봉에서 손절까지 갔는지 이어서 본다(보수적)
+                elif k + 1 >= timeout:
+                    return _close_patch("unfilled", today, cl, None)
+                else:
+                    continue
             if s is not None and lo <= s:
                 return _close_patch("stopped", today, s, (s / e - 1) if e else None)
             if t1 is not None and hi >= t1:
@@ -471,14 +496,25 @@ def resolve_pick_status(
             if k + 1 >= timeout:
                 return _close_patch("expired", today, cl, (cl / e - 1) if e else None)
         if cal_expired:
+            if not filled:
+                return _close_patch("unfilled", today, last_cl, None)
             return _close_patch("expired", today, last_cl, (last_cl / e - 1) if e else None)
         return None
 
     tp1_hit = bool(pick.get("tp1_hit"))
     tp1_ret = (t1 / e - 1) if t1 is not None else 0.0
+    # tp1 을 이미 맞은 픽은 과거에 체결된 것이다(그때 진입 없이 익절될 수 없다).
+    filled = tp1_hit
 
     for k, bar in enumerate(bars):
         lo, hi, cl = _bar_lhc(bar)
+        if not filled:
+            if lo <= e:
+                filled = True              # 같은 봉의 손절/목표를 이어서 본다(보수적)
+            elif k + 1 >= timeout:
+                return _close_patch("unfilled", today, cl, None)
+            else:
+                continue
         if not tp1_hit:
             if s is not None and lo <= s:                  # 손절(전량)
                 return _close_patch("stopped", today, s, s / e - 1)
@@ -501,6 +537,8 @@ def resolve_pick_status(
                                     0.5 * tp1_ret + 0.5 * (cl / e - 1))
 
     # ── 봉 소진(타임아웃 미도달) ──
+    if cal_expired and not filled:                         # 끝내 진입가에 안 닿음
+        return _close_patch("unfilled", today, last_cl, None)
     if cal_expired:                                        # 캘린더 안전망 만료(잔량 종가)
         base = (0.5 * tp1_ret + 0.5 * (last_cl / e - 1)) if tp1_hit else (last_cl / e - 1)
         return _close_patch("expired", today, last_cl, base)
@@ -521,7 +559,7 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
     ).data or []
 
     counts = {"target": 0, "stopped": 0, "expired": 0, "partial": 0,
-              "tp1_hit": 0, "open": 0}
+              "unfilled": 0, "tp1_hit": 0, "open": 0}
     for p in open_picks:
         # 진입(as_of) 다음 거래일부터의 일봉을 시간순으로 — 장중 고가/저가 터치 판정용.
         ao = date.fromisoformat(str(p["as_of"]))
