@@ -189,27 +189,117 @@ def gate_expectancy_from_db(as_of: str | None = None) -> dict[tuple[str, str], f
     }
 
 
+def setup_priority_from_db() -> dict[str, float]:
+    """셋업 → 최신 백테스트 기대값(R). 셋업 간 «누가 더 나은가»의 유일한 공통 자다.
+
+    라운드로빈이 상한에서 잘릴 때 남는 자리를 어느 셋업에 줄지 정하는 데 쓴다.
+    없으면 0.0 — 알파벳 순으로 밀리지 않도록 동점 처리만 한다.
+    """
+    best: dict[str, float] = {}
+    for bt in select_all("backtests", "setup,expectancy_r,passed,created_at"):
+        st = bt.get("setup")
+        if not st or not bt.get("passed"):
+            continue
+        e = bt.get("expectancy_r")
+        if e is None:
+            continue
+        best[st] = max(best.get(st, float("-inf")), float(e))
+    return best
+
+
+def _load_track_a_signals(passed: set[str]) -> list[dict]:
+    """게이트 통과 셋업의 EOD 매수 시그널 **전량** (페이지네이션).
+
+    ⚠️ 필터를 DB 에서 건다. 예전에는 `.limit(2000)` 로 강도 상위만 받아 파이썬에서
+    걸렀는데 두 가지가 겹쳐 조용히 망가져 있었다(2026-08-20 실측):
+
+      ① PostgREST 기본 응답 상한이 1000 이라 2000 을 요청해도 1000행만 온다.
+      ② 그 1000행은 강도 내림차순이라 최저 강도가 0.800 이었고, 절반 이상이
+         게이트를 «통과하지 못한» 셋업이었다(leader_trend 278·bayes 64·markov 59…).
+         게이트 필터가 그 뒤 파이썬에서 걸리므로, 강도 낮은 통과 셋업은
+         파이썬에 도달조차 못 했다.
+
+    그 결과 통과 9셋업 중 6셋업(flow_accumulation·vol_squeeze·pivot·anchor_pullback·
+    double_bottom·capitulation)이 후보 0건이었다. double_bottom 은 기대값 +0.489R 로
+    전 셋업 1위인데 강도 0.600 이라 두 건 모두 잘렸다.
+
+    동점 정렬 안정화를 위해 id 를 2차 키로 둔다 — 강도 0.600 이 수백 건이라
+    2차 키가 없으면 페이지 경계에서 행이 중복되거나 누락된다.
+    """
+    if not passed:
+        return []
+    client = get_client()
+    out: list[dict] = []
+    start, page = 0, 1000
+    while True:
+        res = (
+            client.table("signals")
+            .select("id,setup,style,strength,instruments(symbol,active)")
+            .eq("signal_type", "buy")
+            .in_("setup", sorted(passed))
+            .in_("style", list(EOD_STYLES))
+            .order("strength", desc=True).order("id")
+            .range(start, start + page - 1).execute()
+        ).data or []
+        out.extend(res)
+        if len(res) < page:
+            break
+        start += page
+    log.info("reports.track_a.signals", rows=len(out), setups=len(passed))
+    return out
+
+
 def track_a_symbols(passed: set[str]) -> list[str]:
-    """트랙 A — 게이트 통과 셋업의 EOD 매수 시그널 보유 종목 (강도순)."""
-    rows = (
-        get_client().table("signals")
-        .select("setup,style,strength,instruments(symbol,active)")
-        .eq("signal_type", "buy")
-        .order("strength", desc=True).limit(2000).execute()
-    ).data or []
-    out: list[str] = []
-    seen: set[str] = set()
-    for r in rows:
+    """트랙 A — 게이트 통과 셋업의 EOD 매수 시그널 보유 종목.
+
+    ⚠️ **셋업별 라운드로빈**이다. 전역 강도순이 아니다(2026-08-20 변경).
+
+    왜: strength 는 셋업 «안에서» 계산된 상대값이라 셋업끼리 비교할 수 없다.
+    markov 는 신호가 나면 무조건 1.000, median·pivot 은 무조건 0.600 을 준다.
+    한 줄로 세워 상위 100 을 자르면 markov 59건이 통째로 들어가고 median 433건은
+    전부 탈락한다 — 실제로 2026-08-20 발행 100건이 markov·ensemble·sortino
+    세 셋업으로만 채워졌고, 게이트를 통과한 나머지 8조합은 리포트가 0건이었다.
+    게이트가 13개를 통과시켰는데 발행은 3개만 하는, 게이트가 무력화된 상태였다.
+    (double_bottom:position 은 기대값 +0.489R 로 1위인데 강도 0.600 이라 잘렸다)
+
+    각 셋업의 1등 → 각 셋업의 2등 → … 순으로 섞는다. 후보가 2건뿐인 셋업은
+    2바퀴만 기여하고 빠지므로, 큰 셋업이 남은 자리를 자연히 채운다.
+    같은 바퀴 안의 순서는 백테스트 기대값이 높은 셋업부터 — 상한에서 잘릴 때
+    남는 한 자리가 더 나은 셋업에 가도록.
+    """
+    rows = _load_track_a_signals(passed)
+
+    by_setup: dict[str, list[str]] = {}
+    seen_per_setup: dict[str, set[str]] = {}
+    for r in rows:                                   # 이미 강도 내림차순
         inst = r.get("instruments") or {}
         sym = inst.get("symbol")
-        if (
-            r.get("setup") in passed
-            and r.get("style") in EOD_STYLES
-            and inst.get("active")
-            and sym and sym not in seen
-        ):
-            seen.add(sym)
-            out.append(sym)
+        setup = r.get("setup")
+        if not (setup in passed and r.get("style") in EOD_STYLES
+                and inst.get("active") and sym):
+            continue
+        seen = seen_per_setup.setdefault(setup, set())
+        if sym in seen:                              # 같은 셋업 내 중복 스타일
+            continue
+        seen.add(sym)
+        by_setup.setdefault(setup, []).append(sym)
+
+    if not by_setup:
+        return []
+    prio = setup_priority_from_db()
+    order = sorted(by_setup, key=lambda st: (-prio.get(st, 0.0), st))
+
+    out: list[str] = []
+    picked: set[str] = set()
+    depth = 0
+    longest = max(len(v) for v in by_setup.values())
+    while depth < longest:
+        for setup in order:
+            lst = by_setup[setup]
+            if depth < len(lst) and lst[depth] not in picked:
+                picked.add(lst[depth])
+                out.append(lst[depth])
+        depth += 1
     return out
 
 
