@@ -23,7 +23,7 @@ function sectionHref(posts: BlogPost[]): string | undefined {
   return u ? u.replace(/\/[^/]+$/, "") : undefined;
 }
 
-function PostRows({ posts }: { posts: BlogPost[] }) {
+export function BlogPosts({ posts }: { posts: BlogPost[] }) {
   return (
     <ul className="mt-6 overflow-hidden rounded-[12px] border border-border bg-surface">
       {posts.map((p, i) => (
@@ -97,9 +97,13 @@ function WeeklyReportRows({ items }: { items: WeeklyReport[] }) {
 export function WeeklyBriefs({
   posts,
   reports,
+  // 홈에서는 「전체 보기 → /insights」. 인사이트 페이지 자신은 null 을 줘서 링크를 없앤다
+  // (자기 자신을 가리키는 «전체 보기»는 막다른 길이다).
+  moreHref = "/insights",
 }: {
   posts: BlogPost[];
   reports: WeeklyReport[];
+  moreHref?: string | null;
 }) {
   const hasPosts = posts.length > 0;
   if (!hasPosts && reports.length === 0) return null;
@@ -107,10 +111,9 @@ export function WeeklyBriefs({
     <section className="mt-12">
       <SectionHead
         title="주간 브리핑"
-        href={hasPosts ? sectionHref(posts) : "/market"}
-        linkLabel={hasPosts ? "전체 보기" : "시장 전체"}
+        href={moreHref ?? undefined}
       />
-      {hasPosts ? <PostRows posts={posts} /> : <WeeklyReportRows items={reports} />}
+      {hasPosts ? <BlogPosts posts={posts} /> : <WeeklyReportRows items={reports} />}
     </section>
   );
 }
@@ -172,9 +175,11 @@ function MacroRows({ items }: { items: MacroSeriesView[] }) {
 export function MacroSection({
   posts,
   indicators,
+  moreHref = "/insights",
 }: {
   posts: BlogPost[];
   indicators: MacroSeriesView[];
+  moreHref?: string | null;
 }) {
   const hasPosts = posts.length > 0;
   if (!hasPosts && indicators.length === 0) return null;
@@ -182,10 +187,9 @@ export function MacroSection({
     <section className="mt-12">
       <SectionHead
         title="매크로"
-        href={hasPosts ? sectionHref(posts) : "/market"}
-        linkLabel={hasPosts ? "전체 보기" : "시장 전체"}
+        href={moreHref ?? undefined}
       />
-      {hasPosts ? <PostRows posts={posts} /> : <MacroRows items={indicators} />}
+      {hasPosts ? <BlogPosts posts={posts} /> : <MacroRows items={indicators} />}
     </section>
   );
 }
@@ -260,7 +264,7 @@ export function RecentReports({
         href={hasPosts ? sectionHref(posts) : "/reports"}
         linkLabel={hasPosts ? "전체 보기" : "분석 전체"}
       />
-      {hasPosts ? <PostRows posts={posts} /> : <ReportRows items={reports} />}
+      {hasPosts ? <BlogPosts posts={posts} /> : <ReportRows items={reports} />}
     </section>
   );
 }
