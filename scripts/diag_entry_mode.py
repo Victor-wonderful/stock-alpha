@@ -89,7 +89,9 @@ def main() -> int:
         [(s, st) for s in playbooks.ALL_DETECTORS for st in playbooks.testable_styles(s)]
         if args.all else FOCUS
     )
-    print(f"조합 {len(combos)}개 × 모드 {len(MODES)}\n")
+    # 이미 끝난 조합은 건너뛴다 — 중간에 끊겨도 이어서 돌 수 있게.
+    combos = [c for c in combos if tuple(c) not in done]
+    print(f"남은 조합 {len(combos)}개 × 모드 {len(MODES)}\n")
 
     hdr = f"{'셋업':<18}{'스타일':<10}{'모드':<8}{'거래수':>8}{'승률':>8}{'손익비':>8}{'기대값R':>9}  게이트"
     print(hdr, flush=True)
