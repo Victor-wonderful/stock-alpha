@@ -34,9 +34,9 @@ export function MiniSnowflake({
       aria-label={axes.map((a) => `${a.label} ${a.score}`).join(", ")}
     >
       <title>{axes.map((a) => `${a.label} ${a.score}`).join(" · ")}</title>
-      <polygon points={ring(1)} fill="none" stroke="rgba(255,255,255,0.12)" />
-      <polygon points={ring(0.5)} fill="none" stroke="rgba(255,255,255,0.07)" />
-      <polygon points={data} fill="rgba(198,242,78,0.20)" stroke={weak ? "#E8C45A" : "#C6F24E"} strokeWidth={1.5} />
+      <polygon points={ring(1)} fill="none" stroke="rgba(23,26,43,0.12)" />
+      <polygon points={ring(0.5)} fill="none" stroke="rgba(23,26,43,0.07)" />
+      <polygon points={data} fill="rgba(89,89,228,0.14)" stroke={weak ? "#B45309" : "#5959E4"} strokeWidth={1.5} />
     </svg>
   );
 }

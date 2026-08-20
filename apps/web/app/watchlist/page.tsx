@@ -80,7 +80,7 @@ export default function WatchlistPage() {
                       <span
                         className={`mr-1.5 rounded-[999px] px-2 py-0.5 text-[10px] font-bold ${
                           r.rating === "매수"
-                            ? "bg-accent text-[#0B0C10]"
+                            ? "bg-accent text-text-on-accent"
                             : r.rating === "중립"
                               ? "bg-surface-3 text-text-dim"
                               : "border border-border text-text-mute"

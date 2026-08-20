@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { GNB } from "@/components/GNB";
 import { MarketBrief } from "@/components/MarketBrief";
+import { HomeHero } from "@/components/HomeHero";
+import { WeeklyBriefs, MacroSection, RecentReports } from "@/components/HomeSections";
 import {
   getDashboardKpi,
   getMarketQuotes,
@@ -12,6 +14,9 @@ import {
   getNewsEvents,
   getOpenPicks,
   getNextTradingDay,
+  getBlogPosts,
+  pickBlogPosts,
+  getMacroSeries,
 } from "@/lib/data";
 import {
   fmtPrice,
@@ -178,6 +183,16 @@ export default async function DashboardPage() {
   // 진행중인 픽 — 어제·그제 추천이 지금 어디쯤 와 있나. 홈에 없던 블록이다.
   const openPicks = await getOpenPicks(30);
 
+  // 홈 하단 3섹션 — 서로 독립이라 한 번에 병렬로 읽는다(직렬이면 왕복이 3배다).
+  // 홈 하단 3섹션은 vecta-blog 가 쓴 글이다. 목록 피드 한 번만 읽고 셋으로 나눈다.
+  // 매크로만 폴백이 있다 — 아직 매크로 글이 0편이라 글이 생길 때까지 지표로 자리를 지킨다.
+  // 원/달러(DEXKOUS)는 뺀다: 상단 티커가 네이버 당일 고시환율로 같은 값을 이미 보여주는데
+  // FRED DEXKOUS 는 며칠 지연돼 한 화면에 1,390 과 1,414 가 동시에 뜬다(2026-08-20 실측).
+  const [blogPosts, macroIndicators] = await Promise.all([
+    getBlogPosts(),
+    getMacroSeries(["DEXKOUS"]),
+  ]);
+
   // 현재가·전일대비 — 추천 5건을 벌크 1회로 가져온다(예전엔 종목당 1회, 5왕복).
   // 홈에서 '분석한 종목 전체' 목록을 걷어내며 리포트 심볼 조회도 함께 뺐다.
   const previewPicks = picks.slice(0, 5);
@@ -236,6 +251,8 @@ export default async function DashboardPage() {
       </div>
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-7 pb-10 pt-9">
+        <HomeHero />
+
         {/* ── 오늘의 판단 ──
             예전엔 "홈" 이라는 제목과 KPI 상자 4개로 시작했다. 제목은 정보가 0이고
             KPI 는 자기자랑("리포트 100건 발행")이라 정작 상품인 픽이 세 번째로 밀렸다.
@@ -261,14 +278,14 @@ export default async function DashboardPage() {
               {/* 분석 시점을 못 박는다. '오늘'로 뭉뚱그리면 토요일에 보는 사람에게
                   금요일 장마감 산출물이 오늘 것처럼 읽힌다. */}
               {asOf ? `${asOf} 장마감(16:30) 분석` : "장마감 분석"}
-              <span className="mx-2 text-border-strong">│</span>
+              <span aria-hidden className="mx-2 text-border-strong">│</span>
               기준을 통과한 종목만 추천에 오릅니다
             </p>
           </div>
 
           <Link
             href="/focus"
-            className="whitespace-nowrap rounded-[12px] bg-accent px-5 py-2.5 text-[14px] font-semibold text-[#0B0C10] transition-colors hover:bg-accent-2"
+            className="whitespace-nowrap rounded-[12px] bg-accent px-5 py-2.5 text-[14px] font-semibold text-text-on-accent transition-colors hover:bg-accent-2"
           >
             추천 종목 전체 보기
           </Link>
@@ -597,6 +614,16 @@ export default async function DashboardPage() {
             </Link>
           </dl>
         </div>
+
+        {/* ── 홈 하단 3섹션 ──
+            추천(상품)을 먼저 보여주고, 그 아래에 맥락과 아카이브를 둔다.
+            순서: 주간 브리핑(무슨 일이 있었나) → 매크로(바깥 조건) → 최근 기업분석(쌓인 것). */}
+        <WeeklyBriefs posts={pickBlogPosts(blogPosts, "view", "weekly", 3)} />
+        <MacroSection
+          posts={pickBlogPosts(blogPosts, "view", "macro", 3)}
+          indicators={macroIndicators}
+        />
+        <RecentReports posts={pickBlogPosts(blogPosts, "stocks", "analysis", 3)} />
 
         {/* 면책 고지 */}
         <p className="mt-8 text-center text-[11px] leading-relaxed text-text-mute">

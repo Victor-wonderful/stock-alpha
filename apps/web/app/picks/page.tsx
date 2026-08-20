@@ -111,7 +111,7 @@ export default async function PicksPage({
               href={f === "전체" ? "/picks" : `/picks?status=${encodeURIComponent(f)}`}
               className={`rounded-[999px] border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                 filter === f
-                  ? "border-accent bg-accent text-[#0B0C10]"
+                  ? "border-accent bg-accent text-text-on-accent"
                   : "border-border bg-surface-2 text-text-dim hover:text-text"
               }`}
             >

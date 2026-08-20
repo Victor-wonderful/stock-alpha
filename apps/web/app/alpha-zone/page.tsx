@@ -22,7 +22,7 @@ export default async function AlphaZonePage() {
       title="추천"
       subtitle="현재가가 진입가 부근에 도달한 종목 — 검증 패턴이 가리키는 ‘지금 진입하기 좋은 자리’"
       badge={
-        <span className="flex items-center gap-1.5 rounded-[999px] bg-accent/15 px-3 py-1 text-[11px] font-bold text-accent">
+        <span className="flex items-center gap-1.5 rounded-[999px] bg-accent-soft px-3 py-1 text-[11px] font-bold text-accent">
           존 진입 {cards.length}종목
         </span>
       }
@@ -40,7 +40,7 @@ export default async function AlphaZonePage() {
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
         <ZoneKey color="rgba(46,189,133,0.85)" label="목표 존 (진입→목표)" />
         <ZoneKey color="rgba(61,123,255,0.85)" label="알파 존 (진입→손절)" />
-        <ZoneKey color="#f6465d" label="손절선" line />
+        <ZoneKey color="#1F5FD0" label="손절선" line />
         <span className="ml-auto text-text-mute">
           정렬: 강도순 · 진입가 근접 우선
         </span>

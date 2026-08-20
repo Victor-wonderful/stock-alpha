@@ -45,7 +45,7 @@ function entryStatus(
   if (diff > 0.05)
     return { label: `무효 · 진입가 +${(diff * 100).toFixed(1)}% 이탈`, cls: "bg-bad-soft text-bad", icon: "⚠", alert: "진입가 이탈 — 되돌림 대기" };
   if (Math.abs(diff) <= 0.02)
-    return { label: "지금 진입 타이밍", cls: "bg-accent text-[#0B0C10]", icon: "🟢", alert: "지금 진입가 부근 — 목표·손절 도달 시 알림" };
+    return { label: "지금 진입 타이밍", cls: "bg-accent text-text-on-accent", icon: "🟢", alert: "지금 진입가 부근 — 목표·손절 도달 시 알림" };
   return {
     label: `진입 대기 · ${diff >= 0 ? "+" : ""}${(diff * 100).toFixed(1)}%`,
     cls: "bg-warn-soft text-warn",
@@ -105,7 +105,7 @@ export function PickCard({
         {/* 순위 필 */}
         <span
           className={`grid h-7 w-7 shrink-0 place-items-center rounded-[8px] text-xs font-extrabold ${
-            isFirst ? "bg-accent text-[#0B0C10]" : "bg-surface-3 text-text-mute"
+            isFirst ? "bg-accent text-text-on-accent" : "bg-surface-3 text-text-mute"
           }`}
         >
           {rank}
@@ -170,7 +170,7 @@ export function PickCard({
               >
                 {value}
               </p>
-              {sub && <p className="tnum mt-0.5 text-[10px] text-good/70">{sub}</p>}
+              {sub && <p className="tnum mt-0.5 text-[10px] text-good">{sub}</p>}
             </div>
           ))}
         </div>

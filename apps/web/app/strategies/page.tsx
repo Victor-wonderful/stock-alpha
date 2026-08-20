@@ -283,7 +283,7 @@ export default async function StrategiesPage() {
                         {b.style ? (STYLE_LABEL[b.style] ?? b.style) : "—"}
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <Badge variant={b.passed ? "bull" : "bear"} size="md">
+                        <Badge variant={b.passed ? "pass" : "fail"} size="md">
                           {b.passed ? "통과" : "미통과"}
                         </Badge>
                         {!b.passed && failReason(b) && (
@@ -324,7 +324,7 @@ export default async function StrategiesPage() {
                     </td>
                     <td className="px-3 py-2.5 text-center text-2xs text-text-dim">—</td>
                     <td className="px-3 py-2.5 text-center">
-                      <Badge variant={factor.passed ? "bull" : "bear"} size="md">
+                      <Badge variant={factor.passed ? "pass" : "fail"} size="md">
                         {factor.passed ? "통과" : "미통과"}
                       </Badge>
                     </td>

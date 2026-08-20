@@ -1177,6 +1177,106 @@ export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
   }
 }
 
+// ── 매크로 지표 (홈 매크로 섹션의 폴백) ──
+// 홈 매크로 섹션은 원래 블로그의 view/macro 글을 진열한다. 다만 그 글이 아직 0편이라
+// 섹션 자체가 사라졌다(2026-08-20). 세 섹션은 홈의 뼈대라 자리가 비면 안 되므로,
+// 글이 없는 동안은 같은 행 형태로 «지표»를 보여준다. 글이 생기면 글이 이긴다.
+export async function getMacroSeries(exclude: string[] = []): Promise<MacroSeriesView[]> {
+  try {
+    const supabase = createPublicClient();
+    const ids = Object.keys(MACRO_META).filter((id) => !exclude.includes(id));
+    if (ids.length === 0) return [];
+    const { data, error } = await supabase
+      .from("macro")
+      .select("series_id,date,value")
+      .in("series_id", ids)
+      .order("date", { ascending: true });
+    if (error || !data) throw error ?? new Error("none");
+    const bySeries = new Map<string, { date: string; value: number }[]>();
+    for (const row of data as { series_id: string; date: string; value: number }[]) {
+      const arr = bySeries.get(row.series_id) ?? [];
+      arr.push({ date: row.date, value: Number(row.value) });
+      bySeries.set(row.series_id, arr);
+    }
+    const out: MacroSeriesView[] = [];
+    for (const id of ids) {
+      const arr = bySeries.get(id);
+      if (!arr || arr.length === 0) continue;
+      const last = arr[arr.length - 1];
+      const prev = arr.length > 1 ? arr[arr.length - 2] : last;
+      out.push({
+        series_id: id,
+        label: MACRO_META[id].label,
+        value: last.value,
+        unit: MACRO_META[id].unit,
+        change: last.value - prev.value,
+        spark: arr.slice(-30).map((r) => r.value),
+        as_of: last.date,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// ── 블로그 글 (홈 3섹션) ──
+// 주간 브리핑·매크로·기업 분석은 «글»이다. 이 터미널은 글을 쓰지 않는다 — vecta-blog 가 쓴다.
+// 그래서 여기서 만들어내지 않고 블로그의 목록 피드(/posts.json)를 읽어 진열만 한다.
+// 글은 한 곳에서만 쓰이고 두 사이트가 공유한다.
+//
+// 블로그가 아직 안 떠 있거나(로컬 미기동) 응답이 이상하면 빈 배열이다 —
+// 그 경우 홈의 해당 섹션은 아예 렌더되지 않는다(없는 걸 있는 척하지 않는다).
+export interface BlogPost {
+  slug: string;
+  category: string;
+  categoryLabel: string;
+  sub: string;
+  subLabel: string;
+  title: string;
+  summary: string;
+  publishedAt: string;
+  readingMinutes: number;
+  url: string;
+}
+
+// 서버 컴포넌트에서만 읽는다 → NEXT_PUBLIC_ 접두사를 쓰지 않는다.
+// 접두사를 붙이면 빌드에 값이 박히고 브라우저 번들에도 실린다. 둘 다 불필요하다.
+//
+// 기본값을 두지 않는다. 블로그는 2026-08-20 기준 아직 배포 전이라, 기본값을
+// localhost 로 두면 Vercel 이 매 재검증마다 자기 자신의 localhost 로 헛왕복을 한다
+// (반드시 실패하고 반드시 빈 배열이 되는 요청). 주소가 없으면 «아직 연결 안 됨»으로
+// 보고 요청 자체를 하지 않는다.
+const BLOG_URL = (process.env.BLOG_URL ?? "").trim().replace(/\/$/, "");
+
+export async function getBlogPosts(): Promise<BlogPost[]> {
+  if (!BLOG_URL) return []; // 블로그 미연결 — 홈의 3섹션은 렌더되지 않는다
+  try {
+    // 글은 하루 몇 번 바뀔까 말까다. 10분 캐시면 충분하고, 블로그가 죽어 있어도
+    // 홈이 매 요청마다 그 왕복을 기다리지 않는다.
+    const res = await fetch(`${BLOG_URL}/posts.json`, { next: { revalidate: 600 } });
+    if (!res.ok) throw new Error(String(res.status));
+    const json = (await res.json()) as { posts?: BlogPost[] };
+    if (!Array.isArray(json.posts)) throw new Error("shape");
+    return json.posts;
+  } catch {
+    return [];
+  }
+}
+
+/** 카테고리·하위분류로 골라 최신순 N건. 홈 세 섹션이 각각 한 번씩 부른다. */
+export function pickBlogPosts(
+  posts: BlogPost[],
+  category: string,
+  sub: string,
+  limit = 3,
+): BlogPost[] {
+  return posts
+    .filter((p) => p.category === category && p.sub === sub)
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+    .slice(0, limit);
+}
+
 // ── 픽 기록 (실발행 트랙레코드) ──
 // 발행한 모든 daily_focus 픽의 진입가 대비 현재가·상태를 읽기 시점에 계산.
 // 종가 기반(장중 터치 미반영) — 목표/손절 "도달"은 종가 기준 근사임을 화면에 고지.

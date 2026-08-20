@@ -3,8 +3,8 @@
 // 종목상세의 lightweight-charts 와 달리 비인터랙티브 — 다수 카드에 가볍게 렌더.
 import type { MiniBar } from "@/lib/data";
 
-const UP = "#2ebd85";
-const DOWN = "#f6465d";
+const UP = "#D6293E";
+const DOWN = "#1F5FD0";
 
 export function AlphaZoneMini({
   bars,
@@ -76,16 +76,16 @@ export function AlphaZoneMini({
     >
       {/* 존 밴드 */}
       {target2 && (
-        <rect x={0} y={target2.y} width={width} height={target2.h} fill="rgba(46,189,133,0.07)" />
+        <rect x={0} y={target2.y} width={width} height={target2.h} fill="rgba(214,41,62,0.06)" />
       )}
       {target1 && (
-        <rect x={0} y={target1.y} width={width} height={target1.h} fill="rgba(46,189,133,0.14)" />
+        <rect x={0} y={target1.y} width={width} height={target1.h} fill="rgba(214,41,62,0.11)" />
       )}
-      <rect x={0} y={alpha.y} width={width} height={alpha.h} fill="rgba(61,123,255,0.13)" />
+      <rect x={0} y={alpha.y} width={width} height={alpha.h} fill="rgba(89,89,228,0.10)" />
 
       {/* 가격선 */}
       {lineRow(tp1, UP)}
-      {lineRow(entry, "#3d7bff", true)}
+      {lineRow(entry, "#5959E4", true)}
       {lineRow(stop, DOWN, true)}
 
       {/* 일봉 캔들 */}

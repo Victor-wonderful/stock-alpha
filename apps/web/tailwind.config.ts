@@ -24,6 +24,12 @@ const config: Config = {
               ["accent-dim", "--accent-dim"],
               ["accent-soft", "--accent-soft"],
               ["text-on-accent", "--text-on-accent"],
+              // 네이비 패널(홈 히어로) — 라이트 바탕 위 유일한 어두운 면
+              ["navy", "--navy"],
+              ["navy-2", "--navy-2"],
+              ["on-navy", "--on-navy"],
+              ["on-navy-2", "--on-navy-2"],
+              ["on-navy-3", "--on-navy-3"],
               // bull/bear → good/bad 로 리매핑 (기존 코드 하위 호환)
               ["bull", "--bull"],
               ["bull-soft", "--bull-soft"],
@@ -36,6 +42,11 @@ const config: Config = {
               ["bad-soft", "--bad-soft"],
               ["warn", "--warn"],
               ["warn-soft", "--warn-soft"],
+              // 합격/불합격 — 시세 적/청과 분리된 축
+              ["pass", "--pass"],
+              ["pass-soft", "--pass-soft"],
+              ["fail", "--fail"],
+              ["fail-soft", "--fail-soft"],
             ] as const
           ).map(([name, v]) => [
             name,

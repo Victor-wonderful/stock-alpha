@@ -75,25 +75,25 @@ export function AlphaZoneChart({
     const chart: IChartApi = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#9aa4b2",
+        textColor: "#6B7184",
         fontFamily: "var(--font-sans)",
       },
       grid: {
-        vertLines: { color: "rgba(34,39,50,0.5)" },
-        horzLines: { color: "rgba(34,39,50,0.5)" },
+        vertLines: { color: "rgba(230,232,242,0.9)" },
+        horzLines: { color: "rgba(230,232,242,0.9)" },
       },
-      rightPriceScale: { borderColor: "#222732", scaleMargins: { top: 0.12, bottom: 0.12 } },
-      timeScale: { borderColor: "#222732", timeVisible: false },
+      rightPriceScale: { borderColor: "#E6E8F2", scaleMargins: { top: 0.12, bottom: 0.12 } },
+      timeScale: { borderColor: "#E6E8F2", timeVisible: false },
       crosshair: { mode: 1 },
       autoSize: true,
     });
 
     const series: ISeriesApi<"Candlestick"> = chart.addCandlestickSeries({
-      upColor: "#2ebd85",
-      downColor: "#f6465d",
+      upColor: "#D6293E",
+      downColor: "#1F5FD0",
       borderVisible: false,
-      wickUpColor: "#2ebd85",
-      wickDownColor: "#f6465d",
+      wickUpColor: "#D6293E",
+      wickDownColor: "#1F5FD0",
     });
     series.setData(candles && candles.length > 0 ? candles : sampleCandles(anchor));
 
@@ -109,10 +109,10 @@ export function AlphaZoneChart({
         title,
       });
     };
-    line(levels.tp2, "#2ebd85", "TP2");
-    line(levels.tp1, "#2ebd85", "목표");
-    line(levels.entry, "#3d7bff", "진입");
-    line(levels.stop, "#f6465d", "손절");
+    line(levels.tp2, "#D6293E", "TP2");
+    line(levels.tp1, "#D6293E", "목표");
+    line(levels.entry, "#5959E4", "진입");
+    line(levels.stop, "#1F5FD0", "손절");
 
     // ── 채워진 존 밴드 (HTML 오버레이) ──
     const { entry, stop, tp1, tp2 } = levels;
@@ -133,12 +133,12 @@ export function AlphaZoneChart({
 
     const bands: Band[] = [];
     // 목표 존: 진입~1차 목표 (진한 초록), 1차~2차 (옅은 초록)
-    const tgt1 = mkBand(tp1, entry, "rgba(46,189,133,0.13)");
+    const tgt1 = mkBand(tp1, entry, "rgba(214,41,62,0.10)");
     if (tgt1) bands.push(tgt1);
-    const tgt2 = mkBand(tp2, tp1, "rgba(46,189,133,0.07)");
+    const tgt2 = mkBand(tp2, tp1, "rgba(214,41,62,0.06)");
     if (tgt2) bands.push(tgt2);
     // 알파 존: 손절~진입 (감내 리스크, 블루)
-    const alpha = mkBand(entry, stop, "rgba(61,123,255,0.12)");
+    const alpha = mkBand(entry, stop, "rgba(89,89,228,0.10)");
     if (alpha) bands.push(alpha);
 
     // ── 좌표 동기화 (priceToCoordinate, 매 프레임) ──

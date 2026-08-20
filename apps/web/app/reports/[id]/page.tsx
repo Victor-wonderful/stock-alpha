@@ -196,10 +196,10 @@ export default async function ReportDetailPage({
                     >
                       {/* 스타일 + 셋업 + 상태 */}
                       <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <span className="rounded-[6px] bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 ring-1 ring-inset ring-sky-500/25">
+                        <span className="rounded-[6px] bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-inset ring-sky-500/25">
                           {row.style}
                         </span>
-                        <span className="rounded-[6px] bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-300 ring-1 ring-inset ring-violet-500/25">
+                        <span className="rounded-[6px] bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 ring-1 ring-inset ring-violet-500/25">
                           {row.setup}
                         </span>
                         <Badge variant={status.variant} size="sm">{status.label}</Badge>
@@ -282,8 +282,8 @@ export default async function ReportDetailPage({
               <span
                 className={`rounded-[999px] px-2.5 py-1 text-[10px] font-bold ${
                   p.tradability.passed
-                    ? "bg-good-soft text-good"
-                    : "bg-bad-soft text-bad"
+                    ? "bg-pass-soft text-pass"
+                    : "bg-fail-soft text-fail"
                 }`}
               >
                 {gatePassed}/{gateTotal} 통과
@@ -294,7 +294,7 @@ export default async function ReportDetailPage({
                 <li key={c.key} className="flex items-center gap-2 text-xs">
                   <span
                     className={`w-10 shrink-0 rounded py-0.5 text-center text-[10px] font-bold ${
-                      c.passed ? "bg-good-soft text-good" : "bg-bad-soft text-bad"
+                      c.passed ? "bg-pass-soft text-pass" : "bg-fail-soft text-fail"
                     }`}
                   >
                     {c.passed ? "PASS" : "FAIL"}

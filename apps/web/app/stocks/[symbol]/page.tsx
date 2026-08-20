@@ -217,7 +217,7 @@ export default async function StockDetailPage({
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
               <ZoneKey color="rgba(46,189,133,0.85)" label="목표 존 (진입→목표)" />
               <ZoneKey color="rgba(61,123,255,0.85)" label="알파 존 (진입→손절)" />
-              <ZoneKey color="#f6465d" label="손절선" line />
+              <ZoneKey color="#1F5FD0" label="손절선" line />
             </div>
             <p className="mt-2 text-2xs text-text-mute">
               {candles.length > 0

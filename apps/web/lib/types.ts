@@ -81,6 +81,7 @@ export interface MacroSeriesView {
   unit: string;
   change: number; // 전기 대비
   spark: number[];
+  as_of?: string; // 이 값의 기준일. FRED 계열은 며칠씩 지연돼 반드시 함께 적어야 한다.
 }
 export interface SectorRotationView {
   sector: string;

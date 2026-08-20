@@ -42,8 +42,8 @@ export function setupCharacter(setup: string | null | undefined): SetupCharacter
 // 성격별 배지 색 — 다크 테마 토큰(앱 클래스).
 export const TONE_CLASS: Record<SetupTone, string> = {
   flow: "bg-accent/15 text-accent",
-  trend: "bg-sky-500/15 text-sky-300",
+  trend: "bg-sky-500/15 text-sky-700",
   reversal: "bg-warn-soft text-warn",
-  consensus: "bg-violet-500/15 text-violet-300",
+  consensus: "bg-violet-500/15 text-violet-700",
   value: "bg-good-soft text-good",
 };
