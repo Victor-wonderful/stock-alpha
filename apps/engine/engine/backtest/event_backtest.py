@@ -82,6 +82,22 @@ def _exit_scaleout(df, i, n, entry, stop, tp1, tp2, timeout, costs):
     return net, gross, idx - i
 
 
+def _find_fill(df, i: int, n: int, entry: float, window: int) -> int | None:
+    """지정가 진입이 «실제로 체결되는» 봉 인덱스. 없으면 None.
+
+    라이브의 픽은 신호 봉 종가를 진입가로 적어 발행되고, 사용자는 다음 날부터
+    그 가격 «이하»로 내려와야 살 수 있다. 예전 백테스트는 이 확인 없이 신호 봉
+    가격에 무조건 체결된 것으로 쳤다 — 그래서 갭업해 도망간 종목까지 «샀다»고 셌다.
+
+    실측(발행 픽 48건): 손절 픽은 24/24 체결됐는데 목표 픽은 1/3 만 체결됐다.
+    체결 확인이 없으면 백테스트가 살 수 없었던 승리를 성적에 넣는다.
+    """
+    for j in range(i + 1, min(i + window, n - 1) + 1):
+        if float(df["low"].iloc[j]) <= entry:
+            return j
+    return None
+
+
 def backtest_playbook(
     df: pd.DataFrame,
     setup: str,
@@ -95,6 +111,7 @@ def backtest_playbook(
     style_override: TradeStyle | None = None,
     scaleout: bool = False,
     tp_r_mults: tuple[float, ...] | None = None,
+    entry_mode: str = "signal",
 ) -> list[Trade]:
     """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
 
@@ -104,6 +121,15 @@ def backtest_playbook(
     직접 point-in-time 슬라이스하므로 전체를 그대로 전달.
     costs: 거래비용 모델(수수료·거래세·슬리피지). None 이면 한국 현물 기본값 적용.
     R·수익률은 비용 차감 후(net)로 산출 — gross 가 필요하면 costs=ZERO_COST.
+
+    entry_mode: 진입 체결을 어떻게 가정하는가. 이 가정이 결과를 크게 바꾼다.
+      "signal" — 신호 봉 가격에 무조건 체결(기존 동작, 하위 호환 기본값).
+                 ⚠️ 라이브와 다르다. 갭업해 도망간 종목도 샀다고 센다.
+      "limit"  — 라이브와 동일. 다음 봉부터 저가 ≤ 진입가 인 봉에서 체결.
+                 타임아웃 안에 안 닿으면 «거래 없음»으로 빼고 다음 신호를 찾는다.
+      "open"   — 다음 봉 시가에 시장가 진입. 갭업분을 그대로 지불하되 반드시 체결된다.
+                 레벨(손절·목표)은 그 시가 기준으로 다시 계산한다 — 안 그러면
+                 설계한 손익비가 깨진다.
     """
     if costs is None:
         costs = CostModel()
@@ -158,6 +184,32 @@ def backtest_playbook(
         entry = lv.entry_price
         stop = lv.stop_loss
         tp = lv.tp1
+
+        # ── 진입 체결 ── (entry_mode) 진입 봉 인덱스를 정하고 필요하면 레벨 재계산
+        i_entry = i
+        timeout_for_fill = _TIMEOUT_BARS.get(eff_style, 10)
+        if entry_mode == "limit":
+            j = _find_fill(df, i, n, entry, timeout_for_fill)
+            if j is None:
+                i += 1                       # 못 산 신호는 거래가 아니다
+                continue
+            i_entry = j
+        elif entry_mode == "open":
+            if i + 1 >= n:
+                break
+            nxt_open = float(df["open"].iloc[i + 1])
+            if nxt_open <= 0:
+                i += 1
+                continue
+            lv = compute_levels(
+                style=eff_style, side="buy", entry_price=nxt_open,
+                atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
+                support=cand.support, resistance=cand.resistance,
+                setup=cand.setup, tp_r_mults=tp_r_mults,
+            )
+            entry, stop, tp = lv.entry_price, lv.stop_loss, lv.tp1
+            i_entry = i + 1
+
         risk = entry - stop
         # 노이즈 수준 손절폭 배제 — 라이브 시그널(generate)과 동일 기준(levels).
         if risk <= 0 or risk < min_risk_floor(entry, cand.atr):
@@ -166,23 +218,25 @@ def backtest_playbook(
 
         timeout = _TIMEOUT_BARS.get(eff_style, 10)
         # 청산: 단일(tp1 전량) 또는 스케일아웃(tp1 50%+본전스톱 후 tp2 런).
+        # 청산 추적은 «진입한 봉»부터 — 지정가 체결이 늦어지면 그만큼 늦게 시작한다.
+        # (타임아웃은 진입 봉 기준으로 새로 센다 — 못 산 기간까지 보유로 치면 안 된다)
         if scaleout:
             pnl, gross, bars = _exit_scaleout(
-                df, i, n, entry, stop, tp, lv.tp2, timeout, costs)
+                df, i_entry, n, entry, stop, tp, lv.tp2, timeout, costs)
         else:
             pnl, gross, bars = _exit_single(
-                df, i, n, entry, stop, tp, timeout, costs)
+                df, i_entry, n, entry, stop, tp, timeout, costs)
 
         # 순손익(비용 차감) — 수수료·거래세·슬리피지 반영. 리스크는 계획값(entry-stop)
         # 유지 → '계획 리스크 대비 실현 순R'.
         r_multiple = pnl / risk
         r_gross = gross / risk                     # 비용 미반영 — 진단용
         ret_pct = (pnl / entry) * (lv.position_size_pct / 100.0)
-        entry_ts = str(df["ts"].iloc[i]) if "ts" in df.columns else ""
+        entry_ts = str(df["ts"].iloc[i_entry]) if "ts" in df.columns else ""
         trades.append(Trade(
             r_multiple=r_multiple, ret_pct=ret_pct, bars_held=bars,
             entry_ts=entry_ts, r_gross=r_gross,
         ))
-        i = i + bars + 1                   # 청산 다음 봉부터 재탐색(중첩 방지)
+        i = i_entry + bars + 1             # 청산 다음 봉부터 재탐색(중첩 방지)
 
     return trades
