@@ -30,6 +30,9 @@ const config: Config = {
               ["on-navy", "--on-navy"],
               ["on-navy-2", "--on-navy-2"],
               ["on-navy-3", "--on-navy-3"],
+              ["up-on-navy", "--up-on-navy"],
+              ["down-on-navy", "--down-on-navy"],
+              ["accent-on-navy", "--accent-on-navy"],
               // bull/bear → good/bad 로 리매핑 (기존 코드 하위 호환)
               ["bull", "--bull"],
               ["bull-soft", "--bull-soft"],
