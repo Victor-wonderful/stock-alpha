@@ -439,42 +439,42 @@ export default async function DashboardPage() {
                   '같은 날 여러 매체가 동시에 다뤘다'는 사실만 세고, 그 옆에 VECTA 가
                   실제로 잰 그날 등락을 붙인다. 조용한 종목은 조용하다고 적는다 —
                   그것도 정보다. 상세는 종목명을 눌러 내부 상세로 간다. */}
-              <section className="rounded-[12px] border border-border-soft bg-surface/40 p-5">
-                <h2 className="mb-2 flex items-baseline gap-2 text-sm font-bold text-text">
+              <section className="rounded-[12px] bg-navy p-5">
+                <h2 className="mb-2 flex items-baseline gap-2 text-sm font-bold text-on-navy">
                   최근 보도
-                  <span className="text-[11px] font-medium text-text-mute">
+                  <span className="text-[11px] font-medium text-on-navy-3">
                     최근 10일 · 같은 날 2개 매체 이상 다룬 건만
                   </span>
                 </h2>
-                <div className="divide-y divide-border-soft">
+                <div className="divide-y divide-on-navy/10">
                   {previewPicks.map((p) => {
                     const evs = eventMap.get(p.symbol) ?? [];
                     return (
                       <div key={p.symbol} className="flex flex-wrap items-baseline gap-x-3 py-2">
                         <Link
                           href={`/stocks/${p.symbol}`}
-                          className="w-[120px] shrink-0 truncate text-[16px] font-semibold text-text transition-colors hover:text-accent"
+                          className="w-[120px] shrink-0 truncate text-[16px] font-semibold text-on-navy transition-colors hover:text-accent-on-navy"
                         >
                           {p.name}
                         </Link>
                         {evs.length === 0 ? (
-                          <span className="text-[11px] text-text-mute">
+                          <span className="text-[11px] text-on-navy-3">
                             눈에 띄는 보도 없음
                           </span>
                         ) : (
                           <span className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
                             {evs.slice(0, 3).map((e) => (
                               <span key={e.date} className="flex items-baseline gap-1.5">
-                                <span className="tnum text-[11px] text-text-mute">
+                                <span className="tnum text-[11px] text-on-navy-3">
                                   {e.date.slice(5).replace("-", "/")}
                                 </span>
-                                <span className="rounded-[4px] border border-border-strong px-1.5 py-px text-[11px] font-semibold text-text-dim">
+                                <span className="rounded-[4px] border border-on-navy/25 px-1.5 py-px text-[11px] font-semibold text-on-navy-2">
                                   {e.outletCount}개 매체
                                 </span>
                                 {e.changePct != null && (
                                   <span
                                     className={`tnum text-[11px] font-medium ${
-                                      e.changePct >= 0 ? "text-good" : "text-bad"
+                                      e.changePct >= 0 ? "text-up-on-navy" : "text-down-on-navy"
                                     }`}
                                   >
                                     {fmtPct(e.changePct)}
@@ -493,7 +493,7 @@ export default async function DashboardPage() {
                   접근 경로까지 막지는 않도록 링크 하나만 남긴다. */}
               <Link
                 href="/reports"
-                className="mt-3 inline-block text-[11px] text-text-mute transition-colors hover:text-text-dim"
+                className="mt-3 inline-block text-[11px] text-on-navy-3 transition-colors hover:text-on-navy-2"
               >
                 추천에 오르지 못한 종목까지 전체 분석 보기 →
               </Link>
@@ -590,29 +590,29 @@ export default async function DashboardPage() {
               기준으로만 센다.
 
               전략 이름(median·ensemble 같은)도 뺐다. 사용자에게 아무 뜻이 없는 말이다. */}
-          <dl className="rounded-[12px] border border-border-soft bg-surface/40 p-5 text-[14px] flex flex-col gap-3">
+          <dl className="flex flex-col gap-3 rounded-[12px] bg-navy p-5 text-[14px]">
             <div className="flex items-baseline justify-between gap-2">
-              <dt className="text-text-mute">오늘 분석</dt>
-              <dd className="tnum font-semibold text-text">{dist.total}종목</dd>
+              <dt className="text-on-navy-3">오늘 분석</dt>
+              <dd className="tnum font-semibold text-on-navy">{dist.total}종목</dd>
               {dist.total > 0 && (
-                <span className="tnum text-[11px] text-text-mute">
+                <span className="tnum text-[11px] text-on-navy-3">
                   매수 {dist.매수} · 중립 {dist.중립} · 관망 {dist.관망}
                 </span>
               )}
             </div>
             <div className="flex items-baseline justify-between gap-2">
-              <dt className="text-text-mute">검증 통과 전략</dt>
-              <dd className="tnum font-semibold text-text">
+              <dt className="text-on-navy-3">검증 통과 전략</dt>
+              <dd className="tnum font-semibold text-on-navy">
                 {kpiDisplay.backtestPassed}/{kpiDisplay.backtestTotal}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-2">
-              <dt className="text-text-mute">진행중인 픽</dt>
-              <dd className="tnum font-semibold text-text">{openPicks.length}종목</dd>
+              <dt className="text-on-navy-3">진행중인 픽</dt>
+              <dd className="tnum font-semibold text-on-navy">{openPicks.length}종목</dd>
             </div>
             <Link
               href="/strategies"
-              className="text-[11px] text-text-dim transition-colors hover:text-text"
+              className="text-[11px] text-on-navy-3 transition-colors hover:text-on-navy-2"
             >
               검증 상세 →
             </Link>
