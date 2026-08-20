@@ -7,11 +7,12 @@ import { cn } from "@/lib/utils";
 import { VectaLogo } from "@/components/VectaLogo";
 
 // IA 확정(2026-06-24, docs/PLAN.md '웹/앱 정보구조'): 8개 → 7개로 재편.
+// 2026-08-20: 인사이트를 더해 8개. nav 는 이미 가로 스크롤이라 좁은 폭에서도 1줄을 지킨다.
 // 추천(픽)·스크리너(시그널 탐색)·종목(검색·분석)을 본질이 달라 각각 독립 메뉴로 분리.
 //   ② 추천 = /focus(엔진 엄선 픽 큐레이션, 필터 없음)
 //   ③ 스크리너 = /screener(발행 중 전체 시그널 + 필터, 표/리스트)
 //   ④ 종목 = /reports(검색·분석 허브 → 종목 상세 5축 스노우플레이크)
-//   ⑥ 내 자산 = /watchlist(보유·진단·알림 통합 예정) · ⑦ 성과 = /picks(트랙레코드)
+//   ⑦ 내 자산 = /watchlist(보유·진단·알림 통합 예정) · ⑧ 성과 = /picks(트랙레코드)
 // 우측 아이콘: 검색→/reports(종목 검색 허브), 알림→/alerts.
 // match: 통합 메뉴는 흡수한 구 라우트도 활성으로 표시(③ 종목=리포트·종목상세, ⑥ 내 자산=관심·진단).
 // alpha-zone 은 추천 큐레이션에 흡수돼 더는 탐색 메뉴가 아님 → 추천 match 유지(레거시 라우트).
@@ -21,6 +22,10 @@ const NAV_ITEMS = [
   { href: "/screener", label: "스크리너" },
   { href: "/reports", label: "종목", match: ["/reports", "/stocks"] },
   { href: "/market", label: "시장" },
+  // ⑥ 인사이트 = /insights(주간 브리핑·매크로 — 「읽을 것」).
+  // 2026-08-20 추가: 홈에 주간 브리핑 섹션을 세웠는데 정작 «전체 보기»가 갈 데가 없었다.
+  // /market 은 지표·레짐 화면이지 브리핑 목록이 아니다. 브리핑이 쌓일수록 그 공백이 커진다.
+  { href: "/insights", label: "인사이트" },
   { href: "/watchlist", label: "내 자산", match: ["/watchlist", "/diagnosis", "/alerts"] },
   { href: "/picks", label: "성과" },
 ] as const;
