@@ -306,11 +306,15 @@ def _bar(low: float, high: float, close: float | None = None) -> dict:
 _PICK = {"as_of": "2026-06-10", "entry_price": 100.0,
          "target_price": 120.0, "stop_loss": 95.0}
 
+# ⚠️ 2026-08-20 부터 판정은 «진입 체결»을 먼저 확인한다(저가 ≤ 진입가). 아래 테스트들은
+# 레벨 체결·우선순위·분할익절을 보는 것이지 체결을 보는 게 아니므로, 봉의 저가를
+# 진입가(100) 이하로 두어 체결된 상태를 만든다. 체결 자체의 규칙은 test_pick_fill.py.
+
 
 def test_pick_status_level_fill_and_priority():
     today = date(2026, 6, 11)
     # 고가가 목표 도달 → 목표가(120) 레벨 체결 (종가 오버슈트 아님)
-    out = resolve_pick_status(_PICK, [_bar(118, 121)], today)
+    out = resolve_pick_status(_PICK, [_bar(99, 121)], today)
     assert out["status"] == "target" and out["exit_price"] == 120.0
     assert out["close_return_pct"] == pytest.approx(0.20)
     # 저가가 손절 도달 → 손절가(95) 레벨 체결
@@ -319,7 +323,7 @@ def test_pick_status_level_fill_and_priority():
     assert out["close_return_pct"] == pytest.approx(-0.05)
     # 같은 봉서 손절·목표 동시 → 손절 우선(보수적)
     assert resolve_pick_status(_PICK, [_bar(94, 121)], today)["status"] == "stopped"
-    # 진행 중(미터치, 타임아웃 전) — 변경 없음
+    # 진행 중(체결됐으나 미터치, 타임아웃 전) — 변경 없음
     assert resolve_pick_status(_PICK, [_bar(98, 105)], today) is None
     # 봉 없음 — 판정 보류
     assert resolve_pick_status(_PICK, [], today) is None
@@ -357,7 +361,7 @@ _SCALE = {"as_of": "2026-06-10", "entry_price": 100.0, "target_price": 110.0,
 def test_scaleout_tp1_hit_is_non_closing():
     today = date(2026, 6, 11)
     # tp1(110) 고가 도달, tp2 미만 → 종결 아님: tp1_hit 표시 + 본전스톱 전환.
-    out = resolve_pick_status(_SCALE, [_bar(105, 112)], today)
+    out = resolve_pick_status(_SCALE, [_bar(99, 112)], today)
     assert out == {"tp1_hit": True, "tp1_hit_at": "2026-06-11"}
     assert "status" not in out
 
@@ -388,7 +392,7 @@ def test_scaleout_tp2_after_tp1_is_full_target():
 
 def test_scaleout_multi_bar_tp1_then_tp2():
     # 1봉서 tp1, 다음 봉서 tp2 — 봉 시퀀스 상태(tp1_hit) 유지 검증.
-    bars = [_bar(105, 112), _bar(113, 121)]
+    bars = [_bar(99, 112), _bar(113, 121)]
     out = resolve_pick_status(_SCALE, bars, date(2026, 6, 12))
     assert out["status"] == "target"
     assert out["close_return_pct"] == pytest.approx(0.15)
@@ -396,7 +400,7 @@ def test_scaleout_multi_bar_tp1_then_tp2():
 
 def test_scaleout_same_bar_through_tp2():
     # tp1 미기록 봉서 고가가 tp2 초과 → 양 트랜치 실현(tp2 레벨 체결) + tp1_hit 기록.
-    out = resolve_pick_status(_SCALE, [_bar(105, 125)], date(2026, 6, 11))
+    out = resolve_pick_status(_SCALE, [_bar(99, 125)], date(2026, 6, 11))
     assert out["status"] == "target" and out["tp1_hit"] is True
     assert out["exit_price"] == 120.0
     assert out["close_return_pct"] == pytest.approx(0.15)
@@ -404,7 +408,7 @@ def test_scaleout_same_bar_through_tp2():
 
 def test_scaleout_legacy_pick_without_tp2_unchanged():
     # tp2 없는 옛 픽은 단일 청산 — 목표가(120) 레벨 체결(종가 오버슈트 아님).
-    out = resolve_pick_status(_PICK, [_bar(118, 121)], date(2026, 6, 11))
+    out = resolve_pick_status(_PICK, [_bar(99, 121)], date(2026, 6, 11))
     assert out["status"] == "target"
     assert out["exit_price"] == 120.0
     assert out["close_return_pct"] == pytest.approx(0.20)

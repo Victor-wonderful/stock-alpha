@@ -1326,7 +1326,7 @@ export interface PickRecord {
   stop_loss: number | null;
   last_close: number | null;
   return_pct: number | null; // 진입가 대비 (확정 픽은 청산가 기준)
-  status: "진행중" | "목표 도달" | "손절" | "만료" | "1차 익절" | "—";
+  status: "진행중" | "목표 도달" | "손절" | "만료" | "1차 익절" | "미체결" | "—";
   closed: boolean; // 엔진이 확정 기록한 픽인지(0017) — 표시 구분용
   closed_at?: string | null; // 청산일 — 포지션 합산(보유 창) 판정용
   reselects?: number; // 같은 포지션이 여러 날 재선정된 횟수(>1이면 '연속 선정' 표시)
@@ -1337,6 +1337,9 @@ const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
   stopped: "손절",
   expired: "만료",
   partial: "1차 익절", // 분할익절 후 본전 청산(0022) — 부분 수익 실현
+  // 진입가에 끝내 닿지 않아 «살 수가 없었던» 픽(2026-08-20). 거래가 없었으므로
+  // 손익도 없다 — 승률 계산에서 분모·분자 어디에도 넣지 않는다.
+  unfilled: "미체결",
 };
 
 // 진행중인 픽 — "어제 추천 보고 산 게 지금 어떻게 됐나".
