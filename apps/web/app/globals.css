@@ -4,58 +4,84 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ───────── 디자인 토큰 (UI V3 — 다크+옐로) ─────────
-   단일 출처: design/stock-alpha-ui.pen 의 변수와 동기화 */
+/* ───────── 디자인 토큰 (UI V4 — vecta-blog 라이트) ─────────
+   vecta-blog 의 색을 그대로 가져왔다. 바탕은 옅은 라벤더 화이트, 액센트는 인디고,
+   상승=적/하락=청(한국 관례). 원본: vecta-blog/src/app/globals.css 의 --n-* 토큰.
+   되돌리기: globals.css.v3-dark-yellow.bak 로 이 파일을 덮으면 다크+옐로로 복귀. */
 :root {
   --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  /* 배경 계층 */
-  --bg: #0B0C10;            /* 최하단 배경 */
-  --surface: #16181D;       /* 카드/패널 */
-  --surface-2: #1E2026;     /* 패널 위 요소 (구 surface-sub) */
-  --surface-3: #262931;     /* hover/강조 */
-  --border: #2A2D35;        /* 기본 보더 */
-  --border-strong: #353840; /* 강조 보더 */
-  --border-soft: #1F2229;   /* 소프트 보더 */
+  /* 배경 계층 — 다크의 4단(bg<surface<surface-2<surface-3)이 라이트에선 뒤집힌다.
+     bg 가 가장 어둡고(라벤더 화이트) 카드가 순백, 그 위 요소로 갈수록 다시 진해진다. */
+  --bg: #F5F6FC;            /* 페이지 배경 — 옅은 라벤더 화이트 */
+  --surface: #FFFFFF;       /* 카드/패널 */
+  --surface-2: #F1F2FA;     /* 패널 위 요소 */
+  --surface-3: #E5E7F5;     /* hover/강조 */
+  --border: #E6E8F2;        /* 기본 보더 */
+  --border-strong: #CFD3E8; /* 강조 보더 */
+  --border-soft: #EFF1F8;   /* 소프트 보더 */
 
-  /* 액센트 (옐로우-그린) */
-  --accent: #DDF247;
-  --accent-2: #C8E034;
-  --accent-soft: #DDF24722; /* 알파 22 */
-  --accent-dim: #DDF24722;  /* bg-accent-dim 호환 유지 */
-  --text-on-accent: #0B0C10;
+  /* 액센트 (인디고) — 블로그 브랜드색 그대로. 흰 바탕 대비 5.3:1 로 텍스트도 AA 통과.
+     칩·버튼처럼 액센트를 채운 위의 글자는 흰색이다(--text-on-accent). */
+  /* 블로그 원색은 #5959E4. 이 앱은 액센트 글자를 surface-3(#E5E7F5) 같은 진한 칩
+     위에도 올리는데 거기서 4.3:1 로 미달이었다. #5252DC 로 한 단계만 눌러
+     흰카드 5.8 / surface-3 4.7 / 액센트 채운 위 흰글자 5.8 을 모두 확보했다. */
+  --accent: #5252DC;
+  --accent-2: #4747C9;      /* hover — 한 단계 진하게 */
+  --accent-soft: #ECECFD;   /* 칩·아이콘 박스 배경 (블로그 --n-primary-soft) */
+  --accent-dim: #ECECFD;    /* bg-accent-dim 호환 유지 */
+  --text-on-accent: #FFFFFF;
 
   /* 텍스트 */
-  --text: #FFFFFF;           /* primary */
-  --text-dim: #9CA0A8;       /* secondary */
-  /* tertiary — 구 #5C6068 은 WCAG AA(4.5:1) 미달이었다(surface 2.81 / surface-2 2.58 /
-     surface-3 2.30). 라벨·기준일·유사투자자문 면책고지가 전부 이 색이라 판독성이자 규정 문제였다.
-     #8A909C 는 bg 6.10 / surface 5.54 / surface-2 5.08 / surface-3 4.54 로 전부 통과한다.
-     accent-soft(#313523) 위에서만 3.94 라 그 한 곳은 text-dim 을 쓴다(app/page.tsx '진행중 평균 수익').
-     대신 text-dim 과의 대비가 1.22:1 로 얇아진다 — 3단 위계를 유지하려는 의도적 절충. */
-  --text-mute: #8A909C;      /* tertiary */
+  --text: #171A2B;           /* primary — 흰 바탕 대비 15.2:1 */
+  --text-dim: #4A5068;       /* secondary — 8.2:1 */
+  /* tertiary — 블로그는 #6B7184 지만 이 앱은 surface-2/3 위에도 muted 를 얹는다.
+     #6B7184 는 surface-2 위에서 4.36:1 로 AA 미달이라 한 단계만 더 눌렀다.
+     #61677A 는 흰카드 5.6 / surface-2 5.0 / surface-3 4.6 으로 전부 통과. */
+  --text-mute: #61677A;
 
-  /* 상태 색상 — 상승=그린/하락=레드 (디자인 V3 결정) */
-  --good: #4ADE80;
-  --good-soft: #4ADE8020;
-  --bad: #F87171;
-  --bad-soft: #F8717120;
-  --warn: #FBBF24;
-  --warn-soft: #FBBF2415;
+  /* 상태 색상 — 상승=적/하락=청 (블로그와 동일, 협상 불가)
+     블로그 원색은 #D6293E 지만 이 앱은 같은 빨강을 surface-2/3 같은 옅은 회보라 위에도
+     올린다(수급 막대·칩). 거기서 4.43:1 로 AA 미달이라 #C41F33 로 한 단계 눌렀다 —
+     흰카드 5.9 / surface-2 5.2 / surface-3 4.8 로 전부 통과. 계열은 그대로다. */
+  --good: #C41F33;           /* 상승·이익·호재 */
+  --good-soft: #FEF5F6;
+  --bad: #1F5FD0;            /* 하락·손실·악재 */
+  --bad-soft: #E9F0FC;
+  --warn: #B45309;           /* 라이트 바탕에선 앰버를 어둡게 해야 글자가 읽힌다 */
+  --warn-soft: #FDF3E3;
+
+  /* 합격/불합격 — 상태색과 반드시 분리한다.
+     상승=적으로 바꾸면서 게이트 "PASS" 배지가 빨강이 됐다(2026-08-20 실측).
+     good/bad 가 '오르내림'과 '통과/탈락' 두 뜻을 겸하고 있었던 탓이다.
+     통과는 초록, 탈락은 벽돌색 — 시세 적/청 어느 쪽과도 안 겹친다. */
+  --pass: #10704E;
+  --pass-soft: #E9F6F0;
+  --fail: #B32318;
+  --fail-soft: #FDEEEC;
 
   /* 기존 bull/bear 변수 — good/bad 로 리매핑 (하위 호환) */
-  --bull: #4ADE80;
-  --bull-soft: #4ADE8020;
-  --bear: #F87171;
-  --bear-soft: #F8717120;
+  --bull: #C41F33;
+  --bull-soft: #FEF5F6;
+  --bear: #1F5FD0;
+  --bear-soft: #E9F0FC;
+
+  /* 네이비 패널 — 홈 히어로처럼 색을 뒤집는 블록. 블로그와 같은 값이라 두 사이트가
+     한 브랜드로 읽힌다. 라이트 바탕 위에 얹는 유일한 어두운 면이므로, 그 위 글자는
+     --text 계열이 아니라 반드시 --on-navy 계열을 쓴다. */
+  --navy: #111A47;
+  --navy-2: #1B2560;
+  --on-navy: #FFFFFF;
+  --on-navy-2: #B9C0E4;      /* 보조 — navy 대비 7.4:1 */
+  --on-navy-3: #9AA3CC;      /* 흐림 — navy 대비 5.3:1 */
 
   /* radius 토큰 */
   --radius-card: 20px;
   --radius-inner: 12px;
   --radius-pill: 999px;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {

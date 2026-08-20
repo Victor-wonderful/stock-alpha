@@ -22,7 +22,7 @@ const STATE: Record<
     icon: "↔️",
     name: "횡보(레인지)",
     routing: "평균회귀·수급 위주 — 추세 추격 자제",
-    cls: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+    cls: "border-sky-500/30 bg-sky-500/10 text-sky-700",
   },
   transition: {
     icon: "🔀",
@@ -48,7 +48,7 @@ export function RegimeHeader({ state }: { state: MarketStateView | null }) {
           {state.drivers.slice(0, 3).map((d, i) => (
             <span
               key={i}
-              className="rounded-[999px] bg-black/20 px-2 py-0.5 text-[10px] opacity-90"
+              className="rounded-[999px] bg-black/5 px-2 py-0.5 text-[10px] opacity-90"
             >
               {d}
             </span>

@@ -72,7 +72,7 @@ export function DiagnosisForm() {
         </button>
         <button
           onClick={submit}
-          className="rounded-[999px] bg-accent px-5 py-2 text-xs font-bold text-[#0B0C10] hover:bg-accent-2 transition-colors"
+          className="rounded-[999px] bg-accent px-5 py-2 text-xs font-bold text-text-on-accent hover:bg-accent-2 transition-colors"
         >
           진단하기
         </button>

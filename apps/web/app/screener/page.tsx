@@ -67,7 +67,7 @@ function SparkBars({ data }: { data: number[] }) {
 function SetupPill({ setup }: { setup: string }) {
   const label = SETUP_LABELS[setup] ?? setup;
   return (
-    <span className="inline-flex items-center rounded-[6px] bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-300 ring-1 ring-inset ring-violet-500/25 whitespace-nowrap">
+    <span className="inline-flex items-center rounded-[6px] bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 ring-1 ring-inset ring-violet-500/25 whitespace-nowrap">
       {label}
     </span>
   );
@@ -84,7 +84,7 @@ function StylePill({ style }: { style: string }) {
     );
   }
   return (
-    <span className="inline-flex items-center rounded-[6px] bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 ring-1 ring-inset ring-sky-500/25 whitespace-nowrap">
+    <span className="inline-flex items-center rounded-[6px] bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-inset ring-sky-500/25 whitespace-nowrap">
       {label}
     </span>
   );
@@ -270,24 +270,24 @@ export default async function ScreenerPage({
           href={near ? buildHref("near", null) : buildHref("near", "1")}
           className={`flex items-center gap-1.5 rounded-[999px] border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
             near
-              ? "border-accent bg-accent text-[#0B0C10]"
+              ? "border-accent bg-accent text-text-on-accent"
               : "border-border bg-surface-2 text-text hover:border-accent"
           }`}
         >
-          <Crosshair className={`h-3.5 w-3.5 ${near ? "text-[#0B0C10]" : "text-accent"}`} /> 진입 가능
-          <span className={`font-medium ${near ? "text-[#0B0C10]/70" : "text-text-mute"}`}>현재가가 진입가 부근</span>
+          <Crosshair className={`h-3.5 w-3.5 ${near ? "text-text-on-accent" : "text-accent"}`} /> 진입 가능
+          <span className={`font-medium ${near ? "text-text-on-accent/70" : "text-text-mute"}`}>현재가가 진입가 부근</span>
         </Link>
         <Link
           href={buildHref("setup", "flow_accumulation")}
           className={`flex items-center gap-1.5 rounded-[999px] border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
             activeSetup === "flow_accumulation"
-              ? "border-accent bg-accent text-[#0B0C10]"
+              ? "border-accent bg-accent text-text-on-accent"
               : "border-border bg-surface-2 text-text hover:border-accent"
           }`}
         >
           <TrendingUp className="h-3.5 w-3.5 text-accent" /> 수급
           <span
-            className={`font-medium ${activeSetup === "flow_accumulation" ? "text-[#0B0C10]/70" : "text-text-mute"}`}
+            className={`font-medium ${activeSetup === "flow_accumulation" ? "text-text-on-accent/70" : "text-text-mute"}`}
           >
             외국인·기관 순매수
           </span>
@@ -300,7 +300,7 @@ export default async function ScreenerPage({
           href={buildHref("setup", null)}
           className={`rounded-[999px] px-3 py-1.5 text-xs font-semibold transition-colors ${
             !activeSetup
-              ? "bg-accent text-[#0B0C10]"
+              ? "bg-accent text-text-on-accent"
               : "border border-border bg-surface text-text-dim hover:border-border-strong hover:text-text"
           }`}
         >
@@ -315,7 +315,7 @@ export default async function ScreenerPage({
               href={buildHref("setup", key)}
               className={`rounded-[999px] px-3 py-1.5 text-xs font-semibold transition-colors ${
                 isActive
-                  ? "bg-accent text-[#0B0C10]"
+                  ? "bg-accent text-text-on-accent"
                   : "border border-border bg-surface text-text-dim hover:border-border-strong hover:text-text"
               }`}
             >
@@ -546,7 +546,7 @@ export default async function ScreenerPage({
                       {/* 종목 */}
                       <td className="py-3 pl-5 pr-3">
                         <div className="flex items-center gap-2.5">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-soft text-[11px] font-bold text-accent">
                             {initials(s.name)}
                           </span>
                           <div>
@@ -609,7 +609,7 @@ export default async function ScreenerPage({
                           {fmtPrice(s.tp1)}
                         </span>
                         {tpPct != null && (
-                          <span className="ml-1 text-[10px] text-good/70">
+                          <span className="ml-1 text-[10px] text-good">
                             {fmtPct(tpPct)}
                           </span>
                         )}

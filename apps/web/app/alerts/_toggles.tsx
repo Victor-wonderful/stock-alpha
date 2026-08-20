@@ -38,7 +38,7 @@ export function EventToggles() {
           >
             <span
               className={`absolute top-[3px] h-4 w-4 rounded-full transition-all ${
-                state[e.key] ? "left-[19px] bg-[#0B0C10]" : "left-[3px] bg-text-mute"
+                state[e.key] ? "left-[19px] bg-text-on-accent" : "left-[3px] bg-text-mute"
               }`}
             />
           </span>

@@ -72,7 +72,7 @@ function computeGrade(d: {
   return { grade, checks };
 }
 
-const DONUT_COLORS = ["var(--accent)", "#9CA0A8", "var(--good)", "var(--warn)", "var(--surface-3)", "#6B7280"];
+const DONUT_COLORS = ["var(--accent)", "#A7ADCB", "var(--good)", "var(--warn)", "var(--surface-3)", "#5A628C"];
 
 // SVG 도넛 — 섹터 비중 (CSS 변수 색)
 function SectorDonut({ sectors }: { sectors: { sector: string; weight: number }[] }) {

@@ -149,14 +149,14 @@ export default async function ReportsPage({
                 href={buildHref("rating", key)}
                 className={`inline-flex items-center gap-1 rounded-[999px] px-3 py-1.5 text-xs font-semibold transition-colors ${
                   isActive
-                    ? "bg-accent text-[#0B0C10]"
+                    ? "bg-accent text-text-on-accent"
                     : "border border-border bg-surface text-text-dim hover:border-border-strong hover:text-text"
                 }`}
               >
                 {label}
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    isActive ? "bg-[#0B0C10]/20 text-[#0B0C10]" : "bg-surface-3 text-text-mute"
+                    isActive ? "bg-black/20 text-text-on-accent" : "bg-surface-3 text-text-mute"
                   }`}
                 >
                   {cnt}

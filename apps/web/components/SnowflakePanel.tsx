@@ -46,16 +46,16 @@ export function SnowflakePanel({
         <div>
           <svg viewBox="0 0 260 212" className="w-full" role="img" aria-label={`스노우플레이크 5축: ${axes.map((a) => `${a.label} ${a.score}`).join(", ")}`}>
             {[1, 0.66, 0.33].map((s) => (
-              <polygon key={s} points={vtx(s)} fill="none" stroke="rgba(255,255,255,0.10)" />
+              <polygon key={s} points={vtx(s)} fill="none" stroke="rgba(23,26,43,0.10)" />
             ))}
             {ANG.map((_, i) => {
               const [x, y] = point(i, 1);
-              return <line key={i} x1={C.cx} y1={C.cy} x2={x} y2={y} stroke="rgba(255,255,255,0.08)" />;
+              return <line key={i} x1={C.cx} y1={C.cy} x2={x} y2={y} stroke="rgba(23,26,43,0.08)" />;
             })}
-            <polygon points={dataPoly} fill="rgba(198,242,78,0.18)" stroke="#C6F24E" strokeWidth={2} />
+            <polygon points={dataPoly} fill="rgba(89,89,228,0.12)" stroke="#5959E4" strokeWidth={2} />
             {axes.map((a, i) => {
               const [x, y] = point(i, a.score / 100);
-              return <circle key={a.key} cx={x} cy={y} r={2.6} fill={a.score < 45 ? "#FF6B6B" : "#C6F24E"} />;
+              return <circle key={a.key} cx={x} cy={y} r={2.6} fill={a.score < 45 ? "#B45309" : "#5959E4"} />;
             })}
             {axes.map((a, i) => (
               <text
@@ -65,7 +65,7 @@ export function SnowflakePanel({
                 textAnchor="middle"
                 fontSize="11"
                 fontWeight={a.score < 45 ? 600 : 500}
-                fill={a.score < 45 ? "#FF8A8A" : "#C7CAD1"}
+                fill={a.score < 45 ? "#B45309" : "#6B7184"}
               >
                 {a.label} {a.score}
               </text>
@@ -97,7 +97,7 @@ export function SnowflakePanel({
               <p className="text-[11px] text-text-mute">건강점수</p>
               <p className="mt-1 text-[15px] tracking-[2px]">
                 <span className="text-accent">{"●".repeat(health)}</span>
-                <span className="text-text-mute/40">{"○".repeat(5 - health)}</span>
+                <span className="text-text-mute/70">{"○".repeat(5 - health)}</span>
               </p>
               <p className="mt-0.5 text-[10px] text-text-mute">{health} / 5</p>
             </div>

@@ -7,13 +7,16 @@ const badgeVariants = cva(
     variants: {
       variant: {
         neutral: "bg-surface-3 text-text-dim ring-border-strong",
-        style: "bg-sky-500/15 text-sky-300 ring-sky-500/25",
-        setup: "bg-violet-500/15 text-violet-300 ring-violet-500/25",
-        session: "bg-amber-500/15 text-amber-300 ring-amber-500/25",
+        style: "bg-sky-500/15 text-sky-700 ring-sky-500/25",
+        setup: "bg-violet-500/15 text-violet-700 ring-violet-500/25",
+        session: "bg-amber-500/15 text-amber-800 ring-amber-500/25",
         bull: "bg-bull-soft text-bull ring-bull/20",
         bear: "bg-bear-soft text-bear ring-bear/20",
         accent: "bg-accent-dim text-accent ring-accent/25",
         warn: "bg-warn-soft text-warn ring-warn/25",
+        // 게이트 통과/탈락 — bull/bear(시세 적·청)를 쓰면 안 된다
+        pass: "bg-pass-soft text-pass ring-pass/25",
+        fail: "bg-fail-soft text-fail ring-fail/25",
       },
       size: {
         sm: "px-1.5 py-0.5 text-[10px]",

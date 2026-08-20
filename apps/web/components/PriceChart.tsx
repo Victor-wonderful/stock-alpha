@@ -59,15 +59,15 @@ export function PriceChart({
     const chart: IChartApi = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#9aa4b2",
+        textColor: "#6B7184",
         fontFamily: "var(--font-sans)",
       },
       grid: {
-        vertLines: { color: "rgba(34,39,50,0.6)" },
-        horzLines: { color: "rgba(34,39,50,0.6)" },
+        vertLines: { color: "rgba(230,232,242,0.9)" },
+        horzLines: { color: "rgba(230,232,242,0.9)" },
       },
-      rightPriceScale: { borderColor: "#222732" },
-      timeScale: { borderColor: "#222732", timeVisible: false },
+      rightPriceScale: { borderColor: "#E6E8F2" },
+      timeScale: { borderColor: "#E6E8F2", timeVisible: false },
       crosshair: { mode: 1 },
       height: el.clientHeight || 320,
       width: el.clientWidth,
@@ -75,11 +75,11 @@ export function PriceChart({
     });
 
     const series = chart.addCandlestickSeries({
-      upColor: "#2ebd85",
-      downColor: "#f6465d",
+      upColor: "#D6293E",
+      downColor: "#1F5FD0",
       borderVisible: false,
-      wickUpColor: "#2ebd85",
-      wickDownColor: "#f6465d",
+      wickUpColor: "#D6293E",
+      wickDownColor: "#1F5FD0",
     });
     series.setData(
       candles && candles.length > 0 ? candles : sampleCandles(anchor),
@@ -96,9 +96,9 @@ export function PriceChart({
         title,
       });
     };
-    line(levels.entry, "#3d7bff", "진입");
-    line(levels.stop, "#f6465d", "손절");
-    line(levels.tp1, "#2ebd85", "TP1");
+    line(levels.entry, "#5959E4", "진입");
+    line(levels.stop, "#1F5FD0", "손절");
+    line(levels.tp1, "#D6293E", "TP1");
 
     chart.timeScale().fitContent();
 

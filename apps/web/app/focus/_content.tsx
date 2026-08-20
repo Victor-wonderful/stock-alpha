@@ -274,7 +274,7 @@ export default async function FocusContent() {
                 </span>
               )}
               {planDay && (
-                <span className="rounded-[999px] bg-accent px-3 py-1 text-[11px] font-bold text-[#0B0C10]">
+                <span className="rounded-[999px] bg-accent px-3 py-1 text-[11px] font-bold text-text-on-accent">
                   → {planDay} 장 시작 전 플랜
                 </span>
               )}
