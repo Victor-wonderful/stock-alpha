@@ -25,16 +25,17 @@ import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/fo
 import { PickCard } from "./_pick-card";
 
 // 레짐 게이지 (3구간 바 + 마커)
-function RegimeGauge({ score }: { score: number }) {
+function RegimeGauge({ score, onNavy = false }: { score: number; onNavy?: boolean }) {
   // score: -1 ~ 1 → 0 ~ 100% 포지션
   const pct = Math.max(0, Math.min(100, (score + 1) * 50));
   return (
     <div className="space-y-1.5">
       <div className="relative h-2.5 w-full overflow-hidden rounded-full">
         <div className="absolute inset-0 flex">
-          <div className="flex-1 bg-bad/60" />
+          {/* 네이비 위에서는 라이트 바탕용 적/청이 묻힌다 — 밝은 변형을 쓴다. */}
+          <div className={`flex-1 ${onNavy ? "bg-down-on-navy/70" : "bg-bad/60"}`} />
           <div className="flex-1 bg-warn/60" />
-          <div className="flex-1 bg-good/60" />
+          <div className={`flex-1 ${onNavy ? "bg-up-on-navy/70" : "bg-good/60"}`} />
         </div>
         {/* 마커 */}
         <div
@@ -42,7 +43,7 @@ function RegimeGauge({ score }: { score: number }) {
           style={{ left: `calc(${pct}% - 2px)` }}
         />
       </div>
-      <div className="flex justify-between text-[10px] text-text-mute">
+      <div className={`flex justify-between text-[10px] ${onNavy ? "text-on-navy-3" : "text-text-mute"}`}>
         <span>약세 · 방어</span>
         <span>중립</span>
         <span>강세 · 공격</span>
@@ -304,28 +305,32 @@ export default async function FocusContent() {
              추천 = 필터 없는 큐레이션(IA 2026-06-24): 4탭(RecommendTabs) 폐지, 탐색은 스크리너로 분리. ── */}
         <RegimeHeader state={marketState} />
 
-        {/* ── 모닝 브리프 카드 ── */}
+        {/* ── 모닝 브리프 카드 ──
+             시장 브리프는 «전제»다 — 추천을 읽기 전에 깔고 가는 배경.
+             라이트 카드로 두면 아래 픽 카드들과 같은 무게로 읽혀 배경이 되지 못한다.
+             히어로와 같은 네이비를 써서 «이건 맥락이고 아래가 본문»임을 색으로 말한다.
+             안쪽 글자는 전부 on-navy 계열 — text/text-dim 을 쓰면 네이비 위에서 안 보인다. */}
         {briefData && (
-          <div className="mb-6 rounded-[12px] border border-border bg-surface p-5">
+          <div className="mb-6 rounded-[12px] bg-navy p-5">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_1px_260px]">
               {/* 좌: 헤드라인 + 드라이버 칩 */}
               <div>
                 <div className="mb-2.5 flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-text">시장 브리프</h2>
+                  <h2 className="text-sm font-bold text-on-navy">시장 브리프</h2>
                   {asOf && (
-                    <span className="rounded px-2 py-0.5 text-[10px] bg-surface-3 text-text-mute">
+                    <span className="rounded bg-on-navy/10 px-2 py-0.5 text-[10px] text-on-navy-2">
                       {asOf} 발행
                     </span>
                   )}
                 </div>
-                <p className="text-sm font-semibold leading-relaxed text-text">
+                <p className="text-sm font-semibold leading-relaxed text-on-navy">
                   {briefData.headline}
                 </p>
                 {(briefData.watchpoints ?? []).length > 0 && (
                   <ul className="mt-2.5 space-y-1.5">
                     {briefData.watchpoints.slice(0, 3).map((w, i) => (
-                      <li key={i} className="flex gap-2 text-[11px] leading-relaxed text-text-dim">
-                        <span className="font-bold text-accent">▸</span>
+                      <li key={i} className="flex gap-2 text-[11px] leading-relaxed text-on-navy-2">
+                        <span className="font-bold text-accent-on-navy">▸</span>
                         {w}
                       </li>
                     ))}
@@ -337,7 +342,7 @@ export default async function FocusContent() {
                     {regime.drivers.slice(0, 3).map((d, i) => (
                       <span
                         key={i}
-                        className="rounded-[999px] bg-surface-3 px-2.5 py-1 text-[10px] text-text-dim"
+                        className="rounded-[999px] bg-on-navy/10 px-2.5 py-1 text-[10px] text-on-navy-2"
                       >
                         {d}
                       </span>
@@ -347,26 +352,26 @@ export default async function FocusContent() {
               </div>
 
               {/* 구분선 */}
-              <div className="hidden bg-border lg:block" />
+              <div className="hidden bg-on-navy/15 lg:block" />
 
               {/* 우: 레짐 게이지 + 지수 쿼트 */}
               <div className="flex flex-col gap-4">
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold text-text-mute">시장 레짐</p>
-                  <RegimeGauge score={regimeScore} />
+                  <p className="mb-2 text-[11px] font-semibold text-on-navy-3">시장 레짐</p>
+                  <RegimeGauge score={regimeScore} onNavy />
                 </div>
                 {(briefData.macro ?? []).length > 0 && (
                   <div className="grid grid-cols-3 gap-1.5">
                     {briefData.macro.slice(0, 3).map((m) => (
-                      <div key={m.series} className="rounded-[8px] bg-surface-2 px-2 py-1.5">
-                        <p className="truncate text-[10px] text-text-mute">{m.label}</p>
-                        <p className="tnum text-xs font-bold text-text">
+                      <div key={m.series} className="rounded-[8px] bg-on-navy/10 px-2 py-1.5">
+                        <p className="truncate text-[10px] text-on-navy-3">{m.label}</p>
+                        <p className="tnum text-xs font-bold text-on-navy">
                           {m.value.toLocaleString()}
                         </p>
                         {m.change_pct != null && (
                           <p
                             className={`tnum text-[10px] font-semibold ${
-                              m.change_pct >= 0 ? "text-good" : "text-bad"
+                              m.change_pct >= 0 ? "text-up-on-navy" : "text-down-on-navy"
                             }`}
                           >
                             {m.change_pct >= 0 ? "+" : ""}
