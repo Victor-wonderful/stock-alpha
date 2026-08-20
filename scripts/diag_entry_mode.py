@@ -22,7 +22,9 @@ DB 에 아무것도 쓰지 않는다 — 진단 전용.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from pathlib import Path
 
 from engine.backtest.costs import default_cost_model
 from engine.backtest.event_backtest import backtest_playbook
@@ -35,6 +37,10 @@ from engine.signals import playbooks
 log = get_logger(__name__)
 
 MODES = ("signal", "limit", "open")
+
+# 조합 하나가 끝날 때마다 여기 한 줄씩 append 한다. 실행이 중간에 끊겨도(첫 실행에서
+# 13개 중 3개만 돌고 멈췄다) 거기까지가 남고, 다시 돌리면 남은 것만 이어서 한다.
+RESULTS = Path(__file__).resolve().parents[1] / "var" / "entry_mode_results.jsonl"
 
 # 지금 게이트를 통과 중인 조합 — 여기가 흔들리면 발행이 흔들린다.
 FOCUS = [
@@ -50,7 +56,21 @@ FOCUS = [
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--all", action="store_true", help="전 조합(느림)")
+    ap.add_argument("--restart", action="store_true", help="이전 결과 무시하고 처음부터")
     args = ap.parse_args()
+
+    RESULTS.parent.mkdir(parents=True, exist_ok=True)
+    if args.restart and RESULTS.exists():
+        RESULTS.unlink()
+    done: set[tuple[str, str]] = set()
+    if RESULTS.exists():
+        for line in RESULTS.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            done.add((r["setup"], r["style"]))
+    if done:
+        print(f"이미 끝난 조합 {len(done)}개 — 건너뜁니다", flush=True)
 
     from engine.backtest.runner import _load_active_frames
     from engine.signals.runner import (
@@ -72,8 +92,8 @@ def main() -> int:
     print(f"조합 {len(combos)}개 × 모드 {len(MODES)}\n")
 
     hdr = f"{'셋업':<18}{'스타일':<10}{'모드':<8}{'거래수':>8}{'승률':>8}{'손익비':>8}{'기대값R':>9}  게이트"
-    print(hdr)
-    print("-" * len(hdr))
+    print(hdr, flush=True)
+    print("-" * len(hdr), flush=True)
 
     for setup, style in combos:
         row_by_mode = {}
@@ -93,7 +113,8 @@ def main() -> int:
             rr = f"{gr.avg_rr:.2f}" if gr.avg_rr is not None else "—"
             ex = f"{gr.expectancy_r:+.3f}" if gr.expectancy_r is not None else "—"
             mark = "통과" if gr.passed else ""
-            print(f"{setup:<18}{style:<10}{mode:<8}{len(trades):>8,}{wr:>8}{rr:>8}{ex:>9}  {mark}")
+            print(f"{setup:<18}{style:<10}{mode:<8}{len(trades):>8,}{wr:>8}{rr:>8}{ex:>9}  {mark}",
+                  flush=True)
         # 요약 — 무조건체결 대비 지정가가 얼마나 깎이나
         sg = row_by_mode["signal"][1].expectancy_r
         lm = row_by_mode["limit"][1].expectancy_r
@@ -102,8 +123,16 @@ def main() -> int:
             drop = lm - sg
             best = max(((lm, "limit"), (op or -99, "open")))
             print(f"{'':<18}{'':<10}→ 지정가 반영 시 기대값 {drop:+.3f}R "
-                  f"· 더 나은 쪽: {best[1]}")
-        print()
+                  f"· 더 나은 쪽: {best[1]}", flush=True)
+        print(flush=True)
+
+        # 조합 하나가 끝날 때마다 디스크에 남긴다 — 중간에 끊겨도 여기까지는 보존된다.
+        rec = {"setup": setup, "style": style}
+        for mode, (n_tr, g) in row_by_mode.items():
+            rec[mode] = {"trades": n_tr, "win_rate": g.win_rate, "avg_rr": g.avg_rr,
+                         "expectancy_r": g.expectancy_r, "passed": g.passed}
+        with RESULTS.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + chr(10))
     return 0
 
 
