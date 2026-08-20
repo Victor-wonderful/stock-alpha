@@ -336,6 +336,23 @@ def morning(
 
 
 @app.command()
+def weekly(
+    as_of: str = typer.Option("", help="기준일(YYYY-MM-DD). 비우면 오늘. 그 날이 속한 주를 쓴다"),
+) -> None:
+    """주간 브리핑 발행 — 한 주에 무엇이 달라졌나(홈 「주간 브리핑」 섹션).
+
+    같은 주는 덮어쓴다. 매일 돌려도 그 주 1건만 남으므로 일일 배치에 그대로 걸어도 된다
+    — 주 중간에도 «지금까지의 이번 주»가 최신으로 유지된다.
+    """
+    from engine.reports import weekly as wk
+
+    out = wk.publish(as_of or None)
+    typer.echo(f"weekly {out['as_of']} — {out['headline']}")
+    if out["summary"]:
+        typer.echo(f"  {out['summary']}")
+
+
+@app.command()
 def daily(
     skip_ingest: bool = typer.Option(False, help="시세 인제스트 생략(데이터 최신일 때)"),
     ingest_days: int = typer.Option(7, help="시세 인제스트 기간(일)"),
@@ -551,7 +568,10 @@ def worker(
         {"name": "daily", "hh": 16, "mm": 30, "logbase": "daily",
          "cmds": [["ingest-minutes", "--top", "200"],
                   ["daily"],
-                  ["ingest-disclosures", "--days", "3"]]},
+                  ["ingest-disclosures", "--days", "3"],
+                  # 주간 브리핑은 맨 뒤 — 같은 주를 덮어쓰므로 언제 돌려도 복구된다.
+                  # 앞 명령이 실패하면 이건 안 돌지만, 다음날 실행이 그 주를 다시 채운다.
+                  ["weekly"]]},
     ]
 
     def load_state() -> dict:

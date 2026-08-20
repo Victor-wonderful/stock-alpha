@@ -17,6 +17,7 @@ import {
   getBlogPosts,
   pickBlogPosts,
   getMacroSeries,
+  getWeeklyReports,
 } from "@/lib/data";
 import {
   fmtPrice,
@@ -188,9 +189,12 @@ export default async function DashboardPage() {
   // 매크로만 폴백이 있다 — 아직 매크로 글이 0편이라 글이 생길 때까지 지표로 자리를 지킨다.
   // 원/달러(DEXKOUS)는 뺀다: 상단 티커가 네이버 당일 고시환율로 같은 값을 이미 보여주는데
   // FRED DEXKOUS 는 며칠 지연돼 한 화면에 1,390 과 1,414 가 동시에 뜬다(2026-08-20 실측).
-  const [blogPosts, macroIndicators] = await Promise.all([
+  // 세 섹션 모두 «자체 생성 기본 + 블로그 글 우선»이다. 블로그가 그 주제로 글을 쓰면
+  // 사람 글이 이기고, 없으면 엔진 산출물이 자리를 지킨다(2026-08-20 Victor 결정).
+  const [blogPosts, macroIndicators, weeklyReports] = await Promise.all([
     getBlogPosts(),
     getMacroSeries(["DEXKOUS"]),
+    getWeeklyReports(3),
   ]);
 
   // 현재가·전일대비 — 추천 5건을 벌크 1회로 가져온다(예전엔 종목당 1회, 5왕복).
@@ -618,12 +622,18 @@ export default async function DashboardPage() {
         {/* ── 홈 하단 3섹션 ──
             추천(상품)을 먼저 보여주고, 그 아래에 맥락과 아카이브를 둔다.
             순서: 주간 브리핑(무슨 일이 있었나) → 매크로(바깥 조건) → 최근 기업분석(쌓인 것). */}
-        <WeeklyBriefs posts={pickBlogPosts(blogPosts, "view", "weekly", 3)} />
+        <WeeklyBriefs
+          posts={pickBlogPosts(blogPosts, "view", "weekly", 3)}
+          reports={weeklyReports}
+        />
         <MacroSection
           posts={pickBlogPosts(blogPosts, "view", "macro", 3)}
           indicators={macroIndicators}
         />
-        <RecentReports posts={pickBlogPosts(blogPosts, "stocks", "analysis", 3)} />
+        <RecentReports
+          posts={pickBlogPosts(blogPosts, "stocks", "analysis", 3)}
+          reports={reports.data.slice(0, 3)}
+        />
 
         {/* 면책 고지 */}
         <p className="mt-8 text-center text-[11px] leading-relaxed text-text-mute">
