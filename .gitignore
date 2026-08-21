@@ -70,3 +70,4 @@ backups/
 
 # 픽 정리(scripts/cleanup_picks) 삭제 전 덤프 — 로컬 증거물이라 저장소엔 안 넣는다.
 apps/engine/data/pick_backups/
+apps/engine/data/cleanup_backups/

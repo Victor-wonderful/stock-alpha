@@ -10,7 +10,7 @@ import pandas as pd
 
 from engine.backtest.costs import default_cost_model
 from engine.backtest.event_backtest import backtest_playbook
-from engine.backtest.gate import GateThresholds, evaluate_gate
+from engine.backtest.gate import GateThresholds, combo_blocked, evaluate_gate
 from engine.backtest.metrics import Trade, sharpe
 from engine.db import get_client, select_all, upsert
 from engine.logging import get_logger
@@ -184,10 +184,13 @@ def apply_hysteresis(raw: bool, prev: dict | None) -> bool:
 
 
 def passed_combos(thresholds: GateThresholds | None = None) -> dict[str, list[str]]:
-    """게이트 통과 (셋업→통과 스타일 목록). 재백테스트 실행. 시그널 발행 필터용."""
+    """게이트 통과 (셋업→통과 스타일 목록). 재백테스트 실행. 시그널 발행 필터용.
+
+    체결 가정 불일치로 임시 차단된 조합(gate.BLOCKED_COMBOS)은 통과해도 뺀다.
+    """
     out: dict[str, list[str]] = {}
     for (setup, style), ok in run(thresholds).items():
-        if ok:
+        if ok and not combo_blocked(setup, style):
             out.setdefault(setup, []).append(style)
     return out
 
@@ -215,9 +218,16 @@ def passed_combos_from_db(as_of: str | None = None) -> dict[str, list[str]]:
         if bt.get("setup") and bt.get("style") and _within(bt, cutoff):
             latest[(bt["setup"], bt["style"])] = bt
     out: dict[str, list[str]] = {}
+    blocked: list[str] = []
     for (setup, style), bt in latest.items():
-        if bt.get("passed"):
-            out.setdefault(setup, []).append(style)
+        if not bt.get("passed"):
+            continue
+        if combo_blocked(setup, style):      # 게이트는 통과했지만 라이브 기대값 ≤0
+            blocked.append(f"{setup}:{style}")
+            continue
+        out.setdefault(setup, []).append(style)
+    if blocked:
+        log.info("backtest.gate.blocked_combos", combos=sorted(blocked))
     return out
 
 

@@ -181,3 +181,22 @@ def test_generate_signals_filter_setups():
     rows = generate_signals(df, instrument_id=1, setups=["oversold_bounce"])
     # 상승추세엔 과대낙폭 트리거 없음
     assert rows == []
+
+
+def test_generate_signals_drops_blocked_combo():
+    """체결 가정 불일치로 임시 차단된 조합(breakout:swing)은 발행되지 않는다.
+
+    배치(cli.daily)는 셋업 단위로만 게이트를 걸고 스타일은 안 거른다 — 여기서
+    막지 않으면 signals 테이블을 거쳐 웹 시그널 목록으로 그대로 나간다.
+    """
+    closes = [100.0] * 24 + [106.0]
+    highs = [101.0] * 24 + [106.5]
+    vols = [1000.0] * 24 + [3000.0]
+    df = _mk([100.0] * 25, highs, [99.0] * 25, closes, vols)
+    rows = generate_signals(
+        df, instrument_id=7, setups=["breakout"],
+        styles_by_setup={"breakout": ["swing", "position"]},
+    )
+    styles = {r["style"] for r in rows if r["setup"] == "breakout"}
+    assert "swing" not in styles, f"차단 조합이 발행됐다: {styles}"
+    assert styles == {"position"}
