@@ -339,6 +339,36 @@ export async function getSignalsBySetups(
 //
 // PostgREST 는 GROUP BY 가 없으므로 셋업별 head-count 를 병렬로 던진다.
 // 칩에 실제로 그리는 셋업(7개)만 조회하고, 60초 fetch 캐시가 걸려 있어 반복 비용은 없다.
+/**
+ * (셋업,스타일) 조합 목록에 해당하는 시그널 건수 합.
+ *
+ * 스크리너가 "검증 통과 N건"을 사실대로 말하기 위해 쓴다. signals 는 자연키
+ * 업서트라 과거 시그널이 재발동 전까지 남고, 그사이 게이트 판정이 바뀌면
+ * «테이블에 있는 조합»과 «지금 통과한 조합»이 갈린다. 표본이 아니라 DB count 로
+ * 세야 한다 — 화면에 보이는 100건만 세면 전체를 오도한다.
+ */
+export async function countSignalsForCombos(
+  combos: { setup: string; style: string }[],
+): Promise<number> {
+  if (combos.length === 0) return 0;
+  try {
+    const supabase = createPublicClient();
+    const counts = await Promise.all(
+      combos.map(async ({ setup, style }) => {
+        const { count } = await supabase
+          .from("signals")
+          .select("id", { count: "exact", head: true })
+          .eq("setup", setup)
+          .eq("style", style);
+        return count ?? 0;
+      }),
+    );
+    return counts.reduce((a, b) => a + b, 0);
+  } catch {
+    return 0;
+  }
+}
+
 export async function getSignalCounts(
   setups: string[],
 ): Promise<{ total: number; bySetup: Map<string, number> }> {

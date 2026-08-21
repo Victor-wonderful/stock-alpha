@@ -7,6 +7,7 @@ import { fmtPrice, fmtPct } from "@/lib/format";
 import { MiniSnowflake } from "@/components/MiniSnowflake";
 import { PriceNow } from "@/components/PriceNow";
 import { setupCharacter, TONE_CLASS } from "@/lib/setupCharacter";
+import { holdingLabel, holdingApprox, exitPlanLines } from "@/lib/holding";
 import type { SnowflakeAxis } from "@/lib/snowflake";
 import type { RecommendationView, ReportListItem } from "@/lib/types";
 
@@ -101,6 +102,13 @@ export function PickCard({
   const entryNote = awaitingEntry
     ? "다음 거래일 시가에 매수 — 손절·목표는 시가 확정 후 다시 계산됩니다"
     : es.alert;
+
+  // 매매 계획 — "언제 사서 언제 파나". 규칙은 엔진이 자동 집행하는데 화면에
+  // 없었다(진입가·목표가·손절가만 보였다). 보유기간과 분할 익절을 안 적으면
+  // 사용자는 목표가에서 전량 파는 걸로 이해한다 — 실제 손익과 어긋난다.
+  const exitLines = exitPlanLines(pick.style, {
+    tp1: pick.target_price, tp2: pick.tp2_price, stop: pick.stop_loss,
+  });
   // 성격 — "왜 떴나"(큰손/추세/반등…). 전 픽이 게이트 통과분이라 검증 배지도 함께.
   const ch = setupCharacter(pick.setup);
 
@@ -233,6 +241,31 @@ export function PickCard({
             <p className="tnum mt-0.5 text-xs font-bold text-text">{value}</p>
           </div>
         ))}
+      </div>
+
+      {/* 매매 계획 — 진입 시점 · 보유기간 · 청산 조건을 한 곳에 */}
+      <div className="border-t border-border px-5 py-3">
+        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+          <span className="font-semibold text-text">
+            {awaitingEntry ? "다음 거래일 시가 매수" : "매수"}
+          </span>
+          <span className="text-text-mute">→</span>
+          <span className="rounded-[6px] bg-surface-2 px-2 py-0.5 font-semibold text-text-dim">
+            {holdingLabel(pick.style)}
+          </span>
+          {holdingApprox(pick.style) && (
+            <span className="text-text-mute">{holdingApprox(pick.style)}</span>
+          )}
+        </div>
+        <ul className="space-y-1">
+          {exitLines.map((l) => (
+            <li key={l.trigger} className="flex gap-2 text-[11px] leading-snug">
+              <span className="shrink-0 text-text-dim">{l.trigger}</span>
+              <span className="text-text-mute">→</span>
+              <span className="text-text-mute">{l.action}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* 🔔 진입 레벨 알림 + 접이식 근거 */}
