@@ -1,7 +1,11 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
-import { getPickHistory, type PickRecord } from "@/lib/data";
+import {
+  getPickHistory,
+  NON_TRADE_PICK_STATUSES,
+  type PickRecord,
+} from "@/lib/data";
 import { fmtPct, fmtPrice } from "@/lib/format";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -21,7 +25,7 @@ const STATUS_BADGE: Record<string, string> = {
   "—": "bg-surface-3 text-text-mute",
 };
 
-const FILTERS = ["전체", "진행중", "목표 도달", "손절", "만료", "미체결"] as const;
+const FILTERS = ["전체", "진입 대기", "진행중", "목표 도달", "손절", "만료", "미체결"] as const;
 
 export default async function PicksPage({
   searchParams,
@@ -38,6 +42,13 @@ export default async function PicksPage({
   const rows = filter === "전체" ? all : all.filter((r) => r.status === filter);
 
   // 요약 집계 — 전체 발행 기준 (필터와 무관)
+  //
+  // ⚠️ 비율의 «분모»는 발행 건수가 아니라 «거래가 된 건수»다. 진입을 다음 거래일
+  // 시가로 바꾼 뒤(2026-08-21) 픽은 발행 즉시 거래가 아니다 — 하루는 진입 대기고,
+  // 갭으로 진입 조건이 무너지면 아예 안 산다(취소). 옛 지정가 픽의 미체결도 같다.
+  // 이것들을 분모에 넣으면 손절률이 실제보다 낮아 보인다.
+  const traded = all.filter((r) => !NON_TRADE_PICK_STATUSES.has(r.status));
+  const pending = all.filter((r) => r.status === "진입 대기");
   const closedTarget = all.filter((r) => r.status === "목표 도달");
   const closedStop = all.filter((r) => r.status === "손절");
   const inProgress = all.filter((r) => r.status === "진행중");
@@ -60,22 +71,29 @@ export default async function PicksPage({
   return (
     <AppShell
       title="성과"
-      subtitle="발행한 모든 픽의 트랙레코드 — 종가 기준 자동 확정 (목표 / 손절 / 만료 30일)"
+      subtitle="발행한 모든 픽의 트랙레코드 — 다음 거래일 시가 진입 · 종가 기준 자동 확정 (목표 / 손절 / 만료 30일)"
     >
       <div className="space-y-4">
         {/* 요약 스탯 */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            { label: "누적 발행", value: `${all.length}건`, sub: "전체 트랙레코드", color: "text-text" },
+            {
+              label: "누적 발행",
+              value: `${all.length}건`,
+              sub: pending.length > 0
+                ? `거래 ${traded.length}건 · 진입 대기 ${pending.length}건`
+                : `거래 ${traded.length}건`,
+              color: "text-text",
+            },
             {
               label: "목표 달성",
-              value: `${closedTarget.length}건${all.length ? ` (${Math.round((closedTarget.length / all.length) * 100)}%)` : ""}`,
+              value: `${closedTarget.length}건${traded.length ? ` (${Math.round((closedTarget.length / traded.length) * 100)}%)` : ""}`,
               sub: avg(closedTarget) != null ? `평균 ${fmtPct(avg(closedTarget))}` : undefined,
               color: "text-good",
             },
             {
               label: "손절",
-              value: `${closedStop.length}건${all.length ? ` (${Math.round((closedStop.length / all.length) * 100)}%)` : ""}`,
+              value: `${closedStop.length}건${traded.length ? ` (${Math.round((closedStop.length / traded.length) * 100)}%)` : ""}`,
               sub: avg(closedStop) != null ? `평균 ${fmtPct(avg(closedStop))}` : undefined,
               color: "text-bad",
             },

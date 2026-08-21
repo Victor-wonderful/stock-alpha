@@ -8,12 +8,16 @@ from datetime import datetime
 
 import pandas as pd
 
-from engine.backtest.gate import combo_blocked
 from engine.signals import playbooks
 from engine.signals.levels import compute_levels, min_risk_floor
 from engine.signals.styles import get_style_config
 
 SOURCE_VERSION = "signal-v1"
+
+# 진입 규칙 — 발행 시그널은 «다음 거래일 시가 시장가»를 전제한다(2026-08-21 전환).
+# 여기 적히는 entry_price 는 그 시가를 아직 모르는 시점의 «예상»(당일 종가 기준)이다.
+# reports/daily.ENTRY_RULE · gate.GATE_ENTRY_MODE 와 반드시 같이 움직여야 한다.
+ENTRY_RULE = "next_open"
 
 
 def generate_signals(
@@ -69,12 +73,6 @@ def generate_signals(
             else [cand.style]
         )
         for style in emit_styles:
-            # 체결 가정 불일치 임시 차단(gate.BLOCKED_COMBOS) — 게이트는 통과하지만
-            # 라이브 지정가 기준 기대값이 ≤0 인 조합. 배치 시그널 발행은 스타일
-            # 게이트 없이 셋업 단위로만 돌아서(cli.daily) 여기서 막지 않으면
-            # signals 테이블 → 웹 시그널 목록으로 그대로 나간다.
-            if combo_blocked(cand.setup, style):
-                continue
             lv = compute_levels(
                 style=style, side=cand.side, entry_price=cand.entry_ref,
                 atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
@@ -109,6 +107,10 @@ def generate_signals(
                     "atr": round(cand.atr, 4),
                     "support": cand.support,
                     "resistance": cand.resistance,
+                    # 진입 «규칙». entry_price 는 이 종가 기준으로 계산한 «예상»이고,
+                    # 실제 진입은 다음 거래일 시가 시장가다 — 게이트도 같은 가정으로
+                    # 잰다(gate.GATE_ENTRY_MODE). 웹이 이 값을 보고 표기를 바꾼다.
+                    "entry_rule": ENTRY_RULE,
                 },
                 "llm_rationale": " · ".join(cand.rationale) or None,
                 "source_version": SOURCE_VERSION,

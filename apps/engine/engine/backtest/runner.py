@@ -10,7 +10,7 @@ import pandas as pd
 
 from engine.backtest.costs import default_cost_model
 from engine.backtest.event_backtest import backtest_playbook
-from engine.backtest.gate import GateThresholds, combo_blocked, evaluate_gate
+from engine.backtest.gate import GATE_ENTRY_MODE, GateThresholds, evaluate_gate
 from engine.backtest.metrics import Trade, sharpe
 from engine.db import get_client, select_all, upsert
 from engine.logging import get_logger
@@ -51,7 +51,8 @@ def _load_active_frames(bars: int = 500) -> dict[int, pd.DataFrame]:
 
 
 def run(
-    thresholds: GateThresholds | None = None, *, scaleout: bool = True
+    thresholds: GateThresholds | None = None, *, scaleout: bool = True,
+    entry_mode: str = GATE_ENTRY_MODE,
 ) -> dict[tuple[str, str], bool]:
     """전 종목·(셋업×스타일) 매트릭스 백테스트 → 조합별 게이트 결과. {(setup,style): passed}.
 
@@ -63,6 +64,12 @@ def run(
     scaleout: 청산 규칙. True(기본)=분할익절(tp1 50%+본전스톱 후 tp2 런) — 라이브
     수명주기(resolve_pick_status)와 동일 규칙. 게이트와 라이브가 같은 청산을 쓰도록
     단일 출처로 둔다(diag_scaleout 검증: 6/7 셋업 net 기대값↑).
+
+    entry_mode: 진입 «체결» 가정. 기본 GATE_ENTRY_MODE="open" (다음 거래일 시가
+    시장가) — 라이브 발행과 같은 가정이다. 청산과 마찬가지로 진입도 게이트와
+    라이브가 어긋나면 안 된다: 예전 기본값 "signal"(신호가 무조건 체결)은 갭업해
+    도망간 종목까지 샀다고 세어, 게이트가 통과시킨 기대값이 라이브에서 하나도
+    성립하지 않았다(13조합 전수 비교, 2026-08-20).
     """
     thr = thresholds or GateThresholds()
     frames = _load_active_frames(bars=500)
@@ -81,7 +88,7 @@ def run(
     earnings_map = load_earnings_map()
     discl_map = load_disclosures_map()
 
-    prev = _load_prev_verdicts()
+    prev = _load_prev_verdicts(entry_mode)
 
     costs = default_cost_model()
     log.info("backtest.costs", commission_pct=costs.commission_pct,
@@ -102,6 +109,7 @@ def run(
                         costs=costs,
                         style_override=style,
                         scaleout=scaleout,
+                        entry_mode=entry_mode,
                     )
                 )
             # 시간순 정렬 — MDD 는 순서 민감(시간순 = 실제 시퀀스).
@@ -124,6 +132,7 @@ def run(
                 "style": style,
                 "params": {"thresholds": thr.__dict__, "costs": costs.__dict__,
                            "gross_expectancy_r": gross_exp,
+                           "entry_mode": entry_mode,
                            "walkforward": gr.walkforward},
                 "sharpe": sharpe([t.ret_pct for t in trades]),
                 "mdd": gr.mdd,
@@ -149,19 +158,29 @@ def run(
     return passed
 
 
-def _load_prev_verdicts() -> dict[tuple[str, str], dict]:
+def _load_prev_verdicts(entry_mode: str = GATE_ENTRY_MODE) -> dict[tuple[str, str], dict]:
     """(셋업×스타일)별 직전 런 판정 {(setup,style): {passed, passed_raw}}.
 
     style 없는 옛 행(매트릭스 이전)은 매칭 안 됨 → 첫 측정으로 취급(무해).
+
+    ⚠️ **같은 진입 가정(entry_mode)으로 잰 행만 본다.** 히스테리시스는 "2회 연속
+    같은 원측정일 때만 상태를 바꾼다" 이므로, 가정이 바뀐 첫 런에서 옛 가정의
+    판정을 직전 값으로 쓰면 **이번에 탈락한 조합이 한 런 더 통과로 유지된다** —
+    signal→open 전환에서는 그게 곧 «라이브 기대값이 마이너스인 조합을 하루 더
+    발행»하는 것이다. 가정이 다르면 비교 대상이 아니다(옛 행은 entry_mode 키가
+    없어 자연히 제외된다).
     """
     latest: dict[tuple[str, str], dict] = {}
     rows = sorted(
-        select_all("backtests", "setup,style,passed,passed_raw,created_at"),
+        select_all("backtests", "setup,style,passed,passed_raw,params,created_at"),
         key=lambda b: b.get("created_at") or "",
     )
     for bt in rows:
-        if bt.get("setup") and bt.get("style"):
-            latest[(bt["setup"], bt["style"])] = bt
+        if not (bt.get("setup") and bt.get("style")):
+            continue
+        if ((bt.get("params") or {}).get("entry_mode")) != entry_mode:
+            continue
+        latest[(bt["setup"], bt["style"])] = bt
     return latest
 
 
@@ -184,13 +203,10 @@ def apply_hysteresis(raw: bool, prev: dict | None) -> bool:
 
 
 def passed_combos(thresholds: GateThresholds | None = None) -> dict[str, list[str]]:
-    """게이트 통과 (셋업→통과 스타일 목록). 재백테스트 실행. 시그널 발행 필터용.
-
-    체결 가정 불일치로 임시 차단된 조합(gate.BLOCKED_COMBOS)은 통과해도 뺀다.
-    """
+    """게이트 통과 (셋업→통과 스타일 목록). 재백테스트 실행. 시그널 발행 필터용."""
     out: dict[str, list[str]] = {}
     for (setup, style), ok in run(thresholds).items():
-        if ok and not combo_blocked(setup, style):
+        if ok:
             out.setdefault(setup, []).append(style)
     return out
 
@@ -218,16 +234,9 @@ def passed_combos_from_db(as_of: str | None = None) -> dict[str, list[str]]:
         if bt.get("setup") and bt.get("style") and _within(bt, cutoff):
             latest[(bt["setup"], bt["style"])] = bt
     out: dict[str, list[str]] = {}
-    blocked: list[str] = []
     for (setup, style), bt in latest.items():
-        if not bt.get("passed"):
-            continue
-        if combo_blocked(setup, style):      # 게이트는 통과했지만 라이브 기대값 ≤0
-            blocked.append(f"{setup}:{style}")
-            continue
-        out.setdefault(setup, []).append(style)
-    if blocked:
-        log.info("backtest.gate.blocked_combos", combos=sorted(blocked))
+        if bt.get("passed"):
+            out.setdefault(setup, []).append(style)
     return out
 
 

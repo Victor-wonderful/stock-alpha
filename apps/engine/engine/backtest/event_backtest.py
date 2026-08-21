@@ -112,6 +112,8 @@ def backtest_playbook(
     scaleout: bool = False,
     tp_r_mults: tuple[float, ...] | None = None,
     entry_mode: str = "signal",
+    stop_atr_mult: float | None = None,   # 실험: 손절 ATR 배수 override
+    struct_stop: bool = True,             # 실험: 구조 손절 당김 on/off
 ) -> list[Trade]:
     """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
 
@@ -180,6 +182,7 @@ def backtest_playbook(
             atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
             support=cand.support, resistance=cand.resistance,
             setup=cand.setup, tp_r_mults=tp_r_mults,
+            stop_atr_mult=stop_atr_mult, struct_stop=struct_stop,
         )
         entry = lv.entry_price
         stop = lv.stop_loss
@@ -206,6 +209,7 @@ def backtest_playbook(
                 atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
                 support=cand.support, resistance=cand.resistance,
                 setup=cand.setup, tp_r_mults=tp_r_mults,
+                stop_atr_mult=stop_atr_mult, struct_stop=struct_stop,
             )
             entry, stop, tp = lv.entry_price, lv.stop_loss, lv.tp1
             i_entry = i + 1

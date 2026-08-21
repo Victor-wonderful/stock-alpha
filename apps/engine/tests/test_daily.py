@@ -14,6 +14,7 @@ from engine.reports.daily import (
     resolve_pick_status,
     select_picks,
 )
+from engine.reports import daily as rd
 from engine.reports.runner import should_skip_unchanged
 
 
@@ -505,56 +506,90 @@ def test_mixed_setups():
     assert passed_setups_from_rows(rows) == {"kalman", "factor_composite"}
 
 
-# ── 체결 가정 불일치 임시 차단(BLOCKED_COMBOS) ──
-# 게이트는 "신호가에 무조건 체결" 가정으로 재는데 라이브는 지정가라, 아래 조합들은
-# 게이트 통과 판정을 받고도 실제 기대값이 ≤0 이다. 발행 경로 전부에서 막혀야 한다.
+# ── 진입을 «다음 거래일 시가»로 (entry_rule=next_open, 2026-08-21) ──
+# 발행 시점엔 다음날 시가를 모른다 → 예상 레벨로 pending 발행 → D+1 배치가 실제
+# 시가로 레벨을 «다시 계산»해 확정한다. 백테스트 open 모드와 같은 계산이어야 한다.
 
-def test_blocked_combo_is_not_counted_as_passed():
-    """pivot 은 swing 하나로만 통과 중 — 차단되면 셋업 자체가 트랙 A 에서 빠진다."""
-    rows = {("pivot", "swing"): _bt(True)}
-    assert passed_setups_from_rows(rows) == set()
-
-
-def test_blocked_combo_does_not_drop_other_styles_of_same_setup():
-    """breakout:swing 만 차단 — position 으로는 계속 통과해야 한다."""
-    rows = {
-        ("breakout", "swing"): _bt(True),
-        ("breakout", "position"): _bt(True),
+def _pending(**over) -> dict:
+    p = {
+        "as_of": "2026-08-21", "setup": "breakout", "style": "swing",
+        "entry_price": 100.0, "stop_loss": 97.0,
+        "target_price": 106.0, "tp2_price": 109.0,
+        "plan_payload": {"atr": 3.0, "support": None, "resistance": None,
+                         "risk_pct": 1.0, "planned_entry": 100.0,
+                         "planned_stop": 97.0, "planned_tp1": 106.0,
+                         "planned_tp2": 109.0},
     }
-    assert passed_setups_from_rows(rows) == {"breakout"}
+    p.update(over)
+    return p
 
 
-def test_blocked_combos_are_the_measured_negative_ones():
-    """차단 목록 = 라이브(limit) 기대값이 ≤0 으로 실측된 5조합. 그 이상도 이하도 아니다."""
-    from engine.backtest.gate import BLOCKED_COMBOS, combo_blocked
+def test_confirm_levels_recomputes_from_open_not_shift():
+    """백테스트와 같아야 한다 — 시가로 compute_levels 를 다시 돌린 값."""
+    from engine.signals.levels import compute_levels
 
-    assert BLOCKED_COMBOS == frozenset({
-        ("flow_accumulation", "position"),
-        ("anchor_pullback", "swing"),
-        ("pivot", "swing"),
-        ("flow_accumulation", "swing"),
-        ("breakout", "swing"),
-    })
-    assert combo_blocked("pivot", "swing")
-    assert not combo_blocked("pivot", "position")
-    assert not combo_blocked(None, None)
+    pick = _pending()
+    got = rd._confirm_levels(pick, 104.0)          # 갭업 +4%
+    want = compute_levels(
+        style="swing", side="buy", entry_price=104.0, atr=3.0,
+        risk_per_trade_pct=1.0, support=None, resistance=None, setup="breakout",
+    )
+    assert got["entry_price"] == 104.0
+    assert got["stop_loss"] == round(want.stop_loss, 4)
+    assert got["target_price"] == round(want.tp1, 4)
 
 
-def test_blocked_combos_removed_from_db_passed_combos(monkeypatch):
-    """passed_combos_from_db 가 backtests 의 통과 행에서 차단 조합을 걷어낸다."""
-    from engine.backtest import runner as br
+def test_confirm_levels_falls_back_to_distance_shift_without_atr():
+    """atr 없는 옛 픽은 설계한 «거리»를 보존해 평행이동한다(ATR 손절과 동치)."""
+    pick = _pending(plan_payload={"planned_entry": 100.0})
+    got = rd._confirm_levels(pick, 104.0)
+    assert got["stop_loss"] == 101.0               # 97 + 4
+    assert got["target_price"] == 110.0            # 106 + 4
+    assert got["tp2_price"] == 113.0
 
-    rows = [
-        {"setup": "pivot", "style": "swing", "passed": True,
-         "created_at": "2026-08-21T00:00:00+00:00"},
-        {"setup": "breakout", "style": "swing", "passed": True,
-         "created_at": "2026-08-21T00:00:00+00:00"},
-        {"setup": "breakout", "style": "position", "passed": True,
-         "created_at": "2026-08-21T00:00:00+00:00"},
-        {"setup": "double_bottom", "style": "position", "passed": True,
-         "created_at": "2026-08-21T00:00:00+00:00"},
-    ]
-    monkeypatch.setattr(br, "select_all", lambda *a, **k: rows)
-    out = br.passed_combos_from_db()
-    assert out == {"breakout": ["position"], "double_bottom": ["position"]}
-    assert "pivot" not in out
+
+def test_confirm_levels_voids_when_risk_below_floor():
+    """갭으로 손절폭이 최소치 아래면 사지 않는다 — 백테스트도 거래로 안 센다.
+
+    구조 손절 셋업(STRUCT_FIRST_SETUPS)은 손절 하한을 안 걸어 지지선 바로 위로
+    갭업하면 손절폭이 0 에 가까워진다 — 그 상태의 R 은 의미가 없다.
+    """
+    pick = _pending(setup="double_bottom", plan_payload={
+        "atr": 3.0, "support": 103.9, "resistance": None, "risk_pct": 1.0,
+        "planned_entry": 100.0})
+    assert rd._confirm_levels(pick, 104.0) is None      # 손절폭 0.2 미만
+    assert rd._confirm_levels(pick, 0.0) is None        # 시가 비정상
+
+
+def test_next_open_pick_is_always_filled():
+    """시가 시장가는 진입가에 «닿았는지»를 묻지 않는다 — unfilled 가 나오면 안 된다."""
+    pick = {"as_of": "2026-08-21", "style": "swing", "entry_rule": "next_open",
+            "entry_price": 104.0, "stop_loss": 101.0, "target_price": 110.0,
+            "tp2_price": None}
+    # 진입가 위로만 움직여 지정가였다면 영영 못 샀을 경로 — 목표에 닿는다
+    bars = [{"low": 104.5, "high": 111.0, "close": 110.5, "ts": "2026-08-22"}]
+    out = rd.resolve_pick_status(pick, bars, date(2026, 8, 22))
+    assert out["status"] == "target"
+
+
+def test_limit_pick_still_checks_fill():
+    """옛 픽(limit)은 종전대로 체결을 확인한다 — 소급 변경 금지."""
+    pick = {"as_of": "2026-08-21", "style": "swing", "entry_rule": "limit",
+            "entry_price": 104.0, "stop_loss": 101.0, "target_price": 110.0,
+            "tp2_price": None}
+    bars = [{"low": 104.5, "high": 111.0, "close": 110.5, "ts": "2026-08-22"}]
+    out = rd.resolve_pick_status(pick, bars, date(2026, 8, 22))
+    assert out is None or out["status"] != "target"
+
+
+def test_picks_are_published_as_pending_with_plan_inputs():
+    reports = [_report(1, "매수", 80)]
+    reports[0]["payload"]["plan"][0].update(
+        {"atr": 2.5, "support": 94.0, "resistance": 130.0})
+    picks = select_picks(reports, passed_combos={"breakout": ["swing"]})
+    assert len(picks) == 1
+    p = picks[0]
+    assert p["status"] == "pending"
+    assert p["entry_rule"] == "next_open"
+    assert p["plan_payload"]["atr"] == 2.5
+    assert p["plan_payload"]["planned_entry"] == 100.0

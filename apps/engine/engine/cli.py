@@ -456,22 +456,12 @@ def daily(
     # br.run() 은 (셋업×스타일) 매트릭스 → {(setup, style): passed}. 튜플 키를
     # setup 문자열로 풀어야 한다(시그널 발행 필터는 셋업 단위, 스타일 게이팅은 내부 처리).
     gate = br.run()
-    from engine.backtest.gate import combo_blocked
-    raw_pairs = [(setup, style) for (setup, style), ok in gate.items() if ok]
-    # 체결 가정 불일치 임시 차단(gate.BLOCKED_COMBOS)은 «통과»로 세지 않는다 —
-    # 로그가 발행 실제와 어긋나면 진단이 어긋난다(stale-deploy 사고와 같은 종류).
-    passed_pairs = [p for p in raw_pairs if not combo_blocked(*p)]
-    blocked_pairs = [p for p in raw_pairs if combo_blocked(*p)]
+    passed_pairs = [(setup, style) for (setup, style), ok in gate.items() if ok]
     passed = sorted({setup for setup, _ in passed_pairs})
     typer.echo(
         "[3/5] backtest gate passed: "
         f"{', '.join(f'{s}:{st}' for s, st in passed_pairs) or '(없음)'}"
     )
-    if blocked_pairs:
-        typer.echo(
-            "      차단(라이브 기대값≤0): "
-            f"{', '.join(f'{s}:{st}' for s, st in blocked_pairs)}"
-        )
 
     # factor_composite 는 횡단면 백테스트(backtest-factor) 판정을 따른다 —
     # 미통과면 발행 제외 (2026-06-10 검증: IC 유효하나 상위10% 초과수익 무유의)

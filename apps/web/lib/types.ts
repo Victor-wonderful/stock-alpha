@@ -105,6 +105,12 @@ export interface RecommendationView {
   stop_loss: number | null;
   as_of?: string | null; // 발행 기준일 (daily_focus 스냅샷)
   setup?: string | null; // 셋업(플레이북) — 성격 배지용
+  // 진입 규칙(2026-08-21~). 'next_open' = 다음 거래일 시가 시장가 —
+  // 이때 entry_price 는 «예상»(발행일 종가 기준)이고, 실제 진입가·손절·목표는
+  // 다음 거래일 시가가 확정되면 그 시가 기준으로 다시 계산돼 덮어써진다.
+  // 'limit'(옛 픽) = 전일 종가 지정가.
+  entry_rule?: string | null;
+  status?: string | null;
 }
 
 // ── 전략·백테스트 ──

@@ -22,6 +22,7 @@ from engine.timeutil import kst_today
 from engine.logging import get_logger
 from engine.reports.context import EOD_STYLES, backtest_passed
 from engine.reports.runner import publish_indepth
+from engine.signals.levels import compute_levels, min_risk_floor
 
 log = get_logger(__name__)
 
@@ -157,18 +158,12 @@ def passed_setups_from_rows(latest: dict[tuple[str, str], dict]) -> set[str]:
     """{(setup, style): 백테스트행} → 통과 셋업 집합. (순수 함수)
 
     스타일별 판정이 있는 셋업은 스타일 없는 옛 행을 무시한다(위 docstring 참조).
-    임시 차단 조합(gate.BLOCKED_COMBOS)은 통과로 세지 않는다 — 모든 스타일이
-    차단된 셋업은 트랙 A 리포트 대상에서도 빠진다(발행과 리포트를 일치시킨다).
     """
-    from engine.backtest.gate import combo_blocked
-
     has_style = {setup for (setup, style) in latest if style}
     out: set[str] = set()
     for (setup, style), bt in latest.items():
         if setup in has_style and not style:
             continue                       # 매트릭스 이전 행 — 이미 대체됐다
-        if combo_blocked(setup, style):
-            continue
         if backtest_passed(bt):
             out.add(setup)
     return out
@@ -491,11 +486,17 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             "weight": None,
             "conviction": round(min(score / 100.0, 1.0), 4),
             "thesis": narrative.get("thesis") or r.get("summary"),
+            # ⚠️ 여기 값들은 «예상»이다. 진입은 다음 거래일 시가 시장가이고 그 시가는
+            # 아직 모른다 — D+1 배치가 confirm_pending_picks 로 실제 시가를 넣고
+            # 손절·목표를 그 시가 기준으로 다시 계산해 덮어쓴다.
             "entry_price": top_plan.get("entry_price"),
             "target_price": top_plan.get("tp1"),
             "tp2_price": top_plan.get("tp2"),   # 스케일아웃 잔량 런 목표(있으면 분할청산)
             "stop_loss": top_plan.get("stop_loss"),
             "as_of": r["as_of"],
+            "status": "pending",                # 진입 대기 — 시가 확정 전
+            "entry_rule": ENTRY_RULE,
+            "plan_payload": _plan_payload(top_plan),
         })
     return picks
 
@@ -503,6 +504,39 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
 # 캘린더 안전망 — 타임아웃은 스타일별 봉 수(_TIMEOUT_BARS)가 주(主). 거래정지/상장폐지로
 # 봉이 안 쌓여 봉-타임아웃에 영영 못 닿는 픽만 이 날짜로 강제 만료(position 60봉≈84일보다 길게).
 PICK_EXPIRE_DAYS = 120
+
+
+# 진입 규칙 — 발행하는 픽은 «다음 거래일 시가 시장가»다(2026-08-21 전환).
+# 게이트도 같은 가정(entry_mode="open")으로 평가한다. 둘이 어긋나면 게이트가
+# 통과시킨 기대값이 라이브에서 성립하지 않는다 — 그게 직전까지의 문제였다.
+ENTRY_RULE = "next_open"
+
+# 진입 대기 상한(일). 다음 거래일 봉이 이 안에 안 오면(거래정지·상장폐지) 픽을
+# 취소한다 — 안 그러면 pending 이 조용히 쌓이고, 열흘 지난 계획으로 진입하게 된다.
+PENDING_MAX_DAYS = 10
+
+
+def _plan_payload(plan: dict) -> dict:
+    """픽에 실어 보낼 레벨 재계산 입력 + 발행 시 예상 레벨.
+
+    예상값을 함께 남기는 이유: 확정가로 덮어쓰고 나면 "발행 때 뭐라고 했는지"를
+    되짚을 수 없다. 갭이 컸던 날을 사후에 설명하려면 둘 다 있어야 한다.
+    """
+    return {
+        "atr": plan.get("atr"),
+        "support": plan.get("support"),
+        "resistance": plan.get("resistance"),
+        "risk_pct": PICK_RISK_PCT,
+        "planned_entry": plan.get("entry_price"),
+        "planned_stop": plan.get("stop_loss"),
+        "planned_tp1": plan.get("tp1"),
+        "planned_tp2": plan.get("tp2"),
+    }
+
+
+# 레벨 재계산 시 쓰는 1회 리스크 비율. position_size_pct 는 픽에 저장하지 않고
+# 읽기 시점(웹 lib/position)에 계산하므로, 여기서는 재현성을 위한 기록값이다.
+PICK_RISK_PCT = 1.0
 
 
 def _close_patch(status: str, today: date, exit_price: float,
@@ -568,6 +602,11 @@ def resolve_pick_status(
     t1 = float(tp1) if tp1 is not None else None
     t2 = float(tp2) if tp2 is not None else None
     timeout = _TIMEOUT_BARS.get(pick.get("style"), 10)
+    # 진입 규칙이 next_open 이면 시가 시장가라 «항상 체결»이다 — 체결 확인은 옛
+    # limit 픽(전일 종가 지정가)에만 의미가 있다. 이때 bars 는 «진입 봉부터»
+    # (manage_picks 가 confirmed_at 이상으로 잘라 준다) — 백테스트도 진입 봉부터
+    # 청산을 추적하고 타임아웃도 그 봉부터 센다.
+    next_open = str(pick.get("entry_rule") or "limit") == "next_open"
     as_of = date.fromisoformat(str(pick["as_of"]))
     cal_expired = (today - as_of).days >= PICK_EXPIRE_DAYS
     last_cl = _bar_lhc(bars[-1])[2]
@@ -575,7 +614,7 @@ def resolve_pick_status(
     # ── 옛 픽(tp2 없음) 또는 진입가 결손 → 단일 청산 ──
     # 진입가가 없는 픽은 체결 여부를 물을 수 없다 → 예전 동작 그대로(체결된 셈).
     if t2 is None or e is None:
-        filled = e is None
+        filled = e is None or next_open
         for k, bar in enumerate(bars):
             lo, hi, cl = _bar_lhc(bar)
             if not filled:
@@ -600,7 +639,7 @@ def resolve_pick_status(
     tp1_hit = bool(pick.get("tp1_hit"))
     tp1_ret = (t1 / e - 1) if t1 is not None else 0.0
     # tp1 을 이미 맞은 픽은 과거에 체결된 것이다(그때 진입 없이 익절될 수 없다).
-    filled = tp1_hit
+    filled = tp1_hit or next_open
 
     for k, bar in enumerate(bars):
         lo, hi, cl = _bar_lhc(bar)
@@ -643,6 +682,130 @@ def resolve_pick_status(
     return None
 
 
+def _confirm_levels(pick: dict, open_price: float) -> dict | None:
+    """진입 대기 픽 + 확정 시가 → 갱신 패치. 진입 조건이 무너지면 None. (순수 함수)
+
+    **백테스트 open 모드와 같은 계산이다** — event_backtest 는 다음 봉 시가로
+    compute_levels 를 다시 돌린다. 손절폭을 그대로 평행이동하는 근사가 아니다:
+    구조 손절(지지선)은 절대가라 갭업하면 손절이 «멀어지고» 손익비가 나빠지는데,
+    그 열화까지 게이트가 이미 세어 놓았기 때문이다. 근사로 옮기면 게이트와 발행이
+    또 미세하게 어긋난다 — 이번 전환의 이유가 정확히 그 어긋남이었다.
+
+    atr 이 없는 픽(레벨 입력을 안 싣던 시절 리포트)은 재계산이 불가능하므로 발행 시
+    설계한 «거리»를 보존해 평행이동한다. ATR 손절 경로와는 결과가 같고, 구조 손절
+    경로에서만 다르다.
+
+    진입 조건이 무너지는 경우(None): 시가가 비정상이거나, 갭 때문에 손절폭이
+    거래로 인정할 최소치(min_risk_floor) 아래로 내려간 경우. 백테스트도 그런
+    신호는 거래로 세지 않으므로 라이브도 사지 않는다.
+    """
+    if open_price is None or open_price <= 0:
+        return None
+    pp = pick.get("plan_payload") or {}
+    atr = pp.get("atr")
+    if atr:
+        lv = compute_levels(
+            style=pick.get("style") or "swing", side="buy",
+            entry_price=open_price, atr=float(atr),
+            risk_per_trade_pct=float(pp.get("risk_pct") or PICK_RISK_PCT),
+            support=pp.get("support"), resistance=pp.get("resistance"),
+            setup=pick.get("setup"),
+        )
+        stop, tp1, tp2 = lv.stop_loss, lv.tp1, lv.tp2
+    else:
+        planned_entry = pp.get("planned_entry") or pick.get("entry_price")
+        if not planned_entry:
+            return None
+        shift = open_price - float(planned_entry)
+        def _mv(v):
+            return None if v is None else round(float(v) + shift, 4)
+        stop = _mv(pick.get("stop_loss"))
+        tp1 = _mv(pick.get("target_price"))
+        tp2 = _mv(pick.get("tp2_price"))
+    if stop is None or open_price - stop < min_risk_floor(open_price, atr and float(atr)):
+        return None
+    return {
+        "entry_price": round(open_price, 4),
+        "stop_loss": round(stop, 4),
+        "target_price": None if tp1 is None else round(tp1, 4),
+        "tp2_price": None if tp2 is None else round(tp2, 4),
+    }
+
+
+def confirm_pending_picks(today: str | None = None) -> dict[str, int]:
+    """진입 대기(pending) 픽을 «다음 거래일 시가»로 확정 — 일일 배치에서 호출.
+
+    발행 시점(D일 장 마감 후)에는 다음날 시가를 모른다. 그래서 픽은 예상 레벨을
+    달고 pending 으로 나가고, 다음 거래일 봉이 쌓인 뒤(D+1 배치) 이 함수가 실제
+    시가를 진입가로 박고 손절·목표를 그 시가 기준으로 다시 계산한다.
+
+      pending → open     시가 확정. 이후 판정은 «진입 봉부터» 따라간다.
+      pending → voided   갭으로 손절폭이 최소치 아래가 됐다. 백테스트가 거래로 세지
+                         않는 신호이므로 라이브도 사지 않는다(손익 없음).
+      pending 유지        아직 다음 거래일 봉이 없다(발행 당일 재실행 등).
+    """
+    client = get_client()
+    d = date.fromisoformat(today) if today else kst_today()
+    rows = (
+        client.table("recommendations")
+        .select("id,as_of,setup,style,entry_price,target_price,tp2_price,"
+                "stop_loss,plan_payload,instrument_id")
+        .eq("basket_type", "daily_focus").eq("status", "pending").execute()
+    ).data or []
+
+    counts = {"confirmed": 0, "voided": 0, "waiting": 0}
+    for p in rows:
+        ao = date.fromisoformat(str(p["as_of"]))
+        bars = (
+            client.table("ohlcv").select("open,ts")
+            .eq("instrument_id", p["instrument_id"]).eq("interval", "1d")
+            .gt("ts", p["as_of"]).order("ts").limit(1).execute()
+        ).data or []
+        stale = (d - ao).days >= PENDING_MAX_DAYS
+        if not bars:
+            # 거래정지·상장폐지로 다음 봉이 영영 안 오면 pending 이 무한정 쌓인다.
+            if stale:
+                client.table("recommendations").update({
+                    "status": "voided", "closed_at": d.isoformat(),
+                }).eq("id", p["id"]).execute()
+                counts["voided"] += 1
+                log.info("picks.confirm.voided_no_bar", pick=p["id"],
+                         as_of=str(p["as_of"]))
+            else:
+                counts["waiting"] += 1
+            continue
+        bar = bars[0]
+        bar_date = str(bar["ts"])[:10]
+        # 봉이 한참 뒤에야 왔다면(거래정지 후 재개) 그 시가는 «다음 거래일»이 아니다.
+        # 열흘 지난 계획으로 진입하지 않는다 — 백테스트도 다음 봉만 본다.
+        if (date.fromisoformat(bar_date) - ao).days >= PENDING_MAX_DAYS:
+            client.table("recommendations").update({
+                "status": "voided", "closed_at": bar_date,
+            }).eq("id", p["id"]).execute()
+            counts["voided"] += 1
+            log.info("picks.confirm.voided_stale_bar", pick=p["id"],
+                     as_of=str(p["as_of"]), bar=bar_date)
+            continue
+        patch = _confirm_levels(p, float(bar["open"] or 0))
+        if patch is None:
+            client.table("recommendations").update({
+                "status": "voided", "closed_at": bar_date,
+                "close_return_pct": None,
+            }).eq("id", p["id"]).execute()
+            counts["voided"] += 1
+            log.info("picks.confirm.voided", pick=p["id"], as_of=str(p["as_of"]),
+                     open=bar.get("open"))
+            continue
+        patch.update({"status": "open", "confirmed_at": bar_date})
+        client.table("recommendations").update(patch).eq("id", p["id"]).execute()
+        counts["confirmed"] += 1
+        if ao and bar_date:
+            log.debug("picks.confirm", pick=p["id"], as_of=str(p["as_of"]),
+                      confirmed=bar_date, entry=patch["entry_price"])
+    log.info("reports.daily.confirm_picks", **counts)
+    return counts
+
+
 def manage_picks(today: str | None = None) -> dict[str, int]:
     """열린 픽 전체의 상태를 종가로 확정 — 일일 배치에서 호출 (갭 프레임 [관리])."""
     client = get_client()
@@ -650,21 +813,30 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
     open_picks = (
         client.table("recommendations")
         .select("id,as_of,entry_price,target_price,tp2_price,stop_loss,"
-                "tp1_hit,style,instrument_id")
+                "tp1_hit,style,instrument_id,entry_rule,confirmed_at")
         .eq("basket_type", "daily_focus").eq("status", "open").execute()
     ).data or []
 
     counts = {"target": 0, "stopped": 0, "expired": 0, "partial": 0,
-              "unfilled": 0, "tp1_hit": 0, "open": 0}
+              "unfilled": 0, "voided": 0, "tp1_hit": 0, "open": 0}
     for p in open_picks:
-        # 진입(as_of) 다음 거래일부터의 일봉을 시간순으로 — 장중 고가/저가 터치 판정용.
+        # 어느 봉부터 따라갈 것인가 — 진입 규칙에 따라 다르다.
+        #   next_open: 진입 봉(confirmed_at)«부터». 시가에 이미 샀으므로 그날의
+        #     고가/저가로 목표·손절이 터질 수 있다. 백테스트도 i_entry 부터 본다.
+        #   limit(옛 픽): 발행일 «다음» 봉부터. 그날 진입가에 닿아야 체결이다.
         ao = date.fromisoformat(str(p["as_of"]))
+        start = str(p.get("confirmed_at") or p["as_of"])
         rows = (
             client.table("ohlcv").select("low,high,close,ts")
             .eq("instrument_id", p["instrument_id"]).eq("interval", "1d")
-            .gte("ts", p["as_of"]).order("ts").execute()
+            .gte("ts", start).order("ts").execute()
         ).data or []
-        bars = [r for r in rows if date.fromisoformat(str(r["ts"])[:10]) > ao]
+        if str(p.get("entry_rule") or "limit") == "next_open" and p.get("confirmed_at"):
+            floor_d = date.fromisoformat(start)
+            bars = [r for r in rows
+                    if date.fromisoformat(str(r["ts"])[:10]) >= floor_d]
+        else:
+            bars = [r for r in rows if date.fromisoformat(str(r["ts"])[:10]) > ao]
         patch = resolve_pick_status(p, bars, d)
         if patch is None:
             counts["open"] += 1
@@ -830,8 +1002,13 @@ def run_daily(*, use_llm: bool = True, cap: int = DAILY_CAP,
     """
     today = as_of or kst_today().isoformat()
     today_date = date.fromisoformat(today)
-    # [관리] 어제까지의 열린 픽을 오늘 종가로 먼저 확정(목표/손절/만료)
+    # [관리] ① 진입 대기 픽을 오늘 시가로 확정 → ② 열린 픽을 오늘 종가로 판정.
+    # 순서가 중요하다 — 오늘 확정된 픽은 «그 봉»에서 바로 손절/목표가 터질 수 있고,
+    # 백테스트도 진입 봉부터 청산을 추적한다. 확정을 뒤로 미루면 하루를 빼먹는다.
+    confirm_status = confirm_pending_picks(today)
     pick_status = manage_picks(today)
+    pick_status["confirmed"] = confirm_status.get("confirmed", 0)
+    pick_status["pending"] = confirm_status.get("waiting", 0)
     passed = passed_setups_from_db()
     log.info("reports.daily.gate", passed=sorted(passed))
 
