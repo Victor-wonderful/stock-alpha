@@ -89,8 +89,18 @@ export function PickCard({
         )
       : null;
 
-  // 진입 레벨 알림 — 현재가 대비 진입 타이밍/대기/무효(레벨 알림 핵심).
+  // 진입 규칙 — 2026-08-21 부터 발행 픽은 «다음 거래일 시가 시장가»다.
+  // 이 픽들에는 "지금 진입 타이밍/대기/무효" 판정이 성립하지 않는다: 살 시점이
+  // 이미 정해져 있고(다음 장 시작), 현재가는 어제 종가라 비교 대상도 아니다.
+  // 게다가 손절·목표는 그 시가가 확정돼야 정해지는 «예상»이다.
+  const nextOpen = pick.entry_rule === "next_open";
+  const awaitingEntry = nextOpen && pick.status === "pending";
+  // 진입 레벨 알림 — 옛 지정가 픽에만 의미가 있다(현재가 대비 진입 타이밍).
   const es = entryStatus(lastPrice ?? null, pick.entry_price, pick.stop_loss);
+  const entryLabel = awaitingEntry ? "예상 진입가" : "진입가";
+  const entryNote = awaitingEntry
+    ? "다음 거래일 시가에 매수 — 손절·목표는 시가 확정 후 다시 계산됩니다"
+    : es.alert;
   // 성격 — "왜 떴나"(큰손/추세/반등…). 전 픽이 게이트 통과분이라 검증 배지도 함께.
   const ch = setupCharacter(pick.setup);
 
@@ -144,7 +154,7 @@ export function PickCard({
         {/* 5분할 스탯 */}
         <div className="hidden xl:grid grid-cols-5 gap-3 text-center">
           {[
-            { label: "진입가", value: fmtPrice(pick.entry_price) },
+            { label: entryLabel, value: fmtPrice(pick.entry_price) },
             {
               label: pick.tp2_price != null ? "목표가 (1차)" : "목표가",
               value: fmtPrice(pick.target_price),
@@ -187,19 +197,28 @@ export function PickCard({
           <span className="tnum text-xl font-extrabold text-accent">
             {report?.score != null ? report.score : Math.round(pick.conviction * 100)}
           </span>
-          <span
-            className={`flex items-center gap-1 rounded-[999px] px-2.5 py-1 text-[10px] font-bold ${es.cls}`}
-          >
-            {es.icon && <span aria-hidden>{es.icon}</span>}
-            {es.label}
-          </span>
+          {awaitingEntry ? (
+            // 살 시점이 이미 정해진 픽 — 현재가와 비교해 "지금 진입"을 판정하면
+            // 어제 종가로 오늘을 말하는 셈이라 틀린 신호가 된다.
+            <span className="flex items-center gap-1 rounded-[999px] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-text-dim">
+              <span aria-hidden>🕘</span>
+              다음 거래일 시가 매수
+            </span>
+          ) : (
+            <span
+              className={`flex items-center gap-1 rounded-[999px] px-2.5 py-1 text-[10px] font-bold ${es.cls}`}
+            >
+              {es.icon && <span aria-hidden>{es.icon}</span>}
+              {es.label}
+            </span>
+          )}
         </div>
       </div>
 
       {/* 모바일 스탯 (xl 미만) */}
       <div className="grid grid-cols-3 gap-2 px-5 pb-3 xl:hidden">
         {[
-          { label: "진입", value: fmtPrice(pick.entry_price) },
+          { label: awaitingEntry ? "예상 진입" : "진입", value: fmtPrice(pick.entry_price) },
           {
             label: pick.tp2_price != null ? "목표 1·2차" : "목표",
             value:
@@ -219,8 +238,8 @@ export function PickCard({
       {/* 🔔 진입 레벨 알림 + 접이식 근거 */}
       <div className="border-t border-border px-5 py-2.5">
         <div className="mb-2 flex items-center gap-1.5 text-[11px]">
-          <span aria-hidden className="text-accent">🔔</span>
-          <span className="font-medium text-text-dim">{es.alert}</span>
+          <span aria-hidden className="text-accent">{awaitingEntry ? "🕘" : "🔔"}</span>
+          <span className="font-medium text-text-dim">{entryNote}</span>
         </div>
         <button
           onClick={() => setOpen((v) => !v)}

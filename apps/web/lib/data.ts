@@ -701,7 +701,7 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("recommendations")
-      .select("instrument_id,basket_type,style,weight,conviction,thesis,entry_price,target_price,tp2_price,stop_loss,as_of,setup,instruments(symbol,name)")
+      .select("instrument_id,basket_type,style,weight,conviction,thesis,entry_price,target_price,tp2_price,stop_loss,as_of,setup,entry_rule,status,instruments(symbol,name)")
       .order("as_of", { ascending: false })
       .order("conviction", { ascending: false })
       .limit(100);
@@ -732,6 +732,8 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
         stop_loss: r.stop_loss as number | null,
         as_of: (r.as_of as string) ?? null,
         setup: (r.setup as string) ?? null,
+        entry_rule: (r.entry_rule as string) ?? null,
+        status: (r.status as string) ?? null,
       };
     });
     return { data: rows, isSample: false };
@@ -1326,7 +1328,16 @@ export interface PickRecord {
   stop_loss: number | null;
   last_close: number | null;
   return_pct: number | null; // 진입가 대비 (확정 픽은 청산가 기준)
-  status: "진행중" | "목표 도달" | "손절" | "만료" | "1차 익절" | "미체결" | "—";
+  status:
+    | "진입 대기"   // 다음 거래일 시가 매수 예정 — 아직 안 샀다(레벨은 예상값)
+    | "진행중"
+    | "목표 도달"
+    | "손절"
+    | "만료"
+    | "1차 익절"
+    | "미체결"
+    | "취소"       // 갭으로 손절폭이 최소치 아래 → 진입 조건이 무너져 안 삼
+    | "—";
   closed: boolean; // 엔진이 확정 기록한 픽인지(0017) — 표시 구분용
   closed_at?: string | null; // 청산일 — 포지션 합산(보유 창) 판정용
   reselects?: number; // 같은 포지션이 여러 날 재선정된 횟수(>1이면 '연속 선정' 표시)
@@ -1340,7 +1351,15 @@ const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
   // 진입가에 끝내 닿지 않아 «살 수가 없었던» 픽(2026-08-20). 거래가 없었으므로
   // 손익도 없다 — 승률 계산에서 분모·분자 어디에도 넣지 않는다.
   unfilled: "미체결",
+  // 진입을 «다음 거래일 시가»로 바꾼 뒤(2026-08-21) 생긴 두 상태.
+  // pending 은 «아직 안 산» 계획이다 — 확정 기록이 아니므로 승률·수익률 집계에서
+  // 빼야 한다. voided 는 갭으로 손절폭이 최소치 아래가 돼 사지 않은 것(거래 없음).
+  pending: "진입 대기",
+  voided: "취소",
 };
+
+// 아직 «거래가 아닌» 상태 — 성과 집계의 분모·분자 어디에도 넣지 않는다.
+export const NON_TRADE_PICK_STATUSES = new Set(["진입 대기", "미체결", "취소"]);
 
 // 진행중인 픽 — "어제 추천 보고 산 게 지금 어떻게 됐나".
 //
@@ -1454,6 +1473,17 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
 
         // 엔진이 확정(0017)한 픽 — 기록된 청산가/수익률 그대로 (트랙레코드)
         const stored = r.status as string;
+        // 진입 대기(pending)는 «확정 기록»이 아니다 — 다음 거래일 시가에 살 계획이고
+        // 화면의 손절·목표는 예상값이다. closed 로 넘기면 청산된 픽처럼 집계된다.
+        if (stored === "pending") {
+          return {
+            ...base,
+            last_close: null,
+            return_pct: null,
+            status: "진입 대기" as const,
+            closed: false,
+          };
+        }
         if (stored && stored !== "open") {
           return {
             ...base,
