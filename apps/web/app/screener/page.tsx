@@ -2,8 +2,9 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
-import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts, getSignalsBySetups } from "@/lib/data";
+import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts, getSignalsBySetups, getBacktests, countSignalsForCombos } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
+import { holdingLabel, holdingApprox } from "@/lib/holding";
 import type { SignalView } from "@/lib/types";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -183,6 +184,23 @@ export default async function ScreenerPage({
   // 조건에 맞는 전체 건수(DB count)와 화면에 그린 수의 차이 — 잘린 사실을 밝히기 위함.
   const truncated = Math.max(0, filteredTotal - visible.length);
 
+  // ── 검증 상태 — 화면이 "검증 통과 셋업만"이라고 말하려면 그게 사실이어야 한다 ──
+  // signals 는 자연키 업서트라 과거 시그널이 재발동 전까지 남는다. 그래서 «지금
+  // 게이트를 통과한 조합»과 «테이블에 있는 조합»이 다르다(2026-08-21 실측: 2,750건
+  // 중 통과 조합은 123건뿐). 셋업 필터 목록도 코드에 하드코딩돼 실제 게이트와
+  // 어긋나 있었다. 판정을 backtests 에서 읽어 행마다 표시한다.
+  const gate = await getBacktests();
+  const passingCombos = new Set(
+    gate.data.filter((b) => b.passed).map((b) => `${b.setup}|${b.style ?? ""}`),
+  );
+  const isVerified = (setup: string, style: string) =>
+    passingCombos.has(`${setup}|${style}`);
+  const verifiedCount = await countSignalsForCombos(
+    gate.data
+      .filter((b) => b.passed && b.style)
+      .map((b) => ({ setup: b.setup as string, style: b.style as string })),
+  );
+
   // 현재가 — 진입가만 보여주면 "지금 사도 되는 자리인가"를 판단할 수 없다.
   // 그리는 행만 벌크 1회로 가져온다(종목당 조회는 행 수만큼 왕복이 된다).
   const priceMap = await getLatestPricesBySymbols(visible.map((s) => s.symbol));
@@ -224,10 +242,10 @@ export default async function ScreenerPage({
   return (
     <AppShell
       title="스크리너"
-      subtitle={`발행 중 전체 시그널 ${grandTotal}건을 조건으로 탐색 — 백테스트 게이트 통과 셋업만 발행 · 클릭하면 종목 상세로 · 매일 16:30 갱신`}
+      subtitle={`시그널 ${grandTotal}건 — 셋업이 트리거된 기록이다. 매수 추천이 아니고, «검증 통과»만 실제 발행 대상이다 · 매일 16:30 갱신`}
       badge={
         <span className="flex items-center gap-1.5 rounded-[999px] bg-good-soft px-3 py-1 text-[11px] font-bold text-good">
-          검증 통과 셋업만 — 미통과 발행 금지
+          검증 통과 {verifiedCount}건 · 미통과 {grandTotal - verifiedCount}건
         </span>
       }
     >
@@ -243,7 +261,7 @@ export default async function ScreenerPage({
         {[
           // 값의 근거를 부제에 명시한다. 예전엔 전부 '강도 상위 1000건 표본' 기준이면서
           // 라벨은 전체인 것처럼 적혀 있었다(오늘 신규 1000건 vs 실제 2530건).
-          { label: "발행 중 시그널", value: `${grandTotal}건`, sub: "백테스트 게이트 통과 · 전체" },
+          { label: "시그널 전체", value: `${grandTotal}건`, sub: `그중 검증 통과 ${verifiedCount}건` },
           {
             label: "최다 셋업",
             value: topSetupEntry ? SETUP_LABELS[topSetupEntry[0]] ?? topSetupEntry[0] : "—",
@@ -434,7 +452,7 @@ export default async function ScreenerPage({
                         <Link
                           key={r.id}
                           href={`/stocks/${r.symbol}`}
-                          className="grid min-w-[620px] grid-cols-[minmax(140px,2fr)_5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-center gap-3 px-1 py-3 transition-colors hover:bg-surface"
+                          className="grid min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-center gap-3 px-1 py-3 transition-colors hover:bg-surface"
                         >
                           <span className="flex min-w-0 items-baseline gap-2">
                             <span className="truncate text-[13px] font-semibold text-text">
@@ -444,8 +462,20 @@ export default async function ScreenerPage({
                               {r.symbol}
                             </span>
                           </span>
-                          <span className="text-[10px] text-text-dim">
-                            {STYLE_LABELS[r.style] ?? r.style}
+                          {/* 스타일 + 보유기간 — "언제까지 들고 있나"를 목록에서 바로 본다.
+                              이 기간이 지나면 엔진이 종가로 자동 청산한다. */}
+                          <span className="flex flex-col leading-tight">
+                            <span className="text-[10px] text-text-dim">
+                              {STYLE_LABELS[r.style] ?? r.style}
+                            </span>
+                            <span className="text-[10px] text-text-mute">
+                              {holdingLabel(r.style)}
+                            </span>
+                            {!isVerified(r.setup, r.style) && (
+                              <span className="text-[10px] font-semibold text-warn">
+                                ⚠ 미검증
+                              </span>
+                            )}
                           </span>
                           <span className="mono whitespace-nowrap text-right text-[12px]">
                             {px ? (
@@ -506,6 +536,7 @@ export default async function ScreenerPage({
                     "종목",
                     "셋업",
                     "스타일",
+                    "보유기간",
                     "신호일",
                     "현재가",
                     "진입가",
@@ -569,6 +600,24 @@ export default async function ScreenerPage({
                       {/* 스타일 */}
                       <td className="px-3 py-3">
                         <StylePill style={s.style} />
+                      </td>
+
+                      {/* 보유기간 — "언제까지 들고 있나"에 화면이 답해야 한다.
+                          엔진이 이 기간이 지나면 종가로 자동 청산한다. */}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="text-[11px] font-semibold text-text-dim">
+                          {holdingLabel(s.style)}
+                        </span>
+                        {holdingApprox(s.style) && (
+                          <span className="ml-1 text-[10px] text-text-mute">
+                            {holdingApprox(s.style)}
+                          </span>
+                        )}
+                        {!isVerified(s.setup, s.style) && (
+                          <span className="mt-0.5 block text-[10px] font-semibold text-warn">
+                            ⚠ 미검증 — 발행 대상 아님
+                          </span>
+                        )}
                       </td>
 
                       {/* 신호일 */}
