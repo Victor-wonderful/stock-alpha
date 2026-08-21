@@ -162,7 +162,19 @@ def compute_levels(
     max_position_pct: float = 25.0,
     setup: str | None = None,      # 손절 하한 적용 여부 판단용(STRUCT_FIRST_SETUPS)
     tp_r_mults: tuple[float, ...] | None = None,   # 실험: 목표를 R(실제 손절 거리) 배수로
+    stop_atr_mult: float | None = None,  # 실험: 손절 ATR 배수 override (None=스타일 기본)
+    struct_stop: bool = True,            # 실험: False 면 구조(지지/저항) 손절 당김 끈다
 ) -> Levels:
+    """진입가·ATR·구조로 손절/목표/비중 산출.
+
+    stop_atr_mult / struct_stop 은 **실험용 override** 다(기본값이면 기존 동작 그대로).
+    둘을 둔 이유: 이 시장은 일간 중앙 변동이 3.26%p 인데 구조 손절이 손절폭을
+    1×ATR ≈ 하루치까지 좁혀 놓는다. 무작위 진입 실측(870종목×500일, 60봉 보유)에서
+    9% 손절은 43%가 «먼저» 맞는 반면 30% 로 넓히면 12.5% 로 떨어지는데 목표 터치는
+    54.8%→40.3% 로 조금밖에 안 준다 — 손절이 노이즈 안에 있다는 뜻이다. 어느 폭이
+    실제로 기대값을 올리는지는 백테스트로 재야 하므로(승률↑가 곧 수익↑이 아니다,
+    [[winrate-vs-expectancy-tradeoff]]) 여기에 손잡이를 만든다.
+    """
     if entry_price <= 0:
         raise ValueError("entry_price 는 양수여야 합니다.")
     if atr <= 0:
@@ -173,9 +185,13 @@ def compute_levels(
     cfg = get_style_config(style)
     direction = 1 if side == "buy" else -1
 
-    atr_stop = entry_price - direction * cfg.stop_atr_mult * atr
-    stop = _clamp_stop_to_structure(
-        side, entry_price, atr_stop, support, resistance, atr=atr, setup=setup,
+    mult = cfg.stop_atr_mult if stop_atr_mult is None else stop_atr_mult
+    atr_stop = entry_price - direction * mult * atr
+    stop = (
+        _clamp_stop_to_structure(
+            side, entry_price, atr_stop, support, resistance, atr=atr, setup=setup,
+        )
+        if struct_stop else atr_stop
     )
 
     # ── 목표를 무엇에 묶을 것인가 ──

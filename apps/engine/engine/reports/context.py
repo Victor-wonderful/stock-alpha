@@ -150,6 +150,20 @@ def build_verdict(
     }
 
 
+def _level_inputs(level_payload: dict | None) -> dict:
+    """시그널의 level_payload → 레벨 재계산에 필요한 입력만 추린다.
+
+    atr 은 손절·목표 폭의 자, support/resistance 는 구조 손절의 근거다. 셋이 없으면
+    시가 기준 재계산을 할 수 없어 «발행 때 계산한 값»을 그대로 쓰게 된다(폴백).
+    """
+    lp = level_payload or {}
+    return {
+        "atr": lp.get("atr"),
+        "support": lp.get("support"),
+        "resistance": lp.get("resistance"),
+    }
+
+
 def build_plan(
     signals: list[dict], styles: tuple[str, ...] | None = None
 ) -> list[dict]:
@@ -177,6 +191,10 @@ def build_plan(
             "holding_horizon": s.get("holding_horizon"),
             "rationale": s.get("llm_rationale"),
             "valid_until": s.get("valid_until"),
+            # 레벨 «재계산» 입력 — 진입가가 다음 거래일 시가로 확정되면 손절·목표를
+            # 그 시가 기준으로 다시 계산해야 한다(백테스트 open 모드와 동일).
+            # 픽까지 따라가야 하므로 플랜에 실어 보낸다. 옛 리포트엔 없다(None 허용).
+            **_level_inputs(s.get("level_payload")),
         })
     plan.sort(key=lambda p: p["strength"], reverse=True)
     return plan
