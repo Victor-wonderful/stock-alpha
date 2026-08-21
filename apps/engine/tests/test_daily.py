@@ -503,3 +503,58 @@ def test_mixed_setups():
         ("factor_composite", ""): _bt(True),
     }
     assert passed_setups_from_rows(rows) == {"kalman", "factor_composite"}
+
+
+# ── 체결 가정 불일치 임시 차단(BLOCKED_COMBOS) ──
+# 게이트는 "신호가에 무조건 체결" 가정으로 재는데 라이브는 지정가라, 아래 조합들은
+# 게이트 통과 판정을 받고도 실제 기대값이 ≤0 이다. 발행 경로 전부에서 막혀야 한다.
+
+def test_blocked_combo_is_not_counted_as_passed():
+    """pivot 은 swing 하나로만 통과 중 — 차단되면 셋업 자체가 트랙 A 에서 빠진다."""
+    rows = {("pivot", "swing"): _bt(True)}
+    assert passed_setups_from_rows(rows) == set()
+
+
+def test_blocked_combo_does_not_drop_other_styles_of_same_setup():
+    """breakout:swing 만 차단 — position 으로는 계속 통과해야 한다."""
+    rows = {
+        ("breakout", "swing"): _bt(True),
+        ("breakout", "position"): _bt(True),
+    }
+    assert passed_setups_from_rows(rows) == {"breakout"}
+
+
+def test_blocked_combos_are_the_measured_negative_ones():
+    """차단 목록 = 라이브(limit) 기대값이 ≤0 으로 실측된 5조합. 그 이상도 이하도 아니다."""
+    from engine.backtest.gate import BLOCKED_COMBOS, combo_blocked
+
+    assert BLOCKED_COMBOS == frozenset({
+        ("flow_accumulation", "position"),
+        ("anchor_pullback", "swing"),
+        ("pivot", "swing"),
+        ("flow_accumulation", "swing"),
+        ("breakout", "swing"),
+    })
+    assert combo_blocked("pivot", "swing")
+    assert not combo_blocked("pivot", "position")
+    assert not combo_blocked(None, None)
+
+
+def test_blocked_combos_removed_from_db_passed_combos(monkeypatch):
+    """passed_combos_from_db 가 backtests 의 통과 행에서 차단 조합을 걷어낸다."""
+    from engine.backtest import runner as br
+
+    rows = [
+        {"setup": "pivot", "style": "swing", "passed": True,
+         "created_at": "2026-08-21T00:00:00+00:00"},
+        {"setup": "breakout", "style": "swing", "passed": True,
+         "created_at": "2026-08-21T00:00:00+00:00"},
+        {"setup": "breakout", "style": "position", "passed": True,
+         "created_at": "2026-08-21T00:00:00+00:00"},
+        {"setup": "double_bottom", "style": "position", "passed": True,
+         "created_at": "2026-08-21T00:00:00+00:00"},
+    ]
+    monkeypatch.setattr(br, "select_all", lambda *a, **k: rows)
+    out = br.passed_combos_from_db()
+    assert out == {"breakout": ["position"], "double_bottom": ["position"]}
+    assert "pivot" not in out

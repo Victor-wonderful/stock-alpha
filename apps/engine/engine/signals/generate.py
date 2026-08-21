@@ -8,6 +8,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from engine.backtest.gate import combo_blocked
 from engine.signals import playbooks
 from engine.signals.levels import compute_levels, min_risk_floor
 from engine.signals.styles import get_style_config
@@ -68,6 +69,12 @@ def generate_signals(
             else [cand.style]
         )
         for style in emit_styles:
+            # 체결 가정 불일치 임시 차단(gate.BLOCKED_COMBOS) — 게이트는 통과하지만
+            # 라이브 지정가 기준 기대값이 ≤0 인 조합. 배치 시그널 발행은 스타일
+            # 게이트 없이 셋업 단위로만 돌아서(cli.daily) 여기서 막지 않으면
+            # signals 테이블 → 웹 시그널 목록으로 그대로 나간다.
+            if combo_blocked(cand.setup, style):
+                continue
             lv = compute_levels(
                 style=style, side=cand.side, entry_price=cand.entry_ref,
                 atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,

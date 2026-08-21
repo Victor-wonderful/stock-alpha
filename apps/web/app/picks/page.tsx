@@ -53,15 +53,14 @@ export default async function PicksPage({
   const count = (s: string) =>
     s === "전체" ? all.length : all.filter((r) => r.status === s).length;
 
+  // 개발 중이라 발행 기준이 바뀌면 과거 픽을 정리한다(2026-08-16·08-21 실제 삭제).
+  // 그래서 "수정·삭제 없음"·"🔒 기록 불변" 문구를 뺐다 — 사실과 달랐다.
+  // 기준이 굳고 정정 이력을 공개할 수 있게 되면 그때 다시 단다. (/focus 픽 기록의
+  // "전부 공개 · 삭제 없음" 도 같은 이유로 함께 뺐다)
   return (
     <AppShell
       title="성과"
-      subtitle="발행한 모든 픽의 트랙레코드 — 수정·삭제 없음 · 종가 기준 자동 확정 (목표 / 손절 / 만료 30일)"
-      badge={
-        <span className="rounded-[999px] border border-border bg-surface-2 px-3 py-1 text-[11px] font-semibold text-text-dim">
-          🔒 기록 불변 — 발행 후 수정 불가
-        </span>
-      }
+      subtitle="발행한 모든 픽의 트랙레코드 — 종가 기준 자동 확정 (목표 / 손절 / 만료 30일)"
     >
       <div className="space-y-4">
         {/* 요약 스탯 */}

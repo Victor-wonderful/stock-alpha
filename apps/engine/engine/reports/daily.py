@@ -157,12 +157,18 @@ def passed_setups_from_rows(latest: dict[tuple[str, str], dict]) -> set[str]:
     """{(setup, style): 백테스트행} → 통과 셋업 집합. (순수 함수)
 
     스타일별 판정이 있는 셋업은 스타일 없는 옛 행을 무시한다(위 docstring 참조).
+    임시 차단 조합(gate.BLOCKED_COMBOS)은 통과로 세지 않는다 — 모든 스타일이
+    차단된 셋업은 트랙 A 리포트 대상에서도 빠진다(발행과 리포트를 일치시킨다).
     """
+    from engine.backtest.gate import combo_blocked
+
     has_style = {setup for (setup, style) in latest if style}
     out: set[str] = set()
     for (setup, style), bt in latest.items():
         if setup in has_style and not style:
             continue                       # 매트릭스 이전 행 — 이미 대체됐다
+        if combo_blocked(setup, style):
+            continue
         if backtest_passed(bt):
             out.add(setup)
     return out

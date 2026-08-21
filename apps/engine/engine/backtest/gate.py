@@ -32,6 +32,49 @@ from engine.backtest.metrics import (
 )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 체결 가정 불일치로 «임시 차단»된 조합 (2026-08-21)
+#
+# 이 게이트는 entry_mode="signal" — 신호 봉 가격에 **무조건 체결**된다는 가정으로
+# 기대값을 잰다. 그런데 라이브 발행은 전일 종가를 진입가로 적는 **지정가**라,
+# 다음 날 그 가격 이하로 내려온 종목만 체결된다. 오르는 종목은 갭업해 도망가고
+# 내리는 종목만 잡히는 역선택이 걸린다(발행 픽 48건 실측: 손절 픽 24/24 체결,
+# 목표 픽 1/3 체결 — [[pick-entry-fill-gap]]).
+#
+# 13조합 전수 비교(2026-08-20, var/entry_mode_results.jsonl)에서 **13개 전부**
+# limit 이 signal 보다 나빴고, 아래 5개는 라이브 기준 기대값이 **0 이하**였다:
+#
+#     조합                          signal   limit(라이브)   open(시가진입)
+#     flow_accumulation:position    +0.064      -0.034         +0.042
+#     anchor_pullback:swing         +0.127      -0.019         +0.118
+#     pivot:swing                   +0.102      -0.012         +0.001
+#     flow_accumulation:swing       +0.066      -0.011         +0.049
+#     breakout:swing                +0.070      -0.000         +0.011
+#
+# 즉 게이트는 통과시키는데 실제로는 **손해 보는 픽**이다. 2026-08-20 트랙 A
+# 라운드로빈 수정 전까지는 3셋업만 발행돼 거의 안 나갔지만, 수정 후에는 매일
+# 나가므로 근본 수정(게이트·발행을 함께 open 으로 전환) 전까지 발행을 막는다.
+#
+# ⚠️ 이건 **임시 조치**다. 게이트를 open 기준으로 전환하면 이 목록은 통째로
+# 지운다 — open 에서는 5개 모두 기대값이 양수라 차단할 이유가 없어진다.
+BLOCKED_COMBOS: frozenset[tuple[str, str]] = frozenset({
+    ("flow_accumulation", "position"),
+    ("anchor_pullback", "swing"),
+    ("pivot", "swing"),
+    ("flow_accumulation", "swing"),
+    ("breakout", "swing"),
+})
+
+
+def combo_blocked(setup: str | None, style: str | None) -> bool:
+    """(setup, style)이 임시 차단 목록에 있는가 — 게이트 판정과 무관하게 발행 금지.
+
+    게이트를 읽는 모든 소비처(시그널 발행·픽 선정·트랙 A 리포트)가 이 함수를
+    거치게 해서, 한 곳만 막고 다른 곳으로 새는 일이 없게 한다.
+    """
+    return (setup or "", style or "") in BLOCKED_COMBOS
+
+
 @dataclass
 class GateThresholds:
     min_trades: int = 20            # 표본 수 (과적합·우연 방지)
