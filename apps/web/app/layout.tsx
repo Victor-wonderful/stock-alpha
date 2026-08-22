@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { BottomNav } from "@/components/BottomNav";
 
 export const metadata: Metadata = {
   title: "VECTA Stock — 전문가급 주식 리서치 터미널",
@@ -20,6 +21,9 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         {children}
+        {/* 모바일 주 네비게이션 — md 이상에서는 스스로 숨는다(상단 GNB 가 담당).
+            본문 하단 여백은 globals.css 의 body padding 이 맡는다. */}
+        <BottomNav />
       </body>
     </html>
   );

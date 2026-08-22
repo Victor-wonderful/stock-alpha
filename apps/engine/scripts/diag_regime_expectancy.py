@@ -98,6 +98,10 @@ def main() -> None:
                     help="'최근 구간'으로 볼 마지막 거래일 수")
     ap.add_argument("--bars", type=int, default=500)
     # 축 — 발행은 2026-08-22 부터 기간 축이다. style 은 옛 축(비교용).
+    # 국면 × 최근/과거 교차 — 「최근구간」 단독 컬럼은 국면과 무관해서(최근 60거래일에
+    # 진입한 모든 거래) 「상승 기대값」과 나란히 놓고 거르면 서로 다른 걸 재게 된다.
+    ap.add_argument("--recent-split", action="store_true",
+                    help="국면마다 전체/최근을 나눠 낸다 (국면 × 최근 교차)")
     ap.add_argument("--axis", choices=["style", "horizon"], default="style",
                     help="셋업을 스타일(swing/position)로 쪼갤지 기간(short/mid/long)으로 쪼갤지")
     args = ap.parse_args()
@@ -134,8 +138,14 @@ def main() -> None:
 
     STATES = ["uptrend", "downtrend", "range", None]
     axis_label = "기간" if args.axis == "horizon" else "스타일"
-    hdr = (f"{'셋업:' + axis_label:<30}" + "".join(f"{str(s or '미상'):>13}" for s in STATES)
-           + f"{'최근구간':>13}")
+    if args.recent_split:
+        SPLIT = [("uptrend", "상승"), ("downtrend", "하락"), ("range", "횡보")]
+        hdr = (f"{'셋업:' + axis_label:<30}"
+               + "".join(f"{lab + ' 전체':>13}{lab + ' 최근':>13}" for _, lab in SPLIT))
+    else:
+        hdr = (f"{'셋업:' + axis_label:<30}"
+               + "".join(f"{str(s or '미상'):>13}" for s in STATES)
+               + f"{'최근구간':>13}")
     print("=" * len(hdr))
     print(f"국면별 기대값(R) — 진입일 기준 · entry_mode={GATE_ENTRY_MODE}")
     print("=" * len(hdr))
@@ -168,17 +178,28 @@ def main() -> None:
             if not trades:
                 continue
             by_state: dict[str | None, list[float]] = defaultdict(list)
+            by_cross: dict[tuple[str | None, bool], list[float]] = defaultdict(list)
             recent: list[float] = []
             for t in trades:
                 d = (t.entry_ts or "")[:10]
-                by_state[states.get(d)].append(t.r_multiple)
-                if recent_cut and d >= recent_cut:
+                st_ = states.get(d)
+                is_recent = bool(recent_cut and d >= recent_cut)
+                by_state[st_].append(t.r_multiple)
+                by_cross[(st_, is_recent)].append(t.r_multiple)
+                if is_recent:
                     recent.append(t.r_multiple)
             g = evaluate_gate(trades, thr)
             mark = "*" if g.passed else " "
-            print(f"{setup + ':' + value:<29}{mark}"
-                  + "".join(_summary(by_state.get(s, [])) for s in STATES)
-                  + _summary(recent))
+            if args.recent_split:
+                cells = ""
+                for st_, _lab in SPLIT:
+                    cells += _summary(by_state.get(st_, []))
+                    cells += _summary(by_cross.get((st_, True), []))
+                print(f"{setup + ':' + value:<29}{mark}" + cells)
+            else:
+                print(f"{setup + ':' + value:<29}{mark}"
+                      + "".join(_summary(by_state.get(s, [])) for s in STATES)
+                      + _summary(recent))
 
     print("\n* = 전체 기간 게이트 통과 · 괄호 안은 거래 수")
     print("⚠️ 국면별 숫자는 «그 국면에서 진입한 거래»의 평균이다. 표본이 적은 칸은")
