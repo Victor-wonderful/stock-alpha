@@ -687,3 +687,51 @@ def test_resolve_uses_horizon_timeout_not_style():
     assert out is None, "5거래일 전에는 안 끝난다"
     out = rd.resolve_pick_status(pick, flat[:5], date(2026, 8, 27))
     assert out["status"] == "expired", "5거래일이면 종가 청산"
+
+
+# ── 포트폴리오 예산 (동시 노출 상한, 2026-08-22) ──────────────────────
+def test_position_size_and_account_risk():
+    from engine.reports.daily import account_risk_pct, position_size_pct
+    # 손절 -10% → 비중 10% 여야 손절 시 계좌 -1%
+    assert round(position_size_pct(10000, 9000), 4) == 10.0
+    assert round(account_risk_pct(10000, 9000), 4) == 1.0
+    # 손절이 좁으면 25% 상한에 걸리고, 그러면 실제 리스크는 1% 보다 «작아진다».
+    assert position_size_pct(10000, 9900) == 25.0
+    assert round(account_risk_pct(10000, 9900), 4) == 0.25
+    # 값이 없으면 0 — 예산을 과소평가하지 않도록 조용히 통과시키지 않는다.
+    assert position_size_pct(None, 9000) == 0.0
+    assert position_size_pct(10000, None) == 0.0
+
+
+def test_portfolio_budget_stops_at_each_limit():
+    from engine.reports.daily import (
+        MAX_CONCURRENT_POSITIONS, MAX_PORTFOLIO_EXPOSURE_PCT,
+        MAX_PORTFOLIO_RISK_PCT, fits_portfolio_budget,
+    )
+    assert fits_portfolio_budget(0, 0, 0, 1.0, 10.0)
+    # 리스크 상한
+    assert not fits_portfolio_budget(MAX_PORTFOLIO_RISK_PCT, 0, 0, 0.1, 1.0)
+    # 노출 상한
+    assert not fits_portfolio_budget(0, MAX_PORTFOLIO_EXPOSURE_PCT, 0, 0.1, 1.0)
+    # 종목 수 상한
+    assert not fits_portfolio_budget(0, 0, MAX_CONCURRENT_POSITIONS, 0.1, 1.0)
+
+
+def test_select_picks_respects_open_book():
+    """진행 중 픽이 예산을 다 쓰고 있으면 새 픽을 내지 않는다."""
+    from engine.reports.daily import MAX_PORTFOLIO_RISK_PCT, select_picks
+    plan = {"style": "swing", "setup": "capitulation", "horizon": "short",
+            "entry_price": 10000, "stop_loss": 9000, "tp1": 12000, "tp2": 13000}
+    report = {
+        "instrument_id": 1, "as_of": "2026-08-21",
+        "payload": {"plan": [plan], "verdict": {"score": 90, "rating": "매수"},
+                    "tradability": {"passed": True}},
+    }
+    # 예산이 비어 있으면 발행된다.
+    assert len(select_picks([report], open_book={"count": 0, "risk_pct": 0.0,
+                                                 "exposure_pct": 0.0})) == 1
+    # 리스크 예산이 이미 꽉 찼으면 0건.
+    full = {"count": 0, "risk_pct": MAX_PORTFOLIO_RISK_PCT, "exposure_pct": 0.0}
+    assert select_picks([report], open_book=full) == []
+    # 미주입이면 제약 없음(하위호환).
+    assert len(select_picks([report])) == 1

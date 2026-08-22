@@ -455,6 +455,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
                  close_by_id: dict[int, float | None] | None = None,
                  max_entry_drift: float = PICKS_MAX_ENTRY_DRIFT,
                  blocking: list[dict] | None = None,
+                 open_book: dict | None = None,
                  open_instrument_ids: set[int] | None = None,
                  ) -> list[dict]:
     """오늘의 포커스 선정 — 순수 함수. reports: 그날 발행 리포트 행(payload 포함).
@@ -468,6 +469,9 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
     close_by_id: {instrument_id: 최신 종가} — 주입 시 진입가가 현재가에서 max_entry_drift
       넘게 벗어난 플랜(낡은 시그널)을 제외. 종가 미상은 검증 안 함(graceful).
     blocking: 그날 신규 진입을 막는 캘린더 이벤트(engine.market.calendar.blocking_events).
+    open_book: 진행 중 픽이 이미 쓰고 있는 예산({count,risk_pct,exposure_pct}).
+      주입하면 포트폴리오 상한(MAX_PORTFOLIO_*) 안에서만 새 픽을 낸다. 미주입이면
+      제약 없음(테스트·하위호환) — 운영 호출은 항상 준다.
       시장 전체 이벤트(instrument_id 없음)면 그날은 빈 날, 종목 이벤트면 그 종목만 제외.
     open_instrument_ids: 그 시점에 이미 열려 있는 픽의 종목 — 재발행 중복 방지
       (SUPPRESS_REPUBLISH_WHILE_OPEN 주석 참조). 미주입이면 억제 안 함(하위호환).
@@ -526,6 +530,12 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
     # 다른 섹터의 차순위로 슬롯을 채운다(분산). 섹터 미상은 카운트에서 제외(무제약).
     sec_count: dict[str, int] = {}
     selected: list[tuple[float, dict, dict]] = []
+    # 진행 중 픽이 이미 쓰고 있는 예산에서 출발한다 — 오늘 것만 세면 날마다 쌓인다.
+    book = open_book or {}
+    used_risk = float(book.get("risk_pct") or 0.0)
+    used_expo = float(book.get("exposure_pct") or 0.0)
+    used_cnt = int(book.get("count") or 0)
+    budget_blocked = 0
     for cand in cands:
         if len(selected) >= max_picks:
             break
@@ -533,9 +543,24 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
         known = bool(sec) and sec != "ALL"
         if known and sec_count.get(sec, 0) >= max_per_sector:
             continue
+        if open_book is not None:
+            plan = cand[2]
+            add_risk = account_risk_pct(plan.get("entry_price"), plan.get("stop_loss"))
+            add_expo = position_size_pct(plan.get("entry_price"), plan.get("stop_loss"))
+            if not fits_portfolio_budget(used_risk, used_expo, used_cnt,
+                                         add_risk, add_expo):
+                budget_blocked += 1
+                continue          # 다음 후보로 — 더 작은 픽은 들어갈 수 있다
+            used_risk += add_risk
+            used_expo += add_expo
+            used_cnt += 1
         selected.append(cand)
         if known:
             sec_count[sec] = sec_count.get(sec, 0) + 1
+    if budget_blocked:
+        log.info("picks.budget_blocked", blocked=budget_blocked,
+                 used_risk=round(used_risk, 2), used_exposure=round(used_expo, 2),
+                 used_count=used_cnt)
 
     picks = []
     for score, r, top_plan in selected:
@@ -600,6 +625,61 @@ def _plan_payload(plan: dict) -> dict:
 # 레벨 재계산 시 쓰는 1회 리스크 비율. position_size_pct 는 픽에 저장하지 않고
 # 읽기 시점(웹 lib/position)에 계산하므로, 여기서는 재현성을 위한 기록값이다.
 PICK_RISK_PCT = 1.0
+
+# ── 포트폴리오 예산 (2026-08-22) ───────────────────────────────────────
+# 지금까지 픽은 **서로의 존재를 모른 채** 사이징됐다. 거래 하나는 «손절 시 계좌 1%»로
+# 맞는데, 그게 동시에 30건이면 동시 손절 시 -30% 다. 실측(2026-08-16)에서 동시 노출이
+# 중앙 126% · 최대 396% 였다 — 현금으로 불가능한 4배 레버리지를 화면이 권하고 있었다.
+#
+# ⚠️ 장기(20일)를 쉬어도 안 풀린다. 오히려 구조상 더 커질 수 있다 —
+#    하루 5건 × 중기 10일 보유 = 동시 50종목까지 쌓인다(옛 규칙은 30종목이 최대였다).
+#    보유기간을 줄이는 것과 포트폴리오 상한은 다른 문제다.
+#
+# 그래서 발행 단에서 예산을 세운다. 셋 중 **먼저 닿는 것**이 그날 발행을 멈춘다.
+MAX_PORTFOLIO_RISK_PCT = 10.0       # 동시 보유가 전부 손절될 때 계좌 손실 상한
+MAX_PORTFOLIO_EXPOSURE_PCT = 100.0  # 비중 합 — 현금 계좌라 레버리지 없음
+MAX_CONCURRENT_POSITIONS = 15       # 동시 보유 종목 수(관리 가능한 수)
+
+
+def position_size_pct(entry: float | None, stop: float | None,
+                      risk_pct: float = PICK_RISK_PCT,
+                      max_pct: float = 25.0) -> float:
+    """권장 계좌 비중(%) — 손절 시 손실이 계좌의 risk_pct% 가 되도록 역산. (순수)
+
+    levels.compute_levels · 웹 lib/position 과 같은 공식이다. 픽 행에는 저장하지 않고
+    필요할 때마다 진입가·손절가로 다시 구한다(단일 출처는 이 공식 자체다).
+    """
+    if not entry or not stop or entry <= 0:
+        return 0.0
+    dist = abs(entry - stop) / entry
+    if dist <= 0:
+        return 0.0
+    return max(0.0, min(max_pct, risk_pct / dist))
+
+
+def account_risk_pct(entry: float | None, stop: float | None,
+                     risk_pct: float = PICK_RISK_PCT) -> float:
+    """이 픽이 손절될 때 계좌가 잃는 비율(%). (순수)
+
+    비중이 25% 상한에 걸리면 실제 리스크는 risk_pct 보다 **작아진다** — 그 경우까지
+    1% 로 세면 예산을 과소평가한다. 그래서 비중에서 되짚어 계산한다.
+    """
+    if not entry or not stop or entry <= 0:
+        return 0.0
+    dist = abs(entry - stop) / entry
+    return position_size_pct(entry, stop, risk_pct) * dist
+
+
+def fits_portfolio_budget(
+    used_risk: float, used_exposure: float, used_count: int,
+    add_risk: float, add_exposure: float,
+) -> bool:
+    """이 픽을 더해도 포트폴리오 상한 안인가. (순수)"""
+    return (
+        used_count + 1 <= MAX_CONCURRENT_POSITIONS
+        and used_risk + add_risk <= MAX_PORTFOLIO_RISK_PCT
+        and used_exposure + add_exposure <= MAX_PORTFOLIO_EXPOSURE_PCT
+    )
 
 
 def _close_patch(status: str, today: date, exit_price: float,
@@ -948,6 +1028,26 @@ def _latest_close_map(as_of: str | None = None) -> dict[int, float]:
     return out
 
 
+def _open_book(as_of: str) -> dict:
+    """as_of 시점에 열려 있던 픽이 이미 쓰고 있는 예산 — (건수, 리스크%, 노출%).
+
+    _open_instrument_ids 와 같은 «그 시점 기준» 판정을 쓴다(과거일 백필 정합).
+    새 픽은 여기 남은 만큼만 낼 수 있다.
+    """
+    rows = (
+        get_client().table("recommendations")
+        .select("instrument_id,as_of,status,closed_at,entry_price,stop_loss")
+        .eq("basket_type", "daily_focus").lt("as_of", as_of)
+        .execute()
+    ).data or []
+    held = [r for r in rows
+            if r.get("status") == "open" or (r.get("closed_at") or "") > as_of]
+    risk = sum(account_risk_pct(r.get("entry_price"), r.get("stop_loss")) for r in held)
+    expo = sum(position_size_pct(r.get("entry_price"), r.get("stop_loss")) for r in held)
+    return {"count": len(held), "risk_pct": round(risk, 4),
+            "exposure_pct": round(expo, 4)}
+
+
 def _open_instrument_ids(as_of: str) -> set[int]:
     """as_of 시점에 아직 열려 있던 픽의 종목 id 집합 — 재발행 중복 방지용.
 
@@ -1048,6 +1148,7 @@ def select_and_store_picks(as_of: str) -> int:
         close_by_id=close_by_id,
         blocking=blocking,
         open_instrument_ids=_open_instrument_ids(as_of),
+        open_book=_open_book(as_of),
     )
     log.info("reports.daily.picks.regime", as_of=as_of, regime=regime,
              market_state=market_state)
