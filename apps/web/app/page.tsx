@@ -4,8 +4,11 @@ import { DEFAULT_RISK_PER_TRADE_PCT } from "@/lib/position";
 import { GNB } from "@/components/GNB";
 import { HomeHero } from "@/components/HomeHero";
 import { HomePickCard } from "@/components/HomePickCard";
+import { MacroSection, RecentReports, WeeklyBriefs } from "@/components/HomeSections";
 import {
+  getBlogPosts,
   getLatestPricesBySymbols,
+  getMacroSeries,
   getMarketQuotes,
   getMarketState,
   getMorningBrief,
@@ -14,7 +17,9 @@ import {
   getNthTradingDay,
   getOpenPicks,
   getRecommendations,
+  getReports,
   getWeeklyReports,
+  pickBlogPosts,
 } from "@/lib/data";
 import {
   fmtPct,
@@ -103,14 +108,22 @@ export default async function HomePage() {
   //
   // ⚠️ 인증을 제대로 붙일 때 «로그인 사용자에게 히어로를 어떻게 할지»를 다시 정한다.
   //    그때는 홈을 로그인 뒤로 감추지 않는다 — 홈은 공개 화면이다(Victor, 2026-08-22).
-  const [quotes, recs, brief, marketState, openPicks, weekly] = await Promise.all([
-    getMarketQuotes(),
-    getRecommendations(),
-    getMorningBrief(),
-    getMarketState(),
-    getOpenPicks(30),
-    getWeeklyReports(2),
-  ]);
+  const [quotes, recs, brief, marketState, openPicks, weekly, macro, blogPosts, reports] =
+    await Promise.all([
+      getMarketQuotes(),
+      getRecommendations(),
+      getMorningBrief(),
+      getMarketState(),
+      getOpenPicks(30),
+      getWeeklyReports(3),
+      // ── 아래 셋은 «읽을 것» 섹션용 (2026-08-22 Victor 요청으로 복원) ──
+      // 홈이 인사이트·종목의 요약본이 되지 않게 각 3건씩만 얹고 「전체 보기」로 보낸다.
+      // 예전 홈이 실패한 이유가 «섹션 8개 중 7개가 중복»이었는데, 그건 건수가 아니라
+      // «같은 깊이로 두 번 보여준» 탓이었다.
+      getMacroSeries(["DEXKOUS"]),
+      getBlogPosts(),
+      getReports(3),
+    ]);
 
   const picks = recs.data;
   // 기준일은 «그날 분석»이 기준이다 — 픽의 as_of 를 먼저 보면 픽이 없는 날 하루
@@ -192,6 +205,10 @@ export default async function HomePage() {
   // 카드엔 종목이 있는데 옆 카드는 «없습니다»라 두 카드가 서로 모순돼 보인다.
   // todayPicks 가 이미 status 를 들고 있어 조회를 더 하지 않는다.
   const pendingCount = todayPicks.filter((p) => p.status === "pending").length;
+  // 블로그 글이 있으면 그걸 쓰고, 없으면 엔진 산출물이 그 자리를 지킨다(컴포넌트가 판단).
+  const weeklyPosts = pickBlogPosts(blogPosts, "view", "weekly", 3);
+  const macroPosts = pickBlogPosts(blogPosts, "view", "macro", 3);
+  const analysisPosts = pickBlogPosts(blogPosts, "stocks", "analysis", 3);
 
   return (
     <div className="flex min-h-screen flex-col bg-bg">
@@ -311,7 +328,7 @@ export default async function HomePage() {
             둘 쌓여, 좌우 높이가 100px vs 253px 로 벌어졌다(2026-08-22 Victor 지적).
             「오늘의 픽」의 빈 여백을 고쳐놓고 같은 실수를 옆 칸에서 반복한 것이다.
             셋 다 «한 문장~두 줄»짜리 상태 카드라 폭을 다르게 줄 이유가 없다. */}
-        <div className="grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid items-start gap-5 md:grid-cols-2">
           {/* ── 오늘 시장은 ──
               아침 브리핑은 홈이 이미 통째로 조회하는데 날짜 한 줄만 쓰고 버리고 있었다
               (2026-08-22). 시장 메뉴의 요약본을 만들지 않는다 — 그날 폭 한 문장과 링크
@@ -401,34 +418,16 @@ export default async function HomePage() {
               )}
           </section>
 
-          {/* ── 읽을 것 ── */}
-          <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
-              <div className="mb-3 flex items-baseline justify-between gap-3">
-                <h2 className="text-sm font-bold text-text">읽을 것</h2>
-                <Link href="/insights" className="text-[11px] text-accent hover:underline">
-                  전체 보기 →
-                </Link>
-              </div>
-              {weekly.length === 0 ? (
-                <p className="text-[12px] text-text-mute">아직 쌓인 브리핑이 없습니다.</p>
-              ) : (
-                <ul className="divide-y divide-border-soft">
-                  {weekly.map((w) => (
-                    <li key={w.as_of} className="py-2">
-                      {/* 주간 브리핑은 개별 상세 라우트가 없다 — 목록은 인사이트가 갖는다. */}
-                      <Link
-                        href="/insights"
-                        className="text-[13px] text-text hover:text-accent"
-                      >
-                        {w.title}
-                      </Link>
-                      <p className="text-[11px] text-text-mute">{w.as_of}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-          </section>
         </div>
+
+        {/* ── 읽을 것 ──
+            2026-08-22 Victor 요청으로 되살렸다. 컴포넌트들은 원래 홈용이라
+            moreHref 기본값이 "/insights" 다 — 홈은 «오늘 뭐가 새로 나왔나» 몇 줄만
+            보여주고 전체 목록은 인사이트·종목이 갖는다. 글이 없는 섹션은 스스로
+            렌더하지 않는다(「준비 중」 자리를 몇 달씩 비워두지 않는다). */}
+        <WeeklyBriefs posts={weeklyPosts} reports={weekly} />
+        <MacroSection posts={macroPosts} indicators={macro} />
+        <RecentReports posts={analysisPosts} reports={reports.data} />
       </main>
     </div>
   );

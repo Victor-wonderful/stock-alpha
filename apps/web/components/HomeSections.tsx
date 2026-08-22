@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { BlogPost, WeeklyReport } from "@/lib/data";
-import type { MacroSeriesView } from "@/lib/types";
+import type { MacroSeriesView, ReportListItem } from "@/lib/types";
 import { SectionHead } from "@/components/SectionHead";
 
 /* ────────────────────────────────────────────────────────────
@@ -194,7 +194,81 @@ export function MacroSection({
   );
 }
 
-// 「최근 기업 분석」(RecentReports)·판정 배지·ReportRows 는 2026-08-22 에 지웠다.
-// 홈을 추천 화면으로 바꾸면서(IA 1단계) 유일한 사용처가 사라졌고, 같은 내용을
-// 「종목」(/reports)이 더 넓게 보여준다 — 거기가 검색·분석 허브다.
-// 되살릴 일이 있으면 git 이력(app/page.tsx 삭제 커밋)에 그대로 있다.
+const RATING_VARIANT: Record<string, "bull" | "neutral" | "warn"> = {
+  매수: "bull",
+  중립: "neutral",
+  관망: "warn",
+};
+
+/** 엔진 리포트 행 — 블로그 심층분석이 없을 때 이 자리를 채운다.
+ *  블로그 글은 한 달에 한두 편이지만 이 리포트는 매일 100건씩 나온다. 자리를 비워두는 것보다
+ *  매일 갱신되는 판정을 보여주는 게 낫다. 우측 메타는 읽는 시간 대신 판정과 점수. */
+function ReportRows({ items }: { items: ReportListItem[] }) {
+  return (
+    <ul className="mt-6 overflow-hidden rounded-[12px] border border-border bg-surface">
+      {items.map((r, i) => (
+        <li key={r.id} className={i > 0 ? "border-t border-border-soft" : ""}>
+          <Link
+            href={`/reports/${r.id}`}
+            className="group flex items-center gap-5 px-5 py-4 transition-colors hover:bg-surface-2"
+          >
+            <span className="tnum w-[46px] shrink-0 text-[12px] text-text-mute">
+              {r.as_of.slice(5).replace("-", ".")}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14.5px] font-bold leading-[1.5] text-text group-hover:text-accent">
+                {r.name ?? r.title}
+                {r.symbol && (
+                  <span className="tnum ml-2 text-[11.5px] font-normal text-text-mute">
+                    {r.symbol}
+                  </span>
+                )}
+              </p>
+              {r.summary && (
+                <p className="mt-1 truncate text-[12.5px] leading-[1.6] text-text-mute">
+                  {r.summary}
+                </p>
+              )}
+            </div>
+            <span className="flex shrink-0 items-center gap-2.5">
+              {r.rating && (
+                <Badge variant={RATING_VARIANT[r.rating] ?? "neutral"} size="sm">
+                  {r.rating}
+                </Badge>
+              )}
+              {r.score != null && (
+                <span className="tnum text-[12px] text-text-mute">{r.score.toFixed(1)}점</span>
+              )}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** 최근 기업 분석 — 블로그 `stocks/analysis` 글. 없으면 엔진 리포트가 자리를 지킨다.
+ *
+ * 2026-08-22 에 홈을 추천 화면으로 바꾸며 지웠다가 같은 날 되살렸다(Victor 요청).
+ * 지운 이유는 «/reports 가 더 넓게 보여준다»였는데, 홈에 필요한 건 전체 목록이 아니라
+ * «오늘 뭐가 새로 나왔나» 몇 줄이다. moreHref 가 그 전체 목록으로 보낸다. */
+export function RecentReports({
+  posts,
+  reports,
+}: {
+  posts: BlogPost[];
+  reports: ReportListItem[];
+}) {
+  const hasPosts = posts.length > 0;
+  if (!hasPosts && reports.length === 0) return null;
+  return (
+    <section className="mt-12">
+      <SectionHead
+        title="최근 기업 분석"
+        href={hasPosts ? sectionHref(posts) : "/reports"}
+        linkLabel={hasPosts ? "전체 보기" : "분석 전체"}
+      />
+      {hasPosts ? <BlogPosts posts={posts} /> : <ReportRows items={reports} />}
+    </section>
+  );
+}
