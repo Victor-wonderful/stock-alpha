@@ -593,3 +593,51 @@ def test_picks_are_published_as_pending_with_plan_inputs():
     assert p["entry_rule"] == "next_open"
     assert p["plan_payload"]["atr"] == 2.5
     assert p["plan_payload"]["planned_entry"] == 100.0
+
+
+# ── 기간 축 픽 선정 (2026-08-22) ──
+
+def test_plan_gate_matches_on_horizon():
+    """게이트 축이 기간으로 바뀌었다 — 플랜의 horizon 으로 대조한다."""
+    row = {"setup": "capitulation", "style": "swing", "horizon": "short"}
+    assert rd._plan_gate_ok(row, {"capitulation": ["short"]})
+    assert not rd._plan_gate_ok(row, {"capitulation": ["long"]})
+
+
+def test_plan_gate_falls_back_to_style_for_legacy_plans():
+    """기간 도입 전 리포트는 horizon 이 없다 — style 로 폴백해야 조용히 0건이 안 된다."""
+    row = {"setup": "breakout", "style": "swing"}
+    assert rd._plan_gate_ok(row, {"breakout": ["swing"]})
+
+
+def test_pick_carries_horizon():
+    reports = [_report(1, "매수", 80)]
+    reports[0]["payload"]["plan"][0]["horizon"] = "short"
+    picks = select_picks(reports, passed_combos={"breakout": ["short"]})
+    assert len(picks) == 1
+    assert picks[0]["horizon"] == "short"
+
+
+def test_best_plan_prefers_higher_expectancy_horizon():
+    """같은 종목이 여러 기간으로 통과하면 검증 기대값이 높은 기간을 고른다."""
+    plan = [
+        {"setup": "capitulation", "style": "swing", "horizon": "short", "strength": 0.9},
+        {"setup": "capitulation", "style": "swing", "horizon": "mid", "strength": 0.5},
+    ]
+    got = rd._best_plan(plan, {("capitulation", "short"): 0.24,
+                               ("capitulation", "mid"): 0.31})
+    assert got["horizon"] == "mid"
+
+
+def test_resolve_uses_horizon_timeout_not_style():
+    """단기 픽은 5거래일에 끝나야 한다 — 스타일 타임아웃(10봉)을 쓰면 게이트와 어긋난다."""
+    pick = {"as_of": "2026-08-21", "style": "swing", "horizon": "short",
+            "setup": "capitulation", "entry_rule": "next_open",
+            "entry_price": 100.0, "stop_loss": 90.0, "target_price": 200.0,
+            "tp2_price": None}
+    flat = [{"low": 99.0, "high": 101.0, "close": 100.0, "ts": f"2026-08-{22+i}"}
+            for i in range(6)]
+    out = rd.resolve_pick_status(pick, flat[:4], date(2026, 8, 26))
+    assert out is None, "5거래일 전에는 안 끝난다"
+    out = rd.resolve_pick_status(pick, flat[:5], date(2026, 8, 27))
+    assert out["status"] == "expired", "5거래일이면 종가 청산"

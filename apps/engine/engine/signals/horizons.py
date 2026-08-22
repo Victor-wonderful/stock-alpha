@@ -36,6 +36,13 @@ HORIZONS: tuple[Horizon, ...] = ("short", "mid", "long")
 
 HORIZON_LABELS: dict[str, str] = {"short": "단기", "mid": "중기", "long": "장기"}
 
+# 기간 → trade_style enum 매핑.
+# signals.style 은 enum(scalping/day/swing/position)이라 기간 값을 담을 수 없다.
+# 기간 축에서 style 은 **화면 호환용 라벨**일 뿐이고, 손절·목표·보유상한은 전부
+# 기간 프로파일이 정한다. 자연키에는 horizon 이 따로 들어가므로(0038) 두 기간이
+# 같은 style 로 매핑돼도 서로 덮어쓰지 않는다.
+HORIZON_STYLE: dict[str, str] = {"short": "swing", "mid": "swing", "long": "position"}
+
 
 @dataclass(frozen=True)
 class HorizonProfile:

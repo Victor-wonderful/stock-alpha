@@ -9,6 +9,7 @@ from datetime import datetime
 import pandas as pd
 
 from engine.signals import playbooks
+from engine.signals.horizons import HORIZON_STYLE, get_profile
 from engine.signals.levels import compute_levels, min_risk_floor
 from engine.signals.styles import get_style_config
 
@@ -33,6 +34,7 @@ def generate_signals(
     now: datetime | None = None,
     market_close: datetime | None = None,
     styles_by_setup: dict[str, list[str]] | None = None,
+    horizons_by_setup: dict[str, list[str]] | None = None,
 ) -> list[dict]:
     """일봉 OHLCV → 트리거된 플레이북별 시그널 행 리스트.
 
@@ -45,6 +47,10 @@ def generate_signals(
     styles_by_setup: 셋업별 발행할 스타일 목록(게이트 통과 조합). 주어지면 한 트리거가
         통과 스타일마다 1행 발행(같은 셋업 swing·position 동시 가능). None 이면 단일
         cand.style 발행(하위호환·단위테스트).
+    horizons_by_setup: 셋업별 발행할 **보유기간** 목록(short/mid/long). 주어지면 이쪽이
+        우선한다 — 한 트리거가 통과 기간마다 1행 발행되고, 손절·목표는 그 기간의
+        프로파일(horizons.get_profile)로 산출된다. 스타일이 정하던 보유기간을 기간
+        축으로 옮기는 전환의 마지막 조각이다(docs/HORIZON_DESIGN.md).
     """
     enabled = setups or list(playbooks.ALL_DETECTORS.keys())
     rows: list[dict] = []
@@ -67,18 +73,26 @@ def generate_signals(
         if cand is None:
             continue
 
-        # 발행할 스타일 — 게이트 통과 조합(styles_by_setup) 우선, 없으면 단일 cand.style.
-        emit_styles = (
-            styles_by_setup.get(cand.setup, []) if styles_by_setup is not None
-            else [cand.style]
-        )
-        for style in emit_styles:
+        # 발행 단위 — 기간(horizons_by_setup) 우선, 없으면 스타일, 그것도 없으면 단일.
+        # (기간, 스타일) 쌍으로 돌린다: 기간 축에서는 스타일이 화면 호환용 라벨이고
+        # 손절·목표·보유상한은 전부 기간 프로파일이 정한다.
+        if horizons_by_setup is not None:
+            emit = [(h, HORIZON_STYLE[h]) for h in horizons_by_setup.get(cand.setup, [])]
+        elif styles_by_setup is not None:
+            emit = [(None, st) for st in styles_by_setup.get(cand.setup, [])]
+        else:
+            emit = [(None, cand.style)]
+
+        for horizon, style in emit:
+            prof = get_profile(horizon, cand.setup) if horizon else None
             lv = compute_levels(
                 style=style, side=cand.side, entry_price=cand.entry_ref,
                 atr=cand.atr, risk_per_trade_pct=risk_per_trade_pct,
                 support=cand.support, resistance=cand.resistance,
                 now=now, market_close=market_close,
                 setup=cand.setup,
+                stop_atr_mult=prof.stop_atr_mult if prof else None,
+                tp_atr_mults=prof.tp_atr_mults if prof else None,
             )
             # 노이즈 수준 손절폭 배제 — 백테스트(event_backtest)와 동일 기준.
             if abs(lv.entry_price - lv.stop_loss) < min_risk_floor(lv.entry_price, cand.atr):
@@ -100,7 +114,9 @@ def generate_signals(
                 "tp3": round(lv.tp3, 4),
                 "risk_reward": round(lv.risk_reward, 4),
                 # position_size_pct 는 저장하지 않는다 — 읽기 시점 계산(웹 lib/position).
-                "holding_horizon": lv.holding_horizon,
+                "horizon": horizon,
+                "holding_horizon": (f"{prof.bars}거래일" if prof
+                                    else lv.holding_horizon),
                 "rule_payload": cand.payload,
                 "factor_payload": {"rs_rank": rs_rank} if rs_rank is not None else None,
                 "level_payload": {
@@ -111,6 +127,11 @@ def generate_signals(
                     # 실제 진입은 다음 거래일 시가 시장가다 — 게이트도 같은 가정으로
                     # 잰다(gate.GATE_ENTRY_MODE). 웹이 이 값을 보고 표기를 바꾼다.
                     "entry_rule": ENTRY_RULE,
+                    # 기간 축 발행이면 그 기간의 매매 규칙을 함께 실어 화면이
+                    # «어떻게 사고파는가»를 문구로 만들 수 있게 한다.
+                    **({"horizon_bars": prof.bars,
+                        "scale_in": prof.scale_in,
+                        "target_action": prof.target_action} if prof else {}),
                 },
                 "llm_rationale": " · ".join(cand.rationale) or None,
                 "source_version": SOURCE_VERSION,

@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 import pandas as pd
 
 from engine.backtest.costs import default_cost_model
-from engine.backtest.event_backtest import backtest_playbook
+from engine.backtest.event_backtest import backtest_playbook, precompute_detections
 from engine.backtest.gate import GATE_ENTRY_MODE, GateThresholds, evaluate_gate
 from engine.backtest.metrics import Trade, sharpe
 from engine.db import get_client, select_all, upsert
@@ -54,6 +54,7 @@ def _load_active_frames(bars: int = 500) -> dict[int, pd.DataFrame]:
 def run(
     thresholds: GateThresholds | None = None, *, scaleout: bool = True,
     entry_mode: str = GATE_ENTRY_MODE, axis: str = "style",
+    setups: list[str] | None = None,
 ) -> dict[tuple[str, str], bool]:
     """전 종목·(셋업×스타일) 매트릭스 백테스트 → 조합별 게이트 결과. {(setup,style): passed}.
 
@@ -106,11 +107,24 @@ def run(
     # ⚠️ 시그널·픽이 horizon 을 싣게 되면 기본값을 "horizon" 으로 바꾸고 style 경로를
     #    지운다. 그전에 기본값을 바꾸면 픽 게이트가 plan.style 과 대조하다 하나도
     #    못 맞춰 «조용히 0건»이 된다(docs/HORIZON_DESIGN.md 마이그레이션 순서).
-    for setup in playbooks.ALL_DETECTORS:
+    # setups 를 주면 그것만 — 중단된 실행을 이어서 돌릴 때 쓴다(셋업별로 즉시 적재되므로
+    # 이미 끝난 것을 다시 계산할 이유가 없다).
+    for setup in (setups or list(playbooks.ALL_DETECTORS)):
+        if setup not in playbooks.ALL_DETECTORS:
+            continue
         if axis == "horizon" and not playbooks.testable_styles(setup):
             continue                      # 일봉으로 검증 불가(종가베팅 등)
         axis_values = (HORIZONS if axis == "horizon"
                        else playbooks.testable_styles(setup))
+        # 탐지는 축 값과 무관하다 — 한 번 계산해 모든 값에서 재사용한다.
+        # (셋업당 870종목 × 500봉 = 43만 번을 축 값 수만큼 반복하던 것을 1회로)
+        det_cache: dict[int, list] = {}
+        if len(axis_values) > 1:
+            for iid, df in frames.items():
+                det_cache[iid] = precompute_detections(
+                    df, setup, flows=flows_map.get(iid),
+                    earnings=earnings_map.get(iid),
+                    disclosures=discl_map.get(iid))
         for value in axis_values:
             prof = get_profile(value, setup) if axis == "horizon" else None
             extra = backtest_kwargs(prof) if prof else {"scaleout": scaleout}
@@ -126,6 +140,7 @@ def run(
                         # 기간 축에서는 손절·목표를 프로파일이 정하므로 스타일은 고정
                         style_override="swing" if prof else value,
                         entry_mode=entry_mode,
+                        detections=det_cache.get(iid),
                         **extra,
                     )
                 )
@@ -146,7 +161,10 @@ def run(
             bt_rows.append({
                 "strategy_key": f"playbook:{setup}:{value}",
                 "setup": setup,
-                "style": value,          # 축이 기간이면 여기에도 기간이 들어간다
+                # ⚠️ style 은 enum(trade_style) 이다 — 기간 값("short")을 넣으면
+                # 22P02 로 적재 전체가 실패한다(2026-08-22 실제로 겪음).
+                # 기간 축에서는 style 을 비우고 horizon 컬럼만 쓴다.
+                "style": value if not prof else None,
                 "horizon": value if prof else None,
                 "params": {"thresholds": thr.__dict__, "costs": costs.__dict__,
                            "gross_expectancy_r": gross_exp,
@@ -176,7 +194,14 @@ def run(
                      wf_pos_frac=wf.get("positive_frac"),
                      wf_recent=wf.get("recent_expectancy_r"), reasons=gr.reasons)
 
-    upsert("backtests", bt_rows)
+        # 셋업 하나가 끝날 때마다 적재한다. 예전엔 전부 끝난 뒤 한 번에 넣어서,
+        # 마지막에 실패하면 두 시간짜리 계산이 통째로 날아갔다(2026-08-22).
+        if bt_rows:
+            upsert("backtests", bt_rows)
+            bt_rows = []
+
+    if bt_rows:                       # 남은 잔여분(방어)
+        upsert("backtests", bt_rows)
     return passed
 
 
@@ -194,15 +219,17 @@ def _load_prev_verdicts(entry_mode: str = GATE_ENTRY_MODE) -> dict[tuple[str, st
     """
     latest: dict[tuple[str, str], dict] = {}
     rows = sorted(
-        select_all("backtests", "setup,style,passed,passed_raw,params,created_at"),
+        select_all("backtests",
+                   "setup,style,horizon,passed,passed_raw,params,created_at"),
         key=lambda b: b.get("created_at") or "",
     )
     for bt in rows:
-        if not (bt.get("setup") and bt.get("style")):
+        axis_value = bt.get("horizon") or bt.get("style")
+        if not (bt.get("setup") and axis_value):
             continue
         if ((bt.get("params") or {}).get("entry_mode")) != entry_mode:
             continue
-        latest[(bt["setup"], bt["style"])] = bt
+        latest[(bt["setup"], axis_value)] = bt
     return latest
 
 

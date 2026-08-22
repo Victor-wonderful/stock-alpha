@@ -42,6 +42,70 @@ def _exit_single(df, i, n, entry, stop, tp, timeout, costs):
     return costs.net_pnl(entry, exit_price), exit_price - entry, exit_idx - i
 
 
+def _detect_at(df, i, detector, needs_flows, needs_earnings, needs_discl,
+               flows, earnings, disclosures):
+    """봉 i 시점의 탐지 — 그 시점까지의 데이터만 넘긴다(룩어헤드 차단)."""
+    window = df.iloc[: i + 1]
+    if needs_flows:
+        if "ts" in df.columns:
+            now_ts = str(df["ts"].iloc[i])[:10]
+            fwin = flows[flows["date"] <= now_ts]
+        else:
+            fwin = flows
+        return detector(window, flows=fwin)
+    if needs_earnings:
+        return detector(window, earnings=earnings)
+    if needs_discl:
+        # 공시는 봉의 ts 로 잘라 넘긴다 — 미래 공시가 과거 봉에 새면 룩어헤드다.
+        if "ts" in df.columns:
+            now_ts = str(df["ts"].iloc[i])[:10]
+            dwin = disclosures[disclosures["date"] <= now_ts]
+        else:
+            dwin = disclosures
+        return detector(window, disclosures=dwin)
+    return detector(window)
+
+
+def precompute_detections(
+    df: pd.DataFrame, setup: str, *, min_lookback: int = 60,
+    flows=None, earnings=None, disclosures=None,
+) -> list | None:
+    """봉마다의 탐지 결과를 한 번에 계산해 리스트로 돌려준다.
+
+    **왜 필요한가** — 탐지는 청산 규칙과 무관하다. 어느 봉에서 신호가 뜨는지는
+    보유기간·목표처리와 상관없이 같은데, 지금까지는 변형마다 처음부터 다시 돌렸다.
+    870종목 × 500봉 = 43만 번을 변형 수만큼 반복한 것이다(변형 9개면 390만 번).
+    한 번 계산해 재사용하면 그 배수만큼 줄어든다.
+
+    ⚠️ 단일 변형만 돌릴 때는 오히려 느리다 — 본 루프는 트레이드가 열린 구간의 봉을
+    건너뛰는데(i = i_entry + bars + 1) 사전계산은 모든 봉을 본다. 변형이 2개 이상일
+    때만 쓸 것.
+
+    반환: 길이 n 리스트(각 원소는 Candidate 또는 None). 셋업이 없으면 None.
+    """
+    detector = playbooks.ALL_DETECTORS.get(setup)
+    if detector is None:
+        return None
+    needs_flows = setup == "flow_accumulation"
+    needs_earnings = setup == "pead"
+    needs_discl = setup in playbooks.DISCLOSURE_SETUPS
+    # ⚠️ backtest_playbook 과 **같은 가드**를 둬야 한다. 그쪽은 필요한 컨텍스트가
+    # 없으면 빈 결과로 조기 반환하는데, 여기엔 그게 없어서 공시 없는 종목에서
+    # NoneType 구독 오류로 터졌다(2026-08-22). None 을 돌려주면 호출부가
+    # detections=None 으로 넘기고, backtest_playbook 이 제 가드로 처리한다.
+    if needs_flows and (flows is None or getattr(flows, "empty", True)):
+        return None
+    if needs_earnings and (earnings is None or getattr(earnings, "empty", True)):
+        return None
+    if needs_discl and (disclosures is None or getattr(disclosures, "empty", True)):
+        return None
+    out: list = [None] * len(df)
+    for i in range(min_lookback, len(df)):
+        out[i] = _detect_at(df, i, detector, needs_flows, needs_earnings,
+                            needs_discl, flows, earnings, disclosures)
+    return out
+
+
 def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell"):
     """분할 진입 — 나눠 사고 한 번에 판다.
 
@@ -178,6 +242,7 @@ def backtest_playbook(
     scale_in: tuple[tuple[float, float], ...] | None = None,
     target_action: str = "sell",          # "trail" 이면 목표에서 안 팔고 본전스톱
     tp_atr_mults: tuple[float, ...] | None = None,   # 목표 ATR 배수 override
+    detections: list | None = None,       # precompute_detections 결과 재사용(속도)
 ) -> list[Trade]:
     """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
 
@@ -229,26 +294,9 @@ def backtest_playbook(
     i = min_lookback
     n = len(df)
     while i < n - 1:
-        window = df.iloc[: i + 1]
-        if needs_flows:
-            if "ts" in df.columns:
-                now_ts = str(df["ts"].iloc[i])[:10]
-                fwin = flows[flows["date"] <= now_ts]
-            else:
-                fwin = flows
-            cand = detector(window, flows=fwin)
-        elif needs_earnings:
-            cand = detector(window, earnings=earnings)
-        elif needs_discl:
-            # 공시는 봉의 ts 로 잘라 넘긴다 — 미래 공시가 과거 봉에 새면 룩어헤드다.
-            if "ts" in df.columns:
-                now_ts = str(df["ts"].iloc[i])[:10]
-                dwin = disclosures[disclosures["date"] <= now_ts]
-            else:
-                dwin = disclosures
-            cand = detector(window, disclosures=dwin)
-        else:
-            cand = detector(window)
+        cand = (detections[i] if detections is not None
+                else _detect_at(df, i, detector, needs_flows, needs_earnings,
+                                needs_discl, flows, earnings, disclosures))
         if cand is None or cand.side != "buy":  # 현재 플레이북은 모두 매수
             i += 1
             continue
