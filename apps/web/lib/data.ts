@@ -1017,13 +1017,14 @@ export interface MorningBrief {
   created_at: string;
 }
 
-// 4국면 시장 상태 — market_regime 최신행 직접 읽기(모닝브리프 payload 와 별개).
+// 3국면 시장 상태 — market_regime 최신행 직접 읽기(모닝브리프 payload 와 별개).
 // market_state 미상(구버전 레짐)이면 regime 으로 폴백 추론.
+// 2026-08-22: «전환» 국면과 structure(ER) 컬럼을 뺐다 — 엔진에서 축이 제거됐고,
+// 그 값을 가진 행은 애초에 하나도 없었다(engine/market/regime 참조).
 export interface MarketStateView {
   regime: string;
   score: number;
-  market_state: string | null; // uptrend|downtrend|range|transition
-  structure: string | null;
+  market_state: string | null; // uptrend|downtrend|range
   drivers: string[];
 }
 
@@ -1032,7 +1033,7 @@ export async function getMarketState(): Promise<MarketStateView | null> {
     const supabase = createPublicClient();
     const { data } = await supabase
       .from("market_regime")
-      .select("regime,score,drivers,market_state,structure")
+      .select("regime,score,drivers,market_state")
       .order("date", { ascending: false })
       .limit(1)
       .single();
@@ -1040,12 +1041,11 @@ export async function getMarketState(): Promise<MarketStateView | null> {
     const regime = (data.regime as string) ?? "neutral";
     // 폴백 — market_state 없으면 regime 으로 추론(상승/하락/중립).
     const fallback =
-      regime === "risk_off" ? "downtrend" : regime === "risk_on" ? "uptrend" : "transition";
+      regime === "risk_off" ? "downtrend" : regime === "risk_on" ? "uptrend" : "range";
     return {
       regime,
       score: Number(data.score ?? 0),
       market_state: (data.market_state as string) ?? fallback,
-      structure: (data.structure as string) ?? null,
       drivers: (data.drivers as string[]) ?? [],
     };
   } catch {

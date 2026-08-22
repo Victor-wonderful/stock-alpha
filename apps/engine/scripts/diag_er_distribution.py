@@ -31,11 +31,15 @@ import pandas as pd
 from engine.backtest.runner import _load_active_frames
 from engine.liquidity import filter_liquid_frames
 from engine.logging import get_logger
-from engine.market.regime import ER_TREND, compute_regime
+from engine.market.regime import compute_regime
 
 log = get_logger(__name__)
 
-N = 20  # ER 창 — regime.compute_regime 과 같아야 한다
+N = 20  # ER 창
+
+# 옛 경계 — 2026-08-22 에 regime 에서 제거됐다. 이 스크립트는 «왜 제거했나» 의
+# 근거라서 값을 여기 남겨 두고 비교 기준으로만 쓴다.
+ER_TREND = 0.40
 
 
 def er_series(close: np.ndarray, n: int = N) -> np.ndarray:
@@ -101,7 +105,7 @@ def main() -> None:
               if not np.isnan(idx_er_arr[i])}
 
     # 방향 점수 — 국면 분포를 다시 그리려면 필요(수급은 제외: 분포 비교엔 영향 미미)
-    score = {d: compute_regime(rets[d], None, None)["score"] for d in dates}
+    score = {d: compute_regime(rets[d], None)["score"] for d in dates}
 
     vals = [avg_er[d] for d in dates]
     ivals = [idx_er[d] for d in dates if d in idx_er]

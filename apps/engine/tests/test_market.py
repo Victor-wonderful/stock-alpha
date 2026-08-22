@@ -27,6 +27,29 @@ def test_regime_neutral_without_flows():
     assert len(out["drivers"]) == 2  # 수급 축 제외
 
 
+# ── 국면(market_state) — 방향 점수 1축 3구간 (2026-08-22 ER 축 제거) ──
+def test_market_state_three_buckets():
+    up = compute_regime([0.12] * 7 + [0.05] * 2 + [-0.02], 1e9)
+    down = compute_regime([-0.15] * 8 + [0.01] * 2, -1e9)
+    flat = compute_regime([0.01, -0.01] * 10, None)
+    assert up["market_state"] == "uptrend"
+    assert down["market_state"] == "downtrend"
+    assert flat["market_state"] == "range"
+
+
+def test_market_state_none_without_direction_inputs():
+    # 방향 재료가 하나도 없으면 판정 보류 → 소비처의 구 risk_off 폴백이 산다.
+    assert compute_regime([], None)["market_state"] is None
+
+
+def test_regime_has_no_er_axis():
+    # 축을 다시 들이지 않도록 못을 박는다 — 전환 국면·structure 는 없다.
+    out = compute_regime([0.01, -0.01] * 10, None)
+    assert "structure" not in out
+    assert out["market_state"] != "transition"
+    assert not any("ER" in d for d in out["drivers"])
+
+
 def test_fred_normalize_skips_missing():
     obs = [
         {"date": "2026-06-09", "value": "17.5"},

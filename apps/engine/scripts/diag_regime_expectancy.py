@@ -42,7 +42,7 @@ from engine.backtest.gate import GATE_ENTRY_MODE, GateThresholds, evaluate_gate
 from engine.backtest.runner import _load_active_frames
 from engine.liquidity import filter_liquid_frames
 from engine.logging import get_logger
-from engine.market.regime import ER_TREND, compute_regime, efficiency_ratio
+from engine.market.regime import compute_regime
 from engine.signals import playbooks
 from engine.signals.horizons import HORIZONS, backtest_kwargs, get_profile
 
@@ -60,37 +60,27 @@ def build_state_series(frames: dict[int, pd.DataFrame],
                        flows_by_date: dict[str, dict] | None) -> dict[str, str | None]:
     """날짜 → market_state. 라이브와 같은 compute_regime 을 날짜별로 재실행한다.
 
-    returns_20d 는 그날까지의 20거래일 수익률 단면, avg_er 은 종목별 효율성비율의
-    평균이다. 둘 다 그 시점 데이터만 쓰므로 룩어헤드가 없다.
+    returns_20d 는 그날까지의 20거래일 수익률 단면 — 그 시점 데이터만 쓰므로
+    룩어헤드가 없다. (2026-08-22 ER 축 제거로 재료가 방향 하나로 줄었다.)
     """
     closes: dict[str, list[float]] = defaultdict(list)   # date -> 20일 수익률들
-    ers: dict[str, list[float]] = defaultdict(list)      # date -> ER 들
     for df in frames.values():
         if "ts" not in df.columns or len(df) < 45:
             continue
         ts = df["ts"].astype(str).str[:10].tolist()
-        cl = df["close"].astype(float)
-        arr = cl.tolist()
+        arr = df["close"].astype(float).tolist()
         for i in range(20, len(arr)):
             if arr[i - 20] > 0:
                 closes[ts[i]].append(arr[i] / arr[i - 20] - 1)
-        for i in range(20, len(arr)):
-            er = efficiency_ratio(cl.iloc[: i + 1], 20)
-            if er is not None:
-                ers[ts[i]].append(er)
 
     out: dict[str, str | None] = {}
     for d, rets in closes.items():
         if len(rets) < 30:
             continue
-        er_list = ers.get(d) or []
         fn = None
         if flows_by_date and d in flows_by_date:
             fn = flows_by_date[d].get("foreign_net")
-        r = compute_regime(
-            rets, fn, (sum(er_list) / len(er_list)) if er_list else None,
-        )
-        out[d] = r["market_state"]
+        out[d] = compute_regime(rets, fn)["market_state"]
     return out
 
 
@@ -142,7 +132,7 @@ def main() -> None:
     costs = default_cost_model()
     thr = GateThresholds()
 
-    STATES = ["uptrend", "downtrend", "range", "transition", None]
+    STATES = ["uptrend", "downtrend", "range", None]
     axis_label = "기간" if args.axis == "horizon" else "스타일"
     hdr = (f"{'셋업:' + axis_label:<30}" + "".join(f"{str(s or '미상'):>13}" for s in STATES)
            + f"{'최근구간':>13}")

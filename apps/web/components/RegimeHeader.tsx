@@ -1,5 +1,5 @@
 // ② 국면 적응 — 추천 상단에 "지금 시장 국면 → 그래서 이 종류를 추천"을 명시(알파 노하우).
-// 2축 레짐(상승/하락/횡보/전환)을 사용자 언어로. 순수 서버 컴포넌트.
+// 레짐(상승/하락/횡보)을 사용자 언어로. 순수 서버 컴포넌트.
 import type { MarketStateView } from "@/lib/data";
 
 const STATE: Record<
@@ -24,17 +24,12 @@ const STATE: Record<
     routing: "평균회귀·수급 위주 — 추세 추격 자제",
     cls: "border-sky-500/30 bg-sky-500/10 text-sky-700",
   },
-  transition: {
-    icon: "🔀",
-    name: "방향 전환 구간",
-    routing: "보수적 — 수급·검증 통과분 위주",
-    cls: "border-warn/30 bg-warn-soft text-warn",
-  },
 };
 
 export function RegimeHeader({ state }: { state: MarketStateView | null }) {
   if (!state) return null;
-  const s = STATE[state.market_state ?? ""] ?? STATE.transition;
+  // 미상이면 횡보로 — «방향이 애매한 구간» 이 곧 횡보의 정의다.
+  const s = STATE[state.market_state ?? ""] ?? STATE.range;
   return (
     <div className={`mb-4 rounded-[14px] border px-4 py-3 ${s.cls}`}>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">

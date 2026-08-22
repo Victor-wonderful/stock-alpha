@@ -5,6 +5,16 @@
   · 브레드스 — 20일 양(+)수익 종목 비중
   · 외국인 수급 — 최근 5일 순매수 방향(flows 보유 종목 합)
 점수 -1(위험회피)~+1(위험선호) → risk_off(<-0.2) / neutral / risk_on(>0.2).
+
+국면(market_state)은 **방향 점수 하나로** 상승추세/하락추세/횡보 3구간이다.
+2026-06-24 에 «추세강도 ER» 을 두 번째 축으로 넣고 4국면(+전환)으로 갈랐지만,
+2026-08-22 측정으로 그 축을 뺐다 — 근거(scripts/diag_er_distribution):
+  · 429거래일 종목평균 ER 은 0.145~0.390. 경계 0.40 을 **넘은 날이 0일**이었다.
+  · 경계를 p70(0.247)까지 낮추거나 지수 ER 로 재료를 바꿔도 «전환» 은 0~4일.
+  · 이유는 두 축이 독립이 아니라서다. 방향이 중립인 날은 시장이 헤맨 날이고,
+    헤맸다는 건 정의상 갈지자라 ER 도 낮다 → «중립 + 추세» 칸은 논리적으로 빈다.
+따라서 4국면은 처음부터 3국면이었다. 이 커밋은 그 사실에 코드를 맞춘 것이고,
+판정 결과는 바뀌지 않는다(transition 은 한 번도 발행된 적이 없다).
 """
 from __future__ import annotations
 
@@ -19,31 +29,16 @@ from engine.logging import get_logger
 
 log = get_logger(__name__)
 
-SOURCE_VERSION = "regime-v3"
-
-# 추세/횡보 경계 — 종목별 20일 효율성비율(ER) 평균. ER↑=방향성(추세), ↓=경로 꼬임(횡보).
-ER_TREND = 0.40
-
-
-def efficiency_ratio(close: pd.Series, n: int = 20) -> float | None:
-    """Kaufman 효율성비율 = |순변동| / Σ|일별변동| (0~1). 1=완전추세, 0=완전횡보."""
-    if len(close) < n + 1:
-        return None
-    seg = close.iloc[-(n + 1):]
-    net = abs(float(seg.iloc[-1]) - float(seg.iloc[0]))
-    path = float(seg.diff().abs().sum())
-    return net / path if path > 0 else 0.0
+SOURCE_VERSION = "regime-v4"
 
 
 def compute_regime(
     returns_20d: list[float], foreign_net_5d: float | None,
-    avg_er: float | None = None,
 ) -> dict:
-    """레짐 점수·동인·구조 산출 (순수 함수).
+    """레짐 점수·동인·국면 산출 (순수 함수).
 
     returns_20d: 종목별 20일 수익률 단면.
     foreign_net_5d: 최근 5일 외국인 순매수 합(KRW). None 이면 수급 축 제외.
-    avg_er: 종목별 효율성비율 평균(추세/횡보 축). None 이면 구조 축 제외.
     """
     drivers: list[str] = []
     parts: list[float] = []
@@ -67,31 +62,22 @@ def compute_regime(
     score = round(sum(parts) / len(parts), 4) if parts else 0.0
     regime = "risk_on" if score > 0.2 else "risk_off" if score < -0.2 else "neutral"
 
-    # ── 2축: 방향(score) × 추세강도(ER) → 4국면(market_state) ──
-    # 방향이 강하면(|score|>0.2) 그게 우선 = 상승/하락추세(ER 무관). 평균회귀가
-    # 통하는 '진짜 횡보'는 방향이 약한 중립 구간 + 저ER(가격이 평균 주위 진동)일 때만.
-    # → -18%·상승5% 같은 강한 하락은 ER이 낮아도 '하락추세'로 분류(역추세·수급 라우팅).
-    structure: str | None = None
+    # ── 국면(market_state) — 방향 점수 1축 3구간 ──
+    # «횡보» 는 «평균회귀가 통하는 장» 이 아니라 **방향 점수가 ±0.2 안** 이라는 뜻이다.
+    # 그 구간에서 무엇을 허용할지는 이름이 아니라 기대값 측정으로 정한다
+    # (scripts/diag_regime_expectancy → engine/reports/daily._pick_suppressed).
     market_state: str | None = None
-    if avg_er is not None:
-        structure = "trend" if avg_er >= ER_TREND else "chop"
-        drivers.append(f"추세강도 ER {avg_er:.2f}")
-    # 방향이 강하면(|score|>0.2) ER 무관하게 추세 국면 — avg_er 가 None 이어도 판정한다.
-    # (강한 하락이 market_state=None 으로 빠져 구 risk_off 폴백·평균회귀 셋업 오허용되던
-    #  2축 라우터 버그 차단, 2026-06-24.)
-    if score > 0.2:
-        market_state = "uptrend"              # 상승추세 — 추세추종 우호
-    elif score < -0.2:
-        market_state = "downtrend"            # 하락추세 — 역추세·수급·방어
-    elif structure == "chop":
-        market_state = "range"                # 중립+저ER = 횡보 — 평균회귀 우호
-    elif structure == "trend":
-        market_state = "transition"           # 중립+추세 = 방향 전환 구간
-    # 중립 + ER 미상(avg_er None) → market_state None: 정보 부족, 구 로직 폴백 유지
+    if parts:                                 # 방향 재료가 하나도 없으면 판정 보류
+        if score > 0.2:
+            market_state = "uptrend"          # 상승추세
+        elif score < -0.2:
+            market_state = "downtrend"        # 하락추세
+        else:
+            market_state = "range"            # 횡보 = 방향이 애매한 구간
 
     return {
         "regime": regime, "score": score, "drivers": drivers,
-        "structure": structure, "market_state": market_state,
+        "market_state": market_state,
     }
 
 
@@ -122,13 +108,6 @@ def run(frames: dict[int, pd.DataFrame] | None = None) -> dict:
         if len(df) >= 21
     ]
 
-    # 추세/횡보 축 — 종목별 효율성비율 평균
-    ers = [
-        efficiency_ratio(df["close"]) for df in frames.values() if len(df) >= 21
-    ]
-    ers = [e for e in ers if e is not None]
-    avg_er = sum(ers) / len(ers) if ers else None
-
     # 외국인 5일 순매수 — flows 최신 5영업일 합 (적재된 종목 한정)
     fn: float | None = None
     flows = (
@@ -141,7 +120,7 @@ def run(frames: dict[int, pd.DataFrame] | None = None) -> dict:
                 if r["date"] in days and r.get("foreign_net") is not None]
         fn = sum(vals) if vals else None
 
-    out = compute_regime(rets, fn, avg_er)
+    out = compute_regime(rets, fn)
     row = {
         "date": kst_today().isoformat(),
         **out,
