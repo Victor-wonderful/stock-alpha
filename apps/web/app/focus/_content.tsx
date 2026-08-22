@@ -287,19 +287,9 @@ export default async function FocusContent() {
               종가로 분석해 다음 거래일 장전 플랜으로 제시합니다
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`rounded-[999px] px-3 py-1.5 text-xs font-semibold ${
-                regime?.regime === "risk_off"
-                  ? "bg-bad-soft text-bad"
-                  : regime?.regime === "risk_on"
-                    ? "bg-good-soft text-good"
-                    : "bg-warn-soft text-warn"
-              }`}
-            >
-              {regimeLabel}
-            </span>
-          </div>
+          {/* 국면 배지는 여기 두지 않는다 — 바로 아래 RegimeHeader 가 같은 것을 더
+              자세히(그래서 무엇을 발행하는가까지) 말한다. 둘 다 두면 «강세»와
+              «횡보»가 나란히 떠서 어느 쪽이 지금인지 되묻게 된다. */}
         </div>
 
         {/* ── 국면 헤더 — 지금 시장 상태 → 그래서 이 종류를 추천(알파 노하우 ②) ──
@@ -576,9 +566,10 @@ export default async function FocusContent() {
               // 기간별 구역 — 같은 날 추천이라도 단기·중기·장기는 «다른 거래»다.
               // 보유기간이 다르면 진입 방식(분할 여부)·청산 시점·성과 집계가 전부
               // 갈리므로 한 줄로 세우면 사용자가 섞어 읽는다.
+              // 0건인 기간도 접지 않는다 — 기간은 1급 차원이라 «단기는 왜 없지»에
+              // 답해야 한다. 접으면 사용자는 그 기간이 존재하지 않는 줄로 읽는다.
               HORIZONS.map((hz) => {
                 const group = picks.filter((p) => p.horizon === hz.key);
-                if (group.length === 0) return null;
                 return (
                   <section key={hz.key} className="space-y-3">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -595,6 +586,11 @@ export default async function FocusContent() {
                         {group.length}건
                       </span>
                     </div>
+                    {group.length === 0 && (
+                      <p className="rounded-[12px] border border-dashed border-border px-4 py-3 text-[12px] text-text-mute">
+                        이 기간에서 기준을 통과한 종목이 없습니다.
+                      </p>
+                    )}
                     {group.map((p, i) => (
                       <PickCard
                         key={p.symbol}
