@@ -1259,25 +1259,42 @@ export async function getNthTradingDay(
  */
 export interface TopNewsItem {
   id: number;
-  symbol: string | null;
-  name: string | null;
   headline: string;
   source: string;
   url: string | null;
   publishedAt: string;
-  /** 같은 종목을 최근 구간에 다룬 기사 수 — «화제성»의 대용. */
-  articleCount: number;
+  /** 제목에서 잡힌 시장 키워드 — 왜 «시장 뉴스»로 골랐는지의 근거. */
+  topics: string[];
+  /** 이 기사가 걸려 있는 종목 수 — 여럿이면 개별 기업이 아니라 시황 기사다. */
+  breadth: number;
 }
 
-/** 오늘 주요 뉴스 — 종목별로 «많이 다뤄진 순», 종목마다 대표 기사 1건.
+/** 증시 전체에 영향을 주는 «시장 키워드». 제목에 있으면 시황 기사로 본다. */
+const MARKET_KEYWORDS = [
+  "코스피", "코스닥", "증시", "환율", "금리", "국채", "연준", "Fed", "FOMC",
+  "금통위", "한은", "기준금리", "외국인", "기관", "수급", "물가", "인플레",
+  "CPI", "유가", "달러", "나스닥", "다우", "S&P", "뉴욕증시", "무역", "관세",
+  "경기", "공매도", "지수",
+];
+
+/** 개별 종목·정형 기사 — 시장 뉴스가 아니다. */
+const NOT_MARKET = [/^\[?특징주/, /^기업 공시/, /^\[?표\s?\]/, /^\[포토/, /^\[사진/];
+
+/** 오늘 주요 뉴스 — «증시 전체를 움직이는» 기사만.
  *
- * 최신순으로만 뽑으면 한 종목이 목록을 도배한다(같은 사건을 매체 여럿이 쓴다).
- * 그래서 **종목당 한 줄**로 접고, 그 종목이 몇 건 다뤄졌는지를 옆에 적는다 —
- * 그게 «오늘 무엇이 화제였나»에 가장 가깝다.
+ * 2026-08-23 Victor: "오늘 주요 뉴스는 증시에 영향을 미치는 그런 뉴스를 이야기하는
+ * 것인데, 금리 변동이라든지". 첫 판은 종목별 기업 뉴스(신약 개발·수주)를 뽑아 그
+ * 요구와 어긋났다.
  *
- * ⚠️ 뉴스는 매수 신호가 아니다(PEAD 실측 -0.02). 이 목록은 «맥락»이지 «근거»가 아니다.
- * 제목·매체·원문 링크를 그대로 쓴다 — news 테이블이 url 을 갖고 있어 출처로 되돌아갈
- * 수 있다(RecentCoverage 는 url 이 없던 시절 규약이라 제목을 안 쓴다).
+ * 시황 기사를 골라내는 신호 둘을 쓴다:
+ *   ① 여러 종목에 동시에 걸려 있다 — 네이버는 «종목별 뉴스» 페이지에 시황 기사를 같이
+ *      올리므로, 한 기사가 여러 종목에 붙어 있으면 그건 개별 기업 기사가 아니다.
+ *   ② 제목에 시장 키워드가 있다 — 코스피·금리·환율·외국인 …
+ * 점수 = (걸린 종목 수 − 1) + 키워드 수 × 2. 키워드를 두 배로 치는 건 ①만으로는
+ * 항공 3사 M&A 같은 «산업» 뉴스가 올라오기 때문이다(실측).
+ *
+ * ⚠️ 뉴스는 매수 신호가 아니다(PEAD 실측 -0.02). «무엇이 시장을 움직였나»를 보는
+ * 자리이지 «무엇을 사라»가 아니다.
  */
 export async function getTopNews(limit = 6, days = 2): Promise<TopNewsItem[]> {
   try {
@@ -1285,13 +1302,11 @@ export async function getTopNews(limit = 6, days = 2): Promise<TopNewsItem[]> {
     const since = new Date(Date.now() - days * 864e5).toISOString();
     const { data } = await supabase
       .from("news")
-      .select(
-        "id,instrument_id,headline,source,url,published_at,provider_article_id,instruments(symbol,name)",
-      )
+      .select("id,instrument_id,headline,source,url,published_at,provider_article_id")
       .gte("published_at", since)
       .order("published_at", { ascending: false })
-      .limit(600);
-    const rows = (data ?? []) as unknown as {
+      .limit(800);
+    const rows = (data ?? []) as {
       id: number;
       instrument_id: number | null;
       headline: string;
@@ -1299,62 +1314,47 @@ export async function getTopNews(limit = 6, days = 2): Promise<TopNewsItem[]> {
       url: string | null;
       published_at: string;
       provider_article_id: string | null;
-      instruments: { symbol: string; name: string } | null;
     }[];
     if (rows.length === 0) return [];
 
-    // ⚠️ 종목 연결을 그대로 믿지 않는다. 네이버는 «종목별 뉴스» 페이지에 시황 기사도
-    // 같이 올려서, 「삼성전자 7000억 사고…」 같은 글이 GS건설에 붙어 들어온다
-    // (2026-08-23 실측). 제목에 그 종목 이름이 들어간 기사만 그 종목 것으로 본다 —
-    // getNewsEvents 가 쓰던 것과 같은 가드다.
-    const strip = (t: string) => t.replace(/\s/g, "");
-    const named = rows.filter((r) => {
-      const nm = r.instruments?.name;
-      return Boolean(nm) && strip(r.headline).includes(strip(nm!));
-    });
-    if (named.length === 0) return [];
-
-    // 한 기사가 여러 종목에 붙어 있으면 목록에 같은 제목이 두 번 뜬다(「통합 진에어」가
-    // 대한항공·아시아나항공에 각각). 기사 단위로 먼저 접는다.
-    const seenArticle = new Set<string>();
-    const uniq = named.filter((r) => {
-      const key = r.provider_article_id ?? strip(r.headline);
-      if (seenArticle.has(key)) return false;
-      seenArticle.add(key);
-      return true;
-    });
-
-    // 종목별 기사 수 — 화제성의 대용. 접기 전(named) 기준으로 센다.
-    const count = new Map<number, number>();
-    for (const r of named) {
-      if (r.instrument_id == null) continue;
-      count.set(r.instrument_id, (count.get(r.instrument_id) ?? 0) + 1);
+    // 같은 기사가 종목마다 한 행씩 들어온다 — 기사 단위로 접으면서 걸린 종목 수를 센다.
+    type Bucket = {
+      rep: (typeof rows)[number];
+      insts: Set<number>;
+    };
+    const byArticle = new Map<string, Bucket>();
+    for (const r of rows) {
+      const key = r.provider_article_id ?? r.headline.replace(/\s/g, "");
+      const b = byArticle.get(key);
+      if (b) {
+        if (r.instrument_id != null) b.insts.add(r.instrument_id);
+      } else {
+        byArticle.set(key, {
+          rep: r,
+          insts: new Set(r.instrument_id != null ? [r.instrument_id] : []),
+        });
+      }
     }
 
-    // 종목당 한 줄. 첫 등장이 최신(내림차순 정렬)이라 그게 대표 기사다.
-    const byInst = new Map<number, (typeof uniq)[number]>();
-    for (const r of uniq) {
-      if (r.instrument_id == null) continue;
-      if (!byInst.has(r.instrument_id)) byInst.set(r.instrument_id, r);
-    }
-
-    return [...byInst.entries()]
-      .sort(
-        (a, b) =>
-          (count.get(b[0]) ?? 0) - (count.get(a[0]) ?? 0) ||
-          b[1].published_at.localeCompare(a[1].published_at),
-      )
+    return [...byArticle.values()]
+      .map(({ rep, insts }) => {
+        const topics = MARKET_KEYWORDS.filter((k) => rep.headline.includes(k));
+        const excluded = NOT_MARKET.some((re) => re.test(rep.headline));
+        return {
+          id: rep.id,
+          headline: rep.headline,
+          source: rep.source,
+          url: rep.url,
+          publishedAt: rep.published_at,
+          topics,
+          breadth: insts.size,
+          score: excluded ? -99 : Math.max(0, insts.size - 1) + topics.length * 2,
+        };
+      })
+      .filter((x) => x.score >= 2)
+      .sort((a, b) => b.score - a.score || b.publishedAt.localeCompare(a.publishedAt))
       .slice(0, limit)
-      .map(([iid, rep]) => ({
-        id: rep.id,
-        symbol: rep.instruments?.symbol ?? null,
-        name: rep.instruments?.name ?? null,
-        headline: rep.headline,
-        source: rep.source,
-        url: rep.url,
-        publishedAt: rep.published_at,
-        articleCount: count.get(iid) ?? 1,
-      }));
+      .map(({ score: _score, ...item }) => item);
   } catch {
     return [];
   }

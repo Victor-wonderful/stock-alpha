@@ -2,18 +2,22 @@ import type { TopNewsItem } from "@/lib/data";
 import { SectionHead } from "@/components/SectionHead";
 
 /**
- * 홈 「오늘 주요 뉴스」 — 매크로 자리를 대신한다(2026-08-23 Victor).
+ * 홈 「오늘 주요 뉴스」 — **증시 전체를 움직인 기사**. 매크로 자리를 대신한다.
  *
  * 매크로는 FRED 시리즈라 발표가 3~4일 늦어 «매일 브리핑»이 되지 못했고, 3줄 중 2줄이
- * 상단 티커와 같은 값이었다. 뉴스는 매 거래일 들어오고 티커와 겹치지 않는다.
- * 매크로 자체는 인사이트(/insights)에 남는다.
+ * 상단 티커와 같은 값이었다. 매크로 자체는 인사이트(/insights)에 남는다.
  *
- * ⚠️ 뉴스는 매수 신호가 아니다(PEAD 실측 -0.02). 이 목록은 «오늘 무엇이 화제였나»이지
- * «무엇을 사라»가 아니다. 그래서 픽·시그널과 나란히 두지 않고 읽는 구역에 둔다.
+ * ⚠️ 개별 기업 뉴스가 아니다(2026-08-23 Victor — "증시에 영향을 미치는 그런 뉴스,
+ * 금리 변동이라든지"). 첫 판은 종목별 기업 뉴스(신약 개발·수주)를 뽑아 어긋났다.
+ * 지금은 lib/data.getTopNews 가 «여러 종목에 동시에 걸린 기사» + «제목의 시장 키워드»
+ * 로 시황 기사만 고른다. 그래서 행에 종목명이 아니라 **주제 칩**(금리·환율·외국인 …)
+ * 이 붙는다.
+ *
+ * ⚠️ 뉴스는 매수 신호가 아니다(PEAD 실측 -0.02). «무엇이 시장을 움직였나»를 보는
+ * 자리이지 «무엇을 사라»가 아니다 — 그래서 픽 옆이 아니라 읽는 구역에 둔다.
  *
  * 제목·매체·원문 링크를 그대로 쓴다 — news 테이블이 url(네이버 금융)을 갖고 있어
- * 출처로 되돌아갈 수 있다. components/RecentCoverage 가 제목을 안 쓰는 건 url 이 없던
- * 시절의 규약이라, 링크가 있는 여기서는 적용되지 않는다.
+ * 출처로 되돌아갈 수 있다.
  */
 function timeLabel(iso: string): string {
   // 저장은 UTC, 읽는 사람은 KST. +9 해서 시:분만 보여준다.
@@ -34,7 +38,7 @@ export function HomeTopNews({ items }: { items: TopNewsItem[] }) {
       <SectionHead title="오늘 주요 뉴스" href="/market" linkLabel="시장" />
       {items.length === 0 ? (
         <p className="mt-6 rounded-[12px] border border-border bg-surface px-5 py-8 text-center text-[13px] text-text-mute">
-          최근 이틀간 수집된 기사가 없습니다.
+          최근 이틀간 시장 전체에 걸리는 기사가 없습니다.
         </p>
       ) : (
         <ul className="mt-6 overflow-hidden rounded-[12px] border border-border bg-surface">
@@ -54,36 +58,33 @@ export function HomeTopNews({ items }: { items: TopNewsItem[] }) {
                   <span className="block truncate text-[13.5px] font-semibold leading-[1.5] text-text group-hover:text-accent">
                     {n.headline}
                   </span>
-                  <span className="mt-1 flex flex-wrap items-baseline gap-x-2 text-[11px] text-text-mute">
+                  <span className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px] text-text-mute">
                     <span>{n.source}</span>
-                    {n.name && (
-                      <>
-                        <span className="opacity-50">·</span>
-                        <span className="text-text-dim">{n.name}</span>
-                      </>
-                    )}
-                    {n.articleCount > 1 && (
-                      <span className="rounded-[4px] bg-surface-3 px-1.5 py-px font-semibold text-text-dim">
-                        기사 {n.articleCount}건
+                    {/* 왜 «시장 뉴스»로 골렸는지 — 제목에서 잡힌 키워드를 그대로 보인다.
+                        고르는 규칙이 화면에 드러나야 목록을 믿을 수 있다. */}
+                    {n.topics.slice(0, 3).map((t) => (
+                      <span
+                        key={t}
+                        className="rounded-[4px] bg-accent-soft px-1.5 py-px font-semibold text-accent"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                    {n.breadth > 1 && (
+                      <span className="rounded-[4px] bg-surface-3 px-1.5 py-px text-text-dim">
+                        {n.breadth}개 종목
                       </span>
                     )}
                   </span>
                 </span>
-                {n.symbol && (
-                  <span className="shrink-0 pt-0.5">
-                    {/* 종목 상세는 내부 라우트다 — 바깥 a 안에 a 를 중첩할 수 없어
-                        시각적으로만 링크처럼 두고 실제 이동은 바깥(원문)이 맡는다. */}
-                    <span className="tnum text-[11px] text-text-mute">{n.symbol}</span>
-                  </span>
-                )}
               </a>
             </li>
           ))}
         </ul>
       )}
       <p className="mt-2 text-[11px] leading-relaxed text-text-mute">
-        같은 종목을 여러 매체가 다룬 순 · 종목당 대표 기사 한 건 · 뉴스는 매수 신호가
-        아닙니다(실적 발표 후 주가 흐름을 재봤을 때 상관이 거의 없었습니다)
+        지수·금리·환율·수급처럼 시장 전체에 걸리는 기사만 골랐습니다 · 뉴스는 매수
+        신호가 아닙니다(실적 발표 후 주가 흐름을 재봤을 때 상관이 거의 없었습니다)
       </p>
     </section>
   );
