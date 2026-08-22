@@ -25,10 +25,17 @@ const STATUS_BADGE: Record<string, string> = {
   손절: "bg-bad-soft text-bad",
   진행중: "bg-warn-soft text-warn",
   만료: "bg-surface-3 text-text-dim",
+  // 규칙을 바꿔서 우리가 닫은 픽 — 성적에는 들어가고, 왜 닫혔는지는 이름이 말한다.
+  "규칙 교체 정리": "bg-surface-3 text-text-dim",
   "—": "bg-surface-3 text-text-mute",
 };
 
-const FILTERS = ["전체", "진입 대기", "진행중", "목표 도달", "손절", "만료", "미체결"] as const;
+const FILTERS = [
+  "전체", "진입 대기", "진행중", "목표 도달", "손절", "만료", "미체결",
+  // 2026-08-22 규칙 교체로 우리가 닫은 픽. 숨기지 않는다 — 성적에 들어가고,
+  // 왜 닫혔는지 이름이 말한다.
+  "규칙 교체 정리",
+] as const;
 
 export default async function PicksPage({
   searchParams,
