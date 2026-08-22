@@ -2,6 +2,13 @@
 // 레짐(상승/하락/횡보)을 사용자 언어로. 순수 서버 컴포넌트.
 import type { MarketStateView } from "@/lib/data";
 
+// ⚠️ 여기 문구는 엔진의 억제 규칙(engine/reports/daily._pick_suppressed)을 사람 말로
+// 옮긴 것이다. 규칙을 바꾸면 여기도 바꿔야 한다 — 2026-08-22 에 실제로 어긋나 있었다.
+// 횡보는 «평균회귀·수급 위주»라고 적혀 있었는데 그 규칙은 그날 폐기됐고, 상승은
+// «칼만·메디안·돌파»라고 적혀 있었는데 그 셋은 게이트를 통과한 적이 없다.
+//
+// 그래서 **셋업 이름을 쓰지 않는다.** 어떤 셋업이 나갈지는 백테스트 게이트가 매일
+// 정하므로 화면에 박아두면 또 틀린다. 대신 «어떤 성격을 열고 무엇을 막는가»만 적는다.
 const STATE: Record<
   string,
   { icon: string; name: string; routing: string; cls: string }
@@ -9,19 +16,20 @@ const STATE: Record<
   uptrend: {
     icon: "📈",
     name: "상승추세",
-    routing: "추세 추천 활성 — 칼만·메디안·돌파 위주",
+    routing: "추세·역추세·수급 발행 — 평균회귀만 제외",
     cls: "border-good/30 bg-good-soft text-good",
   },
   downtrend: {
     icon: "📉",
     name: "하락추세",
-    routing: "추세 추천 억제 — 수급·역추세 위주 (손실 회피)",
+    routing: "역추세·수급만 — 추세 매수는 막습니다(하락장 실측 근거)",
     cls: "border-bad/30 bg-bad-soft text-bad",
   },
   range: {
     icon: "↔️",
-    name: "횡보(레인지)",
-    routing: "평균회귀·수급 위주 — 추세 추격 자제",
+    name: "횡보",
+    // 2026-08-22 재측정: 이름으로 나누던 것을 그만두고 «측정된 (셋업 × 기간)»만 연다.
+    routing: "검증된 역추세 조합만 — 단기·중기. 나머지는 전부 막습니다",
     cls: "border-sky-500/30 bg-sky-500/10 text-sky-700",
   },
 };
