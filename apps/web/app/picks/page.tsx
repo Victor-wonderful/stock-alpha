@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import {
   getPickHistory,
+  getResimHorizonStats,
   NON_TRADE_PICK_STATUSES,
   type PickRecord,
 } from "@/lib/data";
@@ -38,7 +39,10 @@ export default async function PicksPage({
     ? sp.status
     : "전체";
 
-  const history = await getPickHistory(500);
+  const [history, resim] = await Promise.all([
+    getPickHistory(500),
+    getResimHorizonStats(),
+  ]);
   const all = history.data;
   const rows = filter === "전체" ? all : all.filter((r) => r.status === filter);
 
@@ -183,6 +187,92 @@ export default async function PicksPage({
                   기간 구분이 없어 위 집계에서 빠집니다 — 전체 통계에는 포함됩니다.
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* 규칙 교체 재현 — 발행 기록이 아니라 «계산»이다.
+            2026-08-22 에 진입·축·청산 규칙을 한꺼번에 바꿨는데, 그 이전 픽은 전부
+            옛 규칙 기록이라 기간별 성과가 빈다. 같은 픽을 새 규칙으로 다시 돌려
+            «규칙 교체가 실제로 개선인가»를 숫자로 본다.
+            ⚠️ 실제로 발행한 것처럼 읽히면 안 된다 — 배경·라벨·문구로 계속 구분한다. */}
+        {resim.data.length > 0 && (
+          <div className="rounded-[12px] border border-dashed border-border-strong bg-surface-2">
+            <div className="border-b border-border-soft px-4 py-2.5">
+              <span className="rounded-[999px] bg-surface-3 px-2 py-0.5 text-[10px] font-bold text-text-dim">
+                재현
+              </span>
+              <span className="ml-2 text-[12px] font-bold text-text">
+                규칙을 바꾸기 전 픽을 새 규칙으로 다시 돌리면
+              </span>
+              <p className="mt-1 text-[11px] leading-relaxed text-text-mute">
+                발행한 픽이 아니라 <b className="font-semibold text-text-dim">계산</b>입니다.
+                2026-08-22 이전 픽을 시가 진입·본전스톱·기간별 보유 상한으로 다시 돌린
+                결과입니다.
+                한 픽을 단기·중기·장기 세 벌로 폅니다 — 실제 발행도 통과한 기간마다 따로 나가기 때문입니다.
+              </p>
+            </div>
+            <div className="divide-y divide-border-soft">
+              {HORIZONS.map((hz) => {
+                const st = resim.data.find((r) => r.horizon === hz.key);
+                return (
+                  <div
+                    key={hz.key}
+                    className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 text-[12px]"
+                  >
+                    <span className="min-w-[8rem] font-bold text-text">
+                      {hz.label}
+                      <span className="ml-1.5 text-[11px] font-normal text-text-mute">
+                        최대 {hz.bars}거래일
+                      </span>
+                    </span>
+                    {!st ? (
+                      <span className="text-text-mute">재현 없음</span>
+                    ) : (
+                      <>
+                        <span className="tnum text-text-dim">종료 {st.closed}건</span>
+                        <span className="tnum text-text-dim">진행중 {st.open}</span>
+                        <span className="tnum text-good">승 {st.wins}</span>
+                        <span className="tnum text-text-dim">
+                          승률{" "}
+                          {st.closed > 0
+                            ? `${Math.round((st.wins / st.closed) * 100)}%`
+                            : "—"}
+                        </span>
+                        <span
+                          className={`tnum ml-auto font-semibold ${
+                            st.mean == null
+                              ? "text-text-mute"
+                              : st.mean >= 0
+                                ? "text-good"
+                                : "text-bad"
+                          }`}
+                        >
+                          {st.mean == null ? "확정 없음" : `평균 ${fmtPct(st.mean)}`}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="border-t border-border-soft px-4 py-3 text-[11px] leading-relaxed text-text-mute">
+              같은 픽의 <b className="font-semibold text-text-dim">옛 규칙 실제 성적</b>은{" "}
+              종료 {closed.length}건 · 승 {closed.filter((r) => (r.return_pct ?? 0) > 0).length}건
+              {closed.length > 0 &&
+                ` (${Math.round(
+                  (closed.filter((r) => (r.return_pct ?? 0) > 0).length / closed.length) * 100,
+                )}%)`}
+              {avgClosed != null && ` · 평균 ${fmtPct(avgClosed)}`} 였습니다. 승률이 오른 가장 큰
+              이유는 진입 방식입니다 — 지정가는 «내려온 종목»만 체결돼 손절될 것만 사졌습니다.
+              <br />
+              다만 이 중{" "}
+              <b className="font-semibold text-text-dim">
+                현재 검증을 통과하는 조합은{" "}
+                {resim.data.reduce((a, r) => a + r.gatePassed, 0)}개뿐
+              </b>
+              입니다. 나머지는 «새 규칙이었다면 이랬을 것»이지 «발행됐을 것»이 아닙니다.
+              위아래 모두 같은 방식으로 중복(보유 중 재선정)을 합쳐 셉니다.
             </div>
           </div>
         )}
