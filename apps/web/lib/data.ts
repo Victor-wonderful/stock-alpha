@@ -1257,6 +1257,109 @@ export async function getNthTradingDay(
  * confirmed 가 false 면 nth() 는 항상 null 이다 — 휴장 목록이 그 구간을 못 덮으면
  * 날짜를 단정하지 않는다(틀린 날짜보다 「N거래일째」가 정직하다).
  */
+export interface TopNewsItem {
+  id: number;
+  symbol: string | null;
+  name: string | null;
+  headline: string;
+  source: string;
+  url: string | null;
+  publishedAt: string;
+  /** 같은 종목을 최근 구간에 다룬 기사 수 — «화제성»의 대용. */
+  articleCount: number;
+}
+
+/** 오늘 주요 뉴스 — 종목별로 «많이 다뤄진 순», 종목마다 대표 기사 1건.
+ *
+ * 최신순으로만 뽑으면 한 종목이 목록을 도배한다(같은 사건을 매체 여럿이 쓴다).
+ * 그래서 **종목당 한 줄**로 접고, 그 종목이 몇 건 다뤄졌는지를 옆에 적는다 —
+ * 그게 «오늘 무엇이 화제였나»에 가장 가깝다.
+ *
+ * ⚠️ 뉴스는 매수 신호가 아니다(PEAD 실측 -0.02). 이 목록은 «맥락»이지 «근거»가 아니다.
+ * 제목·매체·원문 링크를 그대로 쓴다 — news 테이블이 url 을 갖고 있어 출처로 되돌아갈
+ * 수 있다(RecentCoverage 는 url 이 없던 시절 규약이라 제목을 안 쓴다).
+ */
+export async function getTopNews(limit = 6, days = 2): Promise<TopNewsItem[]> {
+  try {
+    const supabase = createPublicClient();
+    const since = new Date(Date.now() - days * 864e5).toISOString();
+    const { data } = await supabase
+      .from("news")
+      .select(
+        "id,instrument_id,headline,source,url,published_at,provider_article_id,instruments(symbol,name)",
+      )
+      .gte("published_at", since)
+      .order("published_at", { ascending: false })
+      .limit(600);
+    const rows = (data ?? []) as unknown as {
+      id: number;
+      instrument_id: number | null;
+      headline: string;
+      source: string;
+      url: string | null;
+      published_at: string;
+      provider_article_id: string | null;
+      instruments: { symbol: string; name: string } | null;
+    }[];
+    if (rows.length === 0) return [];
+
+    // ⚠️ 종목 연결을 그대로 믿지 않는다. 네이버는 «종목별 뉴스» 페이지에 시황 기사도
+    // 같이 올려서, 「삼성전자 7000억 사고…」 같은 글이 GS건설에 붙어 들어온다
+    // (2026-08-23 실측). 제목에 그 종목 이름이 들어간 기사만 그 종목 것으로 본다 —
+    // getNewsEvents 가 쓰던 것과 같은 가드다.
+    const strip = (t: string) => t.replace(/\s/g, "");
+    const named = rows.filter((r) => {
+      const nm = r.instruments?.name;
+      return Boolean(nm) && strip(r.headline).includes(strip(nm!));
+    });
+    if (named.length === 0) return [];
+
+    // 한 기사가 여러 종목에 붙어 있으면 목록에 같은 제목이 두 번 뜬다(「통합 진에어」가
+    // 대한항공·아시아나항공에 각각). 기사 단위로 먼저 접는다.
+    const seenArticle = new Set<string>();
+    const uniq = named.filter((r) => {
+      const key = r.provider_article_id ?? strip(r.headline);
+      if (seenArticle.has(key)) return false;
+      seenArticle.add(key);
+      return true;
+    });
+
+    // 종목별 기사 수 — 화제성의 대용. 접기 전(named) 기준으로 센다.
+    const count = new Map<number, number>();
+    for (const r of named) {
+      if (r.instrument_id == null) continue;
+      count.set(r.instrument_id, (count.get(r.instrument_id) ?? 0) + 1);
+    }
+
+    // 종목당 한 줄. 첫 등장이 최신(내림차순 정렬)이라 그게 대표 기사다.
+    const byInst = new Map<number, (typeof uniq)[number]>();
+    for (const r of uniq) {
+      if (r.instrument_id == null) continue;
+      if (!byInst.has(r.instrument_id)) byInst.set(r.instrument_id, r);
+    }
+
+    return [...byInst.entries()]
+      .sort(
+        (a, b) =>
+          (count.get(b[0]) ?? 0) - (count.get(a[0]) ?? 0) ||
+          b[1].published_at.localeCompare(a[1].published_at),
+      )
+      .slice(0, limit)
+      .map(([iid, rep]) => ({
+        id: rep.id,
+        symbol: rep.instruments?.symbol ?? null,
+        name: rep.instruments?.name ?? null,
+        headline: rep.headline,
+        source: rep.source,
+        url: rep.url,
+        publishedAt: rep.published_at,
+        articleCount: count.get(iid) ?? 1,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export async function getTradingCalendar(): Promise<{
   confirmedThrough: string | null;
   nth: (from: string, n: number) => string | null;

@@ -6,11 +6,11 @@ import { HomeHero } from "@/components/HomeHero";
 import { HomeOpenPicks } from "@/components/HomeOpenPicks";
 import { HomeOpenSummary } from "@/components/HomeOpenSummary";
 import { HomePicksTable } from "@/components/HomePicksTable";
-import { MacroSection, RecentReports, WeeklyBriefs } from "@/components/HomeSections";
+import { RecentReports, WeeklyBriefs } from "@/components/HomeSections";
+import { HomeTopNews } from "@/components/HomeTopNews";
 import {
   getBlogPosts,
   getLatestPricesBySymbols,
-  getMacroSeries,
   getMarketQuotes,
   getMarketState,
   getMorningBrief,
@@ -21,6 +21,7 @@ import {
   getOpenPicks,
   getRecommendations,
   getReports,
+  getTopNews,
   getWeeklyReports,
   pickBlogPosts,
 } from "@/lib/data";
@@ -113,7 +114,7 @@ export default async function HomePage() {
   // ⚠️ 인증을 제대로 붙일 때 «로그인 사용자에게 히어로를 어떻게 할지»를 다시 정한다.
   //    그때는 홈을 로그인 뒤로 감추지 않는다 — 홈은 공개 화면이다(Victor, 2026-08-22).
   const [
-    quotes, recs, brief, marketState, openPicks, weekly, macro, blogPosts, reports, cal,
+    quotes, recs, brief, marketState, openPicks, weekly, blogPosts, reports, cal, topNews,
   ] = await Promise.all([
       getMarketQuotes(),
       getRecommendations(),
@@ -125,14 +126,13 @@ export default async function HomePage() {
       // 홈이 인사이트·종목의 요약본이 되지 않게 각 3건씩만 얹고 「전체 보기」로 보낸다.
       // 예전 홈이 실패한 이유가 «섹션 8개 중 7개가 중복»이었는데, 그건 건수가 아니라
       // «같은 깊이로 두 번 보여준» 탓이었다.
-      // 제외 목록을 비운다 — 원달러가 USDKRW(네이버, 매일)로 바뀌어 더는 지연된
-      // 시리즈가 아니다. 티커와 값이 갈리던 원인이었다(2026-08-22).
-      getMacroSeries(),
       getBlogPosts(),
       getReports(3),
+      // 오늘 주요 뉴스 — 매크로 자리를 대신한다. 종목당 한 줄로 접고 «많이 다뤄진 순».
       // 거래일 계산기 — 휴장일을 한 번만 읽고 메모리에서 센다. 보유 픽마다
       // getNthTradingDay 를 부르면 픽 10건에 왕복 20회다.
       getTradingCalendar(),
+      getTopNews(6),
     ]);
 
   const picks = recs.data;
@@ -226,7 +226,6 @@ export default async function HomePage() {
   );
   // 블로그 글이 있으면 그걸 쓰고, 없으면 엔진 산출물이 그 자리를 지킨다(컴포넌트가 판단).
   const weeklyPosts = pickBlogPosts(blogPosts, "view", "weekly", 3);
-  const macroPosts = pickBlogPosts(blogPosts, "view", "macro", 3);
   const analysisPosts = pickBlogPosts(blogPosts, "stocks", "analysis", 3);
 
   return (
@@ -420,19 +419,21 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* ── 밴드 2 · 읽을 것 ── */}
-        <div className="mt-12 grid items-start gap-x-8 gap-y-10 lg:grid-cols-[2fr_1fr]">
+        {/* ── 밴드 3 · 읽을 것 ──
+            우측 사이드바 배치를 걷어냈다(2026-08-23 Victor — "섹션 배치를 우측에
+            저렇게 하지 마라"). 좁은 칸(1fr ≈ 400px)에 목록을 넣으면 제목이 잘리고,
+            sticky 까지 걸면 스크롤 중에 계속 따라와 읽는 흐름을 방해한다.
+            **균등 2열**이라 양쪽 다 목록이 온전히 들어간다.
+
+            매크로는 홈에서 뺐다 — FRED 시리즈라 발표가 3~4일 늦어 «매일 브리핑»이
+            되지 못했고, 3줄 중 2줄이 상단 티커와 같은 값이었다. 그 자리를 매 거래일
+            들어오는 뉴스가 대신한다. 매크로 자체는 인사이트(/insights)에 남는다. */}
+        <div className="mt-12 grid items-start gap-x-8 gap-y-10 lg:grid-cols-2">
+          <HomeTopNews items={topNews} />
           <div className="min-w-0 [&>section:first-child]:mt-0">
-                      <div className="min-w-0 [&>section:first-child]:mt-0">
             <WeeklyBriefs posts={weeklyPosts} reports={weekly} />
             <RecentReports posts={analysisPosts} reports={reports.data} />
-                      </div>
-
           </div>
-
-          <aside className="lg:sticky lg:top-[72px]">
-            <MacroSection posts={macroPosts} indicators={macro} compact />
-          </aside>
         </div>
       </main>
     </div>
