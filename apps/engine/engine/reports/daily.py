@@ -390,6 +390,24 @@ def _plan_gate_ok(row: dict, passed_combos: dict[str, list[str]] | None) -> bool
     return axis in passed_combos.get(row.get("setup") or "", [])
 
 
+def tradable_now(payload: dict | None) -> bool:
+    """리포트의 «거래 가능» 판정에서 **종목 성질만** 본다. (순수 함수)
+
+    tradability.checks 에는 backtest_gate 항목이 들어 있는데, 그건 리포트를 만든 날의
+    게이트를 얼려 놓은 값이다. 게이트가 바뀌면 그 값이 지금과 어긋난다 —
+    2026-08-21 실측: 리포트에는 통과 셋업이 ["breakout","ensemble","pivot",...] 로
+    박혀 있는데 지금은 셋 다 통과하지 못하고, 반대로 새로 통과한 double_bottom 을 가진
+    종목은 «통과 셋업 없음 → 거래 부적합» 으로 찍혀 있었다.
+
+    조합 검증은 _plan_gate_ok 가 플랜 한 줄씩 한다 — 그쪽이 더 정확하다(셋업 단위가
+    아니라 셋업 × 기간 단위). 그래서 여기서는 유니버스·유동성·변동성만 본다.
+    """
+    checks = ((payload or {}).get("tradability") or {}).get("checks") or []
+    if not checks:
+        return bool(((payload or {}).get("tradability") or {}).get("passed", False))
+    return all(c.get("passed") for c in checks if c.get("key") != "backtest_gate")
+
+
 def _rr_ok(row: dict, min_rr: float = PICKS_MIN_RR) -> bool:
     """손익비 하한. 손익비 미상이면 통과(과도 차단 안 함) — 값이 있을 때만 거른다."""
     rr = row.get("risk_reward")
@@ -517,7 +535,8 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             and _rr_ok(row)
             and _stop_width_ok(row)
         ]
-        tradable = (p.get("tradability") or {}).get("passed", False)
+        # 얼린 게이트 판정은 빼고 종목 성질만 본다 — 조합 검증은 _plan_gate_ok 가 한다.
+        tradable = tradable_now(p)
         if not tradable or not plan:
             continue
         if rating != "매수" and score < min_score:
@@ -1095,12 +1114,20 @@ def _calendar_blocking(as_of: str) -> list[dict]:
     return blocking
 
 
-def select_and_store_picks(as_of: str) -> int:
+def select_and_store_picks(as_of: str, *, gate_as_of: str | None = "same") -> int:
     """해당 일자 발행 리포트에서 픽 선정·적재. 단독 재실행 가능(픽만 갱신).
 
     같은 날 재실행하면 자연키(0016)로 갱신되지만, 직전 선정에서 빠지게 된
     종목이 남을 수 있어 해당 일자 daily_focus 를 먼저 비우고 다시 채운다.
+
+    gate_as_of: 게이트·기대값을 어느 시점 기준으로 볼 것인가.
+      · "same"(기본) — as_of 기준. 그날 알 수 있었던 백테스트만 본다(시점 정합성).
+        일일 배치·과거일 백필은 항상 이쪽이다.
+      · None — **지금** 기준. 규칙을 바꾼 직후, 이미 지나간 분석일의 픽을 새 규칙으로
+        다시 뽑을 때 쓴다(2026-08-22 규칙 교체 후 8/21 재선정). 그날 없던 판정을
+        쓰는 것이므로 일상 경로에서 쓰면 안 된다 — 호출부에서 명시할 때만.
     """
+    gate_cut = as_of if gate_as_of == "same" else gate_as_of
     client = get_client()
     rows = (
         client.table("reports")
@@ -1140,8 +1167,8 @@ def select_and_store_picks(as_of: str) -> int:
     picks = select_picks(
         rows,
         # 게이트 통과 ∩ «지금 발행하는 기간»(장기 휴지, 2026-08-22).
-        passed_combos=publishable_combos(passed_combos_from_db(as_of)),
-        expectancy_by_combo=gate_expectancy_from_db(as_of),
+        passed_combos=publishable_combos(passed_combos_from_db(gate_cut)),
+        expectancy_by_combo=gate_expectancy_from_db(gate_cut),
         regime=regime,
         market_state=market_state,
         sector_by_id=sector_by_id,
@@ -1160,7 +1187,9 @@ def select_and_store_picks(as_of: str) -> int:
     ).execute()
     n = upsert(
         "recommendations", picks,
-        on_conflict="basket_type,instrument_id,as_of",
+        # 자연키에 horizon 이 들어갔다(0039) — 같은 종목이 같은 날 여러 기간으로
+        # 발행될 수 있어서다. 옛 키로 upsert 하면 42P10 으로 적재 자체가 실패한다.
+        on_conflict="basket_type,instrument_id,as_of,horizon",
     ) if picks else 0
     log.info("reports.daily.picks", as_of=as_of, picks=n)
     return n
