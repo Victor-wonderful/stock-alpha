@@ -1516,9 +1516,13 @@ export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
         name: (inst.name as string) ?? "",
         asOf: String(r.as_of),
         entry: (r.entry_price as number) ?? null,
-        // 1차 익절한 픽은 잔량 목표가 tp2 로 바뀐다(0022 스케일아웃).
-        target: (r.tp1_hit ? (r.tp2_price as number) : (r.target_price as number)) ?? null,
-        stop: (r.stop_loss as number) ?? null,
+        // 채택 규칙(target_action="trail")에서 tp1_hit 은 «1차 익절»이 아니라
+        // **본전스톱으로 전환됨**을 뜻한다(2026-08-22). 그래서 바뀌는 건 목표가 아니라
+        // 손절이다 — 예전 코드는 정반대로 «목표를 tp2 로 바꾸고 손절은 그대로»였고,
+        // 그건 옛 스케일아웃(0022) 전제였다. tp2 는 trail 경로가 아예 안 쓴다.
+        target: (r.target_price as number) ?? null,
+        stop: ((r.tp1_hit ? (r.entry_price as number) : (r.stop_loss as number)) ??
+          null) as number | null,
         tp1Hit: Boolean(r.tp1_hit),
       };
     });

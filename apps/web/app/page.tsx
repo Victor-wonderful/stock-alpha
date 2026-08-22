@@ -3,6 +3,7 @@ import Link from "next/link";
 import { DEFAULT_RISK_PER_TRADE_PCT } from "@/lib/position";
 import { GNB } from "@/components/GNB";
 import { HomeHero } from "@/components/HomeHero";
+import { HomeOpenPicks } from "@/components/HomeOpenPicks";
 import { HomePickCard } from "@/components/HomePickCard";
 import { MacroSection, RecentReports, WeeklyBriefs } from "@/components/HomeSections";
 import {
@@ -405,6 +406,14 @@ export default async function HomePage() {
               </p>
             )}
           </section>
+
+          {/* ── 진행 중 ──
+              「오늘의 픽」이 «오늘 살 것»이라면 이건 «이미 산 것»이다. 매일 값이 바뀌는
+              건 이쪽인데 홈에는 건수만 있었다(2026-08-22 Victor). 조회는 안 늘었다 —
+              getOpenPicks(30) 을 이미 부르고 `.length` 만 쓰고 있었다.
+              보유가 0 건이면 스스로 렌더하지 않는다(네이비 패널이 «아직 없습니다»를
+              이미 말한다). */}
+          <HomeOpenPicks picks={openPicks} />
 
         </div>
 
