@@ -252,7 +252,8 @@ export default async function ScreenerPage({
       subtitle={`시그널 ${grandTotal}건 — 셋업이 트리거된 기록이다. 매수 추천이 아니고, «검증 통과»만 실제 발행 대상이다 · 매일 16:30 갱신`}
       badge={
         <span className="flex items-center gap-1.5 rounded-[999px] bg-good-soft px-3 py-1 text-[11px] font-bold text-good">
-          검증 통과 {verifiedCount}건 · 미통과 {grandTotal - verifiedCount}건
+          검증 통과 {Math.min(verifiedCount, grandTotal)}건 · 미통과{" "}
+          {Math.max(0, grandTotal - verifiedCount)}건
         </span>
       }
     >
@@ -268,7 +269,12 @@ export default async function ScreenerPage({
         {[
           // 값의 근거를 부제에 명시한다. 예전엔 전부 '강도 상위 1000건 표본' 기준이면서
           // 라벨은 전체인 것처럼 적혀 있었다(오늘 신규 1000건 vs 실제 2530건).
-          { label: "시그널 전체", value: `${grandTotal}건`, sub: `그중 검증 통과 ${verifiedCount}건` },
+          {
+              label: "시그널 전체",
+              value: `${grandTotal}건`,
+              // 두 수는 각자 캐시되므로 잠깐 어긋날 수 있다 — 전체보다 큰 «통과»는 없다.
+              sub: `그중 검증 통과 ${Math.min(verifiedCount, grandTotal)}건`,
+            },
           {
             label: "최다 셋업",
             value: topSetupEntry ? SETUP_LABELS[topSetupEntry[0]] ?? topSetupEntry[0] : "—",

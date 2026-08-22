@@ -420,9 +420,13 @@ export async function getSignals(
 
     const { data, error, count } = await q;
     if (error) throw error;
-    if (!data || data.length === 0) {
-      const s = applyFilters(SAMPLE_SIGNALS, filters);
-      return { data: s, isSample: true, total: s.length };
+    // ⚠️ «비어 있음»과 «연결 실패»를 구분한다. 예전엔 0건이면 예시 데이터로 넘어갔는데,
+    // DB 가 멀쩡히 답한 0건까지 가짜 종목으로 채우는 건 위험하다 — 라벨을 붙여도
+    // 사용자는 실제 신호로 읽을 수 있다. 조건에 맞는 게 없으면 없다고 말한다.
+    // (2026-08-22 기간 축 전환으로 시그널을 비운 뒤 실제로 이 경로를 탔다)
+    if (!data) throw new Error("no data");
+    if (data.length === 0) {
+      return { data: [], isSample: false, total: 0 };
     }
     const riskPct = await getUserRiskPct();
     return {
