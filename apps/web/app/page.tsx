@@ -5,7 +5,7 @@ import { GNB } from "@/components/GNB";
 import { HomeHero } from "@/components/HomeHero";
 import { HomeOpenPicks } from "@/components/HomeOpenPicks";
 import { HomeOpenSummary } from "@/components/HomeOpenSummary";
-import { HomePickCard } from "@/components/HomePickCard";
+import { HomePicksTable } from "@/components/HomePicksTable";
 import { MacroSection, RecentReports, WeeklyBriefs } from "@/components/HomeSections";
 import {
   getBlogPosts,
@@ -263,7 +263,7 @@ export default async function HomePage() {
               밴드 2 [2fr | 1fr]  좌 = 읽을 것(글)          · 우 = 매크로(지표)
             비율이 뒤집히면서 화면 가운데에 계단이 생긴다 — 그게 스크롤의 눈금이 된다.
             폭 배정 기준은 내용이다: 표는 넓어야 하고 지표는 좁아도 된다. */}
-        <div className="grid items-start gap-x-8 gap-y-6 lg:grid-cols-[1fr_2fr]">
+        <div className="grid items-start gap-x-8 gap-y-6 lg:grid-cols-[minmax(280px,1fr)_2.6fr]">
           <div className="flex min-w-0 flex-col gap-5">
             {/* ── 오늘 한 줄 판정 ──
                 국면·건수·기준일을 한 줄로. 이게 홈의 본문이다. */}
@@ -343,34 +343,30 @@ export default async function HomePage() {
             </section>
           </div>
 
-          {/* ── 오늘의 픽 — 밴드 1 우측(2fr) ──
-              6칸 표라 넓은 쪽이 제자리다. 1fr(≈450px)에 넣으면 칸이 뭉개진다. */}
+          {/* ── 오늘의 픽 — 밴드 1 우측 ──
+              「진행 중」과 같은 «항목 헤더 표»다(2026-08-22 Victor — "오늘의 픽도 이와
+              같은 유형으로"). 둘은 같은 것을 다른 시점에서 보는 화면이라 모양이 같아야
+              한다: 오늘의 픽 = 사기 전 계획, 진행 중 = 산 뒤 상태. */}
           <section>
             <div className="mb-3 flex items-baseline justify-between gap-3">
-              <h2 className="text-sm font-bold text-text">오늘의 픽</h2>
+              <h2 className="text-sm font-bold text-text">
+                오늘의 픽{" "}
+                <span className="text-[11px] font-medium text-text-mute">
+                  {todayPicks.length > 0 ? `${todayPicks.length}건 · 점수순` : "발행 없음"}
+                </span>
+              </h2>
               <Link href="/focus" className="text-[11px] text-accent hover:underline">
                 전체 보기 →
               </Link>
             </div>
-            {preview.length === 0 ? (
-              <p className="rounded-[12px] border border-border bg-surface py-8 text-center text-[13px] text-text-mute">
-                오늘 기준을 통과한 픽이 없습니다.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-4">
-                {preview.map((p) => (
-                  <HomePickCard
-                    key={p.symbol}
-                    pick={p}
-                    price={previewPrices?.get(p.symbol) ?? null}
-                    planDay={planDay}
-                    exitDay={exitDays.get(horizonSpec(p.horizon)?.bars ?? -1) ?? null}
-                    riskPct={DEFAULT_RISK_PER_TRADE_PCT}
-                    events={previewNews?.get(p.symbol) ?? []}
-                  />
-                ))}
-              </ul>
-            )}
+            <HomePicksTable
+              picks={preview}
+              prices={previewPrices}
+              news={previewNews}
+              planDay={planDay}
+              exitDays={exitDays}
+              riskPct={DEFAULT_RISK_PER_TRADE_PCT}
+            />
             {todayPicks.length > preview.length && (
               <p className="mt-2 text-[11px] text-text-mute">
                 나머지 {todayPicks.length - preview.length}건은 「오늘의 픽」에서 봅니다 · 총{" "}
@@ -378,8 +374,6 @@ export default async function HomePage() {
               </p>
             )}
           </section>
-
-
         </div>
 
         {/* ── 밴드 2 · 진행 중 ──
