@@ -1,9 +1,10 @@
 import Link from "next/link";
 
+import { TRADE_SETUP_LABELS } from "@stock-alpha/db";
 import { GNB } from "@/components/GNB";
 import { HomeHero } from "@/components/HomeHero";
-import { createClient } from "@/lib/supabase/server";
 import {
+  getLatestPricesBySymbols,
   getMarketQuotes,
   getMarketState,
   getMorningBrief,
@@ -75,19 +76,28 @@ const STATE_LABEL: Record<string, string> = {
   range: "횡보",
 };
 
-export default async function HomePage() {
-  // 세션 확인 실패는 «비로그인»으로 본다 — 배너 하나 때문에 홈이 죽으면 안 된다.
-  let signedIn = false;
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    signedIn = Boolean(user);
-  } catch {
-    signedIn = false;
-  }
+// 국면 칩 색 — 오늘 무엇을 할지 정하는 값인데 회색 반투명이라 화면에서 가장 약했다
+// (2026-08-22). 시세 관례를 그대로 따른다: 상승=적 · 하락=청 · 횡보=앰버.
+// 네이비 위라 라이트 바탕용 --good/--bad/--warn 을 못 쓴다(#C41F33 은 navy 대비 2.4:1).
+// 어두운 면용 밝은 변형을 쓴다 — 대비 up 5.6 / down 7.2 / warn 10.4.
+const STATE_CHIP: Record<string, string> = {
+  uptrend: "bg-up-on-navy/15 text-up-on-navy",
+  downtrend: "bg-down-on-navy/15 text-down-on-navy",
+  range: "bg-warn-on-navy/15 text-warn-on-navy",
+};
 
+export default async function HomePage() {
+  // 세션을 보지 않는다. 예전엔 여기서 auth.getUser() 를 불러 «로그인이면 히어로를
+  // 숨긴다»를 했는데, 로그인·회원가입으로 가는 길이 UI 에 없다 — GNB 프로필 버튼은
+  // title="로그인 준비 중" 인 껍데기이고, /login 을 링크하는 건 아무도 안 쓰는
+  // components/Nav.tsx 뿐이다(2026-08-22 확인).
+  //
+  // 그래서 실제로는 «가입할 수 없는데 숨김 분기만 있는» 상태였고, 그 분기에 걸리는
+  // 사람은 옛 세션 쿠키를 가진 Victor 하나였다. 그에게만 히어로가 안 보이고 화면
+  // 아래 절반이 비었다. 분기를 지우면 요청 하나(세션 왕복)도 같이 준다.
+  //
+  // ⚠️ 인증을 제대로 붙일 때 «로그인 사용자에게 히어로를 어떻게 할지»를 다시 정한다.
+  //    그때는 홈을 로그인 뒤로 감추지 않는다 — 홈은 공개 화면이다(Victor, 2026-08-22).
   const [quotes, recs, brief, marketState, openPicks, weekly] = await Promise.all([
     getMarketQuotes(),
     getRecommendations(),
@@ -117,6 +127,12 @@ export default async function HomePage() {
   // 홈은 «5개»인데 오늘의 픽은 «없습니다»가 된다 — 같은 날 두 화면이 다른 말을 한다.
   const todayPicks = asOf ? picks.filter((p) => p.as_of === asOf) : picks;
   const preview = todayPicks.slice(0, 3);
+  // 홈은 «상태판»인데 정작 픽 줄에 시세가 없었다(2026-08-22). 벌크 조회라 픽이 몇
+  // 건이든 왕복 1회이고, 픽이 없는 날은 아예 안 부른다.
+  const previewPrices =
+    preview.length > 0
+      ? await getLatestPricesBySymbols(preview.map((p) => p.symbol))
+      : null;
   // 손절까지 3% 이내로 붙은 픽. toStopPct 는 «현재가 → 손절가» 비율이라 롱에서는
   // 음수이고 0 에 가까울수록 코앞이다(-0.03 = 3% 남음). 단위가 %가 아니라 비율이라
   // 처음에 `<= 3` 으로 썼더니 보유 전량이 «손절 근접»으로 잡혔다.
@@ -151,22 +167,30 @@ export default async function HomePage() {
       )}
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-10 pt-7 sm:px-7">
-        {!signedIn && <HomeHero />}
+        <HomeHero />
 
         {/* ── 오늘 한 줄 판정 ──
             국면·건수·기준일을 한 줄로. 이게 홈의 본문이다. */}
         <section className="mb-6 rounded-[14px] bg-navy px-5 py-5">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             {stateLabel && (
-              <span className="rounded-[999px] bg-on-navy/10 px-3 py-1 text-[12px] font-semibold text-on-navy-2">
+              <span
+                className={`rounded-[999px] px-3 py-1 text-[12px] font-semibold ${
+                  (state && STATE_CHIP[state]) ?? "bg-on-navy/10 text-on-navy-2"
+                }`}
+              >
                 {stateLabel}
               </span>
             )}
-            <span className="text-[20px] font-bold text-on-navy">
+            {/* 홈의 h1 이다. 예전엔 HomeHero 안의 "감이 아니라 근거로"가 유일한 h1 이라
+                로그인해서 히어로가 숨겨지면 홈에 제목이 아예 없었다(2026-08-22).
+                이 줄은 로그인 여부와 무관하게 항상 있고, 이미 화면에서 제목 노릇을
+                하고 있었다 — 마크업을 실제와 맞춘 것이다. */}
+            <h1 className="text-[24px] font-bold leading-[1.3] tracking-[-0.5px] text-on-navy">
               {todayPicks.length > 0
                 ? `살 만한 종목 ${todayPicks.length}개`
                 : "오늘은 살 만한 게 없습니다"}
-            </span>
+            </h1>
             {planDay && (
               <span className="text-[12px] text-on-navy-3">{planDay} 장 시작 전 플랜</span>
             )}
@@ -192,7 +216,10 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+        {/* items-start — 없으면 그리드가 좌측 카드를 우측 두 카드 높이(258px)까지
+            늘린다. 픽이 1건인 날 839×258 카드에 내용은 97px 뿐이라 161px 가 빈 흰
+            면이었다(2026-08-22 실측). 카드는 내용만큼만 높아야 한다. */}
+        <div className="grid items-start gap-5 lg:grid-cols-[1.6fr_1fr]">
           {/* ── 오늘의 픽 미리보기 (상위 3) ── */}
           <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
             <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -207,27 +234,59 @@ export default async function HomePage() {
               </p>
             ) : (
               <ul className="divide-y divide-border-soft">
-                {preview.map((p) => (
-                  <li key={p.symbol} className="flex flex-wrap items-baseline gap-x-3 py-2.5">
-                    <Link
-                      href={`/stocks/${p.symbol}`}
-                      className="text-[15px] font-semibold text-text hover:text-accent"
-                    >
-                      {p.name}
-                    </Link>
-                    <span className="text-[11px] text-text-mute">{p.symbol}</span>
-                    {horizonLabel(p.horizon) && (
-                      <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">
-                        {horizonLabel(p.horizon)}
-                      </span>
-                    )}
-                    {p.setup && (
-                      <span className="rounded-[999px] bg-surface-3 px-2 py-0.5 text-[11px] text-text-dim">
-                        {p.setup}
-                      </span>
-                    )}
-                  </li>
-                ))}
+                {preview.map((p) => {
+                  const px = previewPrices?.get(p.symbol) ?? null;
+                  // 셋업은 한글 라벨로. 예전엔 p.setup 을 날것으로 찍어 화면에
+                  // "double_bottom" 이 나왔다 — 오늘의 픽·스크리너는 진작 이 표를
+                  // 쓰고 있었고 홈만 안 썼다(2026-08-22).
+                  const setupLabel = p.setup
+                    ? TRADE_SETUP_LABELS[p.setup as keyof typeof TRADE_SETUP_LABELS] ??
+                      p.setup
+                    : null;
+                  return (
+                    <li key={p.symbol} className="flex flex-wrap items-baseline gap-x-3 py-2.5">
+                      <Link
+                        href={`/stocks/${p.symbol}`}
+                        className="text-[15px] font-semibold text-text hover:text-accent"
+                      >
+                        {p.name}
+                      </Link>
+                      <span className="text-[11px] text-text-mute">{p.symbol}</span>
+                      {px && (
+                        <>
+                          <span className="tnum text-[13px] font-medium text-text">
+                            {px.close.toLocaleString("ko-KR")}원
+                          </span>
+                          {px.changePct != null && (
+                            <span
+                              className={`tnum text-[12px] font-medium ${
+                                px.changePct >= 0 ? "text-good" : "text-bad"
+                              }`}
+                            >
+                              {fmtPct(px.changePct)}
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {horizonLabel(p.horizon) && (
+                        <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">
+                          {horizonLabel(p.horizon)}
+                        </span>
+                      )}
+                      {setupLabel && (
+                        <span className="rounded-[999px] bg-surface-3 px-2 py-0.5 text-[11px] text-text-dim">
+                          {setupLabel}
+                        </span>
+                      )}
+                      <Link
+                        href={`/stocks/${p.symbol}`}
+                        className="ml-auto text-[11px] text-accent hover:underline"
+                      >
+                        자세히 →
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {todayPicks.length > preview.length && (
@@ -246,18 +305,29 @@ export default async function HomePage() {
                   성과 →
                 </Link>
               </div>
-              <div className="flex items-baseline gap-5">
-                <div>
-                  <p className="text-[11px] text-text-mute">보유 중</p>
-                  <p className="tnum text-2xl font-bold text-text">{openPicks.length}건</p>
+              {/* 숫자 크기는 «중요도»를 뜻하는데 0 은 중요하지 않다. 아무것도 없는 날
+                  "0건 0건"을 24px 볼드로 두 번 찍어 시선을 뺏고 있었다(2026-08-22).
+                  보유가 없으면 문장 한 줄로 말하고, 한 건이라도 있으면 숫자로 돌아간다. */}
+              {openPicks.length === 0 ? (
+                <p className="text-[12.5px] leading-relaxed text-text-mute">
+                  보유 중인 픽이 없습니다.
+                  <br />
+                  손절 근접도 없습니다.
+                </p>
+              ) : (
+                <div className="flex items-baseline gap-5">
+                  <div>
+                    <p className="text-[11px] text-text-mute">보유 중</p>
+                    <p className="tnum text-2xl font-bold text-text">{openPicks.length}건</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-text-mute">손절 근접</p>
+                    <p className={`tnum text-2xl font-bold ${nearStop > 0 ? "text-bad" : "text-text-dim"}`}>
+                      {nearStop}건
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[11px] text-text-mute">손절 근접</p>
-                  <p className={`tnum text-2xl font-bold ${nearStop > 0 ? "text-bad" : "text-text-dim"}`}>
-                    {nearStop}건
-                  </p>
-                </div>
-              </div>
+              )}
             </section>
 
             <section className="rounded-[12px] border border-border bg-surface px-5 py-4">

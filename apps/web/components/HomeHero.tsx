@@ -28,11 +28,15 @@ export function HomeHero() {
           <span className="hidden sm:inline"> · 종목 리서치 터미널</span>
         </span>
 
-        <h1 className="text-[28px] font-bold leading-[1.32] tracking-[-0.6px] text-on-navy xl:w-[600px] xl:text-[38px] xl:leading-[1.25] xl:tracking-[-1px]">
+        {/* h1 이 아니라 p 다. 홈의 h1 은 판정 블록의 「살 만한 종목 N개」 하나뿐이다
+            (app/page.tsx). 여기가 h1 이면 비로그인일 때 h1 이 둘이 되고, 로그인하면
+            히어로가 숨겨지며 h1 이 통째로 사라진다 — 둘 다 틀렸다.
+            이건 브랜드 카피이지 이 화면의 주제가 아니다. 크기는 그대로 둔다. */}
+        <p className="text-[28px] font-bold leading-[1.32] tracking-[-0.6px] text-on-navy xl:w-[600px] xl:text-[38px] xl:leading-[1.25] xl:tracking-[-1px]">
           감이 아니라 근거로,
           <br />
           오늘 살 종목을 고릅니다
-        </h1>
+        </p>
 
         <p className="text-[14.5px] leading-[1.8] text-on-navy-2 xl:w-[560px] xl:text-[15px] xl:leading-[1.75]">
           백테스트를 통과한 전략만 추천에 올립니다. 진입가·목표가·손절가까지 계산해
@@ -40,18 +44,21 @@ export function HomeHero() {
           붙이고, 맞은 것과 틀린 것을 모두 기록으로 남깁니다.
         </p>
 
+        {/* CTA 는 하나다. 예전엔 「오늘의 추천 보기」(/focus)가 여기 같이 있었는데,
+            바로 아래 판정 블록의 「오늘의 픽 보기」도 같은 /focus 로 간다 — 같은 곳으로
+            가는 버튼을 «추천»과 «픽» 두 이름으로 34px 간격에 두 번 둔 셈이었다
+            (2026-08-22 실측). 히어로(8/20)와 판정 블록(8/22)이 이틀 간격으로 따로
+            만들어지며 생긴 중복이다.
+            역할을 갈랐다 — 히어로는 «왜 믿나»만 말하고, «오늘 뭘 사나»는 판정 블록이
+            건수까지 붙여 답한다. 그래서 남긴 버튼은 검증 쪽이고, 하나뿐이니 채운다.
+            ⚠️ 링크는 /strategies 가 아니라 /picks 다 — 8개 메뉴의 「성과」가 /picks 이고,
+            /strategies 는 메뉴에 없어 한 번 들어가면 되돌아올 길이 없었다. */}
         <div className="flex flex-wrap items-center gap-[11px] pt-1 xl:pt-0.5">
           <Link
-            href="/focus"
+            href="/picks"
             className="inline-flex min-h-10 items-center rounded-[9px] bg-accent px-6 text-[14px] font-semibold text-on-navy transition-colors duration-200 hover:bg-accent-2"
           >
-            오늘의 추천<span className="hidden sm:inline"> 보기</span>
-          </Link>
-          <Link
-            href="/strategies"
-            className="inline-flex min-h-10 items-center rounded-[9px] border border-on-navy/25 px-6 text-[14px] font-semibold text-on-navy transition-colors duration-200 hover:border-on-navy"
-          >
-            검증 성적표
+            검증 성적표<span className="hidden sm:inline"> 보기</span>
           </Link>
         </div>
 

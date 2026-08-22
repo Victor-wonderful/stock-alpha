@@ -91,6 +91,9 @@
   --up-on-navy: #FF7A87;
   --down-on-navy: #7FA9FF;
   --accent-on-navy: #8B8BF5;
+  /* 횡보·주의를 네이비 위에 올릴 때. --warn(#B45309)은 어두운 면에서 1.5:1 로 묻힌다.
+     이 값은 navy 대비 10.4:1 — 상승 적/하락 청 어느 쪽과도 안 겹치는 앰버다. */
+  --warn-on-navy: #F2C684;
 
   /* radius 토큰 */
   --radius-card: 20px;
