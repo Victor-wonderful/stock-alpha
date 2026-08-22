@@ -36,6 +36,41 @@ HORIZONS: tuple[Horizon, ...] = ("short", "mid", "long")
 
 HORIZON_LABELS: dict[str, str] = {"short": "단기", "mid": "중기", "long": "장기"}
 
+# 지금 «발행»하는 기간. 카탈로그(HORIZONS)와 다르다 — 게이트·백테스트는 세 기간을
+# 그대로 재고, 사용자에게 내보내는 것만 여기서 정한다. 판정을 왜곡하지 않기 위해서다.
+#
+# 장기를 뺀 이유 (2026-08-22, Victor 결정) — 지난 1년을 지금 규칙으로 재현한 결과
+# (scripts/backfill_track_record, 후보 12,985건 → 발행 1,093건):
+#
+#     단기 5일   446건  승률 40.8%  평균 +0.331R
+#     중기 10일  388건  승률 42.3%  평균 +0.457R
+#     장기 20일  259건  승률 36.3%  평균 +0.204R   ← 셋 중 가장 낮다
+#
+# 게다가 장기 조합(bayes·leader_trend·sortino)은 최근 60거래일 기대값이 각각
+# -0.373 / -0.176 / -0.319R 로 엣지가 죽어 있다. 그 셋을 빼고 다시 뽑으면 장기가
+# +0.040R 까지 내려간다 — 즉 «빼도 문제, 둬도 문제»다.
+#
+# ⚠️ 게이트에 «최근 60일» 조건을 새로 넣는 방법도 검토했는데 채택하지 않았다.
+#    1년 기준으로는 오히려 성과를 깎았고(장기 +0.204R → +0.040R), 근거가 두 달짜리
+#    관찰뿐이었다. 규칙을 하나 더 얹는 대신 «가장 나쁜 기간을 쉰다»로 끝낸다.
+#
+# 다시 열려면: 장기 조합의 최근 기대값이 회복됐는지 재측정하고 이 튜플에 되돌린다.
+PUBLISH_HORIZONS: tuple[Horizon, ...] = ("short", "mid")
+
+
+def publishable_combos(combos: dict[str, list[str]]) -> dict[str, list[str]]:
+    """{셋업: [통과 기간]} 에서 «지금 발행하는 기간»만 남긴다. (순수 함수)
+
+    게이트 결과 자체는 건드리지 않는다 — 통과 판정은 그대로 두고 발행만 줄인다.
+    기간이 하나도 안 남는 셋업은 키째 뺀다(발행 대상이 아니다).
+    """
+    out: dict[str, list[str]] = {}
+    for setup, hs in combos.items():
+        keep = [h for h in hs if h in PUBLISH_HORIZONS]
+        if keep:
+            out[setup] = keep
+    return out
+
 # 기간 → trade_style enum 매핑.
 # signals.style 은 enum(scalping/day/swing/position)이라 기간 값을 담을 수 없다.
 # 기간 축에서 style 은 **화면 호환용 라벨**일 뿐이고, 손절·목표·보유상한은 전부

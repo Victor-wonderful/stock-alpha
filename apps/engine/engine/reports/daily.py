@@ -1009,6 +1009,7 @@ def select_and_store_picks(as_of: str) -> int:
         .execute()
     ).data or []
     from engine.backtest.runner import passed_combos_from_db
+    from engine.signals.horizons import publishable_combos
 
     # 발행일 시점 시장 국면(<=as_of 최신) — 4국면(market_state)으로 셋업 라우팅.
     reg_row = (
@@ -1038,7 +1039,8 @@ def select_and_store_picks(as_of: str) -> int:
     # 조합'을 그때 알았던 것처럼 쓰는 사고를 막는다.
     picks = select_picks(
         rows,
-        passed_combos=passed_combos_from_db(as_of),
+        # 게이트 통과 ∩ «지금 발행하는 기간»(장기 휴지, 2026-08-22).
+        passed_combos=publishable_combos(passed_combos_from_db(as_of)),
         expectancy_by_combo=gate_expectancy_from_db(as_of),
         regime=regime,
         market_state=market_state,

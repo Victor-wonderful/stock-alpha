@@ -8,7 +8,7 @@ import {
   NON_TRADE_PICK_STATUSES,
   type PickRecord,
 } from "@/lib/data";
-import { HORIZONS, horizonLabel } from "@/lib/holding";
+import { HORIZONS, horizonLabel, isHorizonPaused } from "@/lib/holding";
 import { fmtPct, fmtPrice } from "@/lib/format";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -163,7 +163,11 @@ export default async function PicksPage({
                       </span>
                     </span>
                     {rows.length === 0 ? (
-                      <span className="text-text-mute">아직 발행 없음</span>
+                      <span className="text-text-mute">
+                        {isHorizonPaused(hz.key)
+                          ? "발행을 쉬는 중 — 지난 1년 재현에서 성적이 가장 낮았습니다"
+                          : "아직 발행 없음"}
+                      </span>
                     ) : (
                       <>
                         <span className="tnum text-text-dim">발행 {rows.length}건</span>

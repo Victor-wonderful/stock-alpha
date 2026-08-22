@@ -131,7 +131,10 @@ def run(
     styles_by_setup: dict[str, list[str]] | None = None
     if enforce_gate:
         from engine.backtest.runner import passed_combos_from_db
-        styles_by_setup = passed_combos_from_db()   # {setup: [통과 스타일]}
+        from engine.signals.horizons import publishable_combos
+        # 게이트 통과 ∩ «지금 발행하는 기간». 장기는 2026-08-22 부터 쉰다
+        # (engine/signals/horizons.PUBLISH_HORIZONS 주석에 근거).
+        styles_by_setup = publishable_combos(passed_combos_from_db())
         allowed = set(styles_by_setup)
         setups = [s for s in (setups or list(allowed)) if s in allowed]
         log.info("signals.gate", combos=styles_by_setup, effective=setups)
