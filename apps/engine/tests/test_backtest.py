@@ -321,3 +321,99 @@ def test_hysteresis_legacy_rows_without_raw():
     from engine.backtest.runner import apply_hysteresis
     # passed_raw 없는 과거 행 — 원측정=안정화로 간주
     assert apply_hysteresis(False, {"passed": True, "passed_raw": None}) is True
+
+
+# ── 분할 진입 (_exit_scalein) ──
+# 나눠 사고 한 번에 판다. 회계 규칙 두 가지가 핵심이다:
+#   ① 손익은 «전량 체결 가정 1주당» — 안 채워진 몫을 벌었다고 세지 않는다
+#   ② 손절선은 1차 진입 기준으로 확정, 평단만 내려간다
+
+def _df(lows, highs, closes):
+    n = len(lows)
+    return pd.DataFrame({
+        "open": closes, "high": highs, "low": lows, "close": closes,
+        "volume": [1000.0] * n,
+    }, dtype=float)
+
+
+class _FreeCosts:
+    """비용 0 — 회계 검증에서 수수료가 숫자를 흐리지 않게."""
+
+    def net_pnl(self, entry, exit_price):
+        return exit_price - entry
+
+
+LEGS = ((0.5, 100.0), (0.5, 95.0))   # 100 에 절반, 95 에 나머지 절반
+
+
+def test_scalein_second_leg_unfilled_scales_pnl_down():
+    """2차가 안 닿으면 절반만 산 것 — 손익도 절반이어야 한다."""
+    df = _df(lows=[100, 99, 98], highs=[100, 105, 112], closes=[100, 104, 111])
+    net, gross, bars, filled_w, avg = m_scalein(df, 0, len(df), LEGS, 90.0, 110.0, 5)
+    assert filled_w == pytest.approx(0.5)
+    assert avg == pytest.approx(100.0)
+    assert gross == pytest.approx(0.5 * (110.0 - 100.0))   # 전량 기준 1주당
+
+
+def test_scalein_second_leg_filled_lowers_average():
+    """2차가 체결되면 평단이 내려가고 손익이 커진다."""
+    df = _df(lows=[100, 94, 98], highs=[100, 101, 112], closes=[100, 96, 111])
+    net, gross, bars, filled_w, avg = m_scalein(df, 0, len(df), LEGS, 90.0, 110.0, 5)
+    assert filled_w == pytest.approx(1.0)
+    assert avg == pytest.approx(97.5)
+    assert gross == pytest.approx(0.5 * 10.0 + 0.5 * 15.0)
+
+
+def test_scalein_fills_before_stop_on_same_bar():
+    """같은 봉에서 추가 체결과 손절이 겹치면 «체결 먼저» — 더 산 뒤 손절이 보수적이다."""
+    df = _df(lows=[100, 89, 89], highs=[100, 100, 95], closes=[100, 90, 92])
+    net, gross, bars, filled_w, avg = m_scalein(df, 0, len(df), LEGS, 90.0, 110.0, 5)
+    assert filled_w == pytest.approx(1.0)                  # 95 를 지나 89 까지 갔다
+    assert gross == pytest.approx(0.5 * (90.0 - 100.0) + 0.5 * (90.0 - 95.0))
+
+
+def test_scalein_stop_is_not_moved_by_averaging_down():
+    """평단이 내려가도 손절가는 그대로 — 분할이 낮추는 건 평단이지 손절이 아니다."""
+    df = _df(lows=[100, 94, 90], highs=[100, 101, 96], closes=[100, 96, 91])
+    _, _, _, _, avg = m_scalein(df, 0, len(df), LEGS, 90.0, 110.0, 5)
+    assert avg == pytest.approx(97.5)                      # 평단은 내려갔고
+    # 손절가 90 은 인자로 고정 — 함수가 이를 바꾸지 않는다(위 케이스가 90 에 청산)
+
+
+def m_scalein(df, i, n, legs, stop, tp, timeout):
+    from engine.backtest.event_backtest import _exit_scalein
+    return _exit_scalein(df, i, n, legs, stop, tp, timeout, _FreeCosts())
+
+
+def test_scalein_single_leg_matches_plain_single_exit():
+    """legs 가 1개면 기존 단일 청산과 같아야 한다 — 경로를 합쳐도 결과가 안 바뀐다."""
+    from engine.backtest.event_backtest import _exit_single
+
+    df = _df(lows=[100, 97, 96], highs=[100, 105, 112], closes=[100, 104, 111])
+    a = m_scalein(df, 0, len(df), ((1.0, 100.0),), 95.0, 110.0, 5)
+    b = _exit_single(df, 0, len(df), 100.0, 95.0, 110.0, 5, _FreeCosts())
+    assert (a[0], a[1], a[2]) == pytest.approx(b)
+
+
+def test_target_trail_does_not_sell_at_target():
+    """목표 도달 → 팔지 않고 본전 스톱. 기간까지 보유해 상방을 안 자른다."""
+    from engine.backtest.event_backtest import _exit_scalein
+
+    # 2봉에서 목표 110 터치, 3봉에서 130 까지 감 → 기간 만료 종가 128 에 매도
+    df = _df(lows=[100, 105, 120], highs=[100, 112, 130], closes=[100, 111, 128])
+    net, gross, *_ = _exit_scalein(
+        df, 0, len(df), ((1.0, 100.0),), 95.0, 110.0, 5, _FreeCosts(),
+        target_action="trail")
+    assert gross == pytest.approx(28.0), "목표에서 팔았으면 10 이었을 것"
+
+
+def test_target_trail_protects_with_breakeven_stop():
+    """목표 도달 후 되돌아오면 본전에서 끊는다 — 손실로 끝나지 않는다."""
+    from engine.backtest.event_backtest import _exit_scalein
+
+    # 2봉에서 목표 터치 후 3봉에서 96 까지 하락 → 본전 100 에 청산
+    df = _df(lows=[100, 105, 96], highs=[100, 112, 101], closes=[100, 111, 97])
+    net, gross, *_ = _exit_scalein(
+        df, 0, len(df), ((1.0, 100.0),), 95.0, 110.0, 5, _FreeCosts(),
+        target_action="trail")
+    assert gross == pytest.approx(0.0)

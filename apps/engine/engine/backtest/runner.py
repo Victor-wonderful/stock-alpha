@@ -15,6 +15,7 @@ from engine.backtest.metrics import Trade, sharpe
 from engine.db import get_client, select_all, upsert
 from engine.logging import get_logger
 from engine.signals import playbooks
+from engine.signals.horizons import HORIZONS, backtest_kwargs, get_profile
 
 log = get_logger(__name__)
 
@@ -52,7 +53,7 @@ def _load_active_frames(bars: int = 500) -> dict[int, pd.DataFrame]:
 
 def run(
     thresholds: GateThresholds | None = None, *, scaleout: bool = True,
-    entry_mode: str = GATE_ENTRY_MODE,
+    entry_mode: str = GATE_ENTRY_MODE, axis: str = "style",
 ) -> dict[tuple[str, str], bool]:
     """전 종목·(셋업×스타일) 매트릭스 백테스트 → 조합별 게이트 결과. {(setup,style): passed}.
 
@@ -96,8 +97,23 @@ def run(
 
     passed: dict[tuple[str, str], bool] = {}
     bt_rows: list[dict] = []
+    # 평가 축 — 전환 중이라 둘을 함께 지원한다.
+    #   axis="style"   (기본·라이브) 셋업 × 스타일(swing/position). 발행 경로가 아직
+    #                  스타일로 돌아가므로 라이브 게이트는 이쪽이어야 «게이트와 발행이
+    #                  같은 것을 재는» 상태가 유지된다.
+    #   axis="horizon" (마이그레이션) 셋업 × 기간(short/mid/long). 기간마다 사고파는
+    #                  규칙이 달라(분할 진입·본전스톱) 프로파일에서 인자를 받는다.
+    # ⚠️ 시그널·픽이 horizon 을 싣게 되면 기본값을 "horizon" 으로 바꾸고 style 경로를
+    #    지운다. 그전에 기본값을 바꾸면 픽 게이트가 plan.style 과 대조하다 하나도
+    #    못 맞춰 «조용히 0건»이 된다(docs/HORIZON_DESIGN.md 마이그레이션 순서).
     for setup in playbooks.ALL_DETECTORS:
-        for style in playbooks.testable_styles(setup):
+        if axis == "horizon" and not playbooks.testable_styles(setup):
+            continue                      # 일봉으로 검증 불가(종가베팅 등)
+        axis_values = (HORIZONS if axis == "horizon"
+                       else playbooks.testable_styles(setup))
+        for value in axis_values:
+            prof = get_profile(value, setup) if axis == "horizon" else None
+            extra = backtest_kwargs(prof) if prof else {"scaleout": scaleout}
             trades: list[Trade] = []
             for iid, df in frames.items():
                 trades.extend(
@@ -107,9 +123,10 @@ def run(
                         earnings=earnings_map.get(iid),
                         disclosures=discl_map.get(iid),
                         costs=costs,
-                        style_override=style,
-                        scaleout=scaleout,
+                        # 기간 축에서는 손절·목표를 프로파일이 정하므로 스타일은 고정
+                        style_override="swing" if prof else value,
                         entry_mode=entry_mode,
+                        **extra,
                     )
                 )
             # 시간순 정렬 — MDD 는 순서 민감(시간순 = 실제 시퀀스).
@@ -123,16 +140,21 @@ def run(
                 round(gross_exp - gr.expectancy_r, 4)
                 if gross_exp is not None and gr.expectancy_r is not None else None
             )
-            key = (setup, style)
+            key = (setup, value)
             effective = apply_hysteresis(gr.passed, prev.get(key))
             passed[key] = effective
             bt_rows.append({
-                "strategy_key": f"playbook:{setup}:{style}",
+                "strategy_key": f"playbook:{setup}:{value}",
                 "setup": setup,
-                "style": style,
+                "style": value,          # 축이 기간이면 여기에도 기간이 들어간다
+                "horizon": value if prof else None,
                 "params": {"thresholds": thr.__dict__, "costs": costs.__dict__,
                            "gross_expectancy_r": gross_exp,
                            "entry_mode": entry_mode,
+                           "axis": axis,
+                           "horizon_bars": prof.bars if prof else None,
+                           "scale_in": prof.scale_in if prof else None,
+                           "target_action": prof.target_action if prof else "sell",
                            "walkforward": gr.walkforward},
                 "sharpe": sharpe([t.ret_pct for t in trades]),
                 "mdd": gr.mdd,
@@ -144,10 +166,10 @@ def run(
                 "period": "daily-history",
             })
             if effective != gr.passed:
-                log.info("backtest.gate.held", setup=setup, style=style,
+                log.info("backtest.gate.held", setup=setup, axis_value=value,
                          raw=gr.passed, held=effective)
             wf = gr.walkforward or {}
-            log.info("backtest.setup", setup=setup, style=style, passed=effective,
+            log.info("backtest.setup", setup=setup, axis_value=value, passed=effective,
                      raw=gr.passed, n=gr.n_trades, gross_exp=gross_exp,
                      net_exp=gr.expectancy_r, cost_drag=cost_drag,
                      mdd=gr.mdd, wf_eval=wf.get("evaluable"),
@@ -217,7 +239,11 @@ def passed_setups(thresholds: GateThresholds | None = None) -> list[str]:
 
 
 def passed_combos_from_db(as_of: str | None = None) -> dict[str, list[str]]:
-    """backtests 최신 행 기준 통과 (셋업→스타일 목록) — 재백테스트 없이 read.
+    """backtests 최신 행 기준 통과 (셋업→**기간** 목록) — 재백테스트 없이 read.
+
+    2026-08-22 부터 축이 «스타일»에서 «기간»(short/mid/long)으로 바뀌었다. horizon
+    컬럼이 있으면 그걸 쓰고, 없는 옛 행은 style 로 폴백한다 — 전환 중 두 세대가
+    섞여 있어도 조용히 틀리지 않게.
 
     daily 배치/signals --gate 발행 필터용. 직전 backtest 런이 적재한 안정화 판정 사용.
 
@@ -228,11 +254,12 @@ def passed_combos_from_db(as_of: str | None = None) -> dict[str, list[str]]:
     cutoff = gate_cutoff(as_of)
     latest: dict[tuple[str, str], dict] = {}
     for bt in sorted(
-        select_all("backtests", "setup,style,passed,created_at"),
+        select_all("backtests", "setup,style,horizon,passed,created_at"),
         key=lambda b: b.get("created_at") or "",
     ):
-        if bt.get("setup") and bt.get("style") and _within(bt, cutoff):
-            latest[(bt["setup"], bt["style"])] = bt
+        axis = bt.get("horizon") or bt.get("style")
+        if bt.get("setup") and axis and _within(bt, cutoff):
+            latest[(bt["setup"], axis)] = bt
     out: dict[str, list[str]] = {}
     for (setup, style), bt in latest.items():
         if bt.get("passed"):

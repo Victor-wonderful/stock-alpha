@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from engine.signals import playbooks
 from engine.signals.generate import generate_signals
@@ -181,3 +182,66 @@ def test_generate_signals_filter_setups():
     rows = generate_signals(df, instrument_id=1, setups=["oversold_bounce"])
     # 상승추세엔 과대낙폭 트리거 없음
     assert rows == []
+
+
+# ── 기간 카탈로그 (단기·중기·장기) ──
+# 사고파는 규칙의 단일 출처. 손절을 나누지 않는다는 원칙이 코드로 지켜지는지 본다.
+
+def test_horizon_profiles_cover_three_periods():
+    from engine.signals.horizons import HORIZONS, all_profiles
+
+    profs = all_profiles()
+    assert [p.horizon for p in profs] == list(HORIZONS)
+    assert [p.bars for p in profs] == sorted(p.bars for p in profs), "기간은 짧은 순"
+    assert profs[0].bars < profs[-1].bars
+
+
+def test_short_horizon_is_single_entry():
+    """단기는 나눠 살 시간이 없다 — 시가에 전량."""
+    from engine.signals.horizons import get_profile
+
+    p = get_profile("short")
+    assert p.scale_in is None
+    assert p.scaleout is False
+    assert "전량" in p.entry_desc
+
+
+def test_mid_and_long_scale_in_weights_sum_to_one():
+    """분할 비중 합이 1이 아니면 «계획 포지션»이 어긋나 R 계산이 깨진다."""
+    from engine.signals.horizons import get_profile
+
+    for h in ("mid", "long"):
+        p = get_profile(h)
+        assert p.scale_in is not None
+        assert sum(w for w, _ in p.scale_in) == pytest.approx(1.0)
+        assert p.scale_in[0][1] == 0.0, "1차는 시가 진입(하락배수 0)"
+        drops = [d for _, d in p.scale_in]
+        assert drops == sorted(drops), "차수가 내려갈수록 낮은 가격"
+
+
+def test_entry_desc_reads_as_a_plan():
+    from engine.signals.horizons import get_profile
+
+    assert get_profile("mid").entry_desc == "다음 거래일 시가 50% · −1×ATR 50%"
+
+
+def test_setup_override_applies():
+    from engine.signals import horizons as hz
+
+    hz.SETUP_OVERRIDES["_test_setup"] = {"short": {"bars": 7}}
+    try:
+        assert hz.get_profile("short", "_test_setup").bars == 7
+        assert hz.get_profile("short").bars != 7           # 기본값은 그대로
+    finally:
+        hz.SETUP_OVERRIDES.pop("_test_setup", None)
+
+
+def test_all_horizons_use_trail_on_target():
+    """목표는 «파는 트리거»가 아니라 «손절을 올리는 트리거»다 — 파는 건 기간이 한다.
+
+    12개 비교에서 예외 없이 trail 이 이겼다(2026-08-21). 이게 sell 로 돌아가면
+    상방이 목표에서 잘려 기대값이 절반 이하가 된다.
+    """
+    from engine.signals.horizons import all_profiles
+
+    assert all(p.target_action == "trail" for p in all_profiles())

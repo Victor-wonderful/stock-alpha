@@ -162,8 +162,9 @@ def compute_levels(
     max_position_pct: float = 25.0,
     setup: str | None = None,      # 손절 하한 적용 여부 판단용(STRUCT_FIRST_SETUPS)
     tp_r_mults: tuple[float, ...] | None = None,   # 실험: 목표를 R(실제 손절 거리) 배수로
-    stop_atr_mult: float | None = None,  # 실험: 손절 ATR 배수 override (None=스타일 기본)
-    struct_stop: bool = True,            # 실험: False 면 구조(지지/저항) 손절 당김 끈다
+    stop_atr_mult: float | None = None,  # 손절 ATR 배수 override (None=스타일 기본)
+    struct_stop: bool = True,            # False 면 구조(지지/저항) 손절 당김 끈다
+    tp_atr_mults: tuple[float, ...] | None = None,  # 목표 ATR 배수 override
 ) -> Levels:
     """진입가·ATR·구조로 손절/목표/비중 산출.
 
@@ -207,7 +208,8 @@ def compute_levels(
     if tp_r_mults and risk_per_share > 0:
         tps = tuple(entry_price + direction * m * risk_per_share for m in tp_r_mults)
     else:
-        tps = tuple(entry_price + direction * m * atr for m in cfg.tp_atr_mults)
+        mults = tp_atr_mults or cfg.tp_atr_mults
+        tps = tuple(entry_price + direction * m * atr for m in mults)
 
     reward_to_tp1 = abs(tps[0] - entry_price)
     rr = reward_to_tp1 / risk_per_share if risk_per_share > 0 else 0.0
