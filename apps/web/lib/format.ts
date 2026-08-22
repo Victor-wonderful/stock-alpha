@@ -77,10 +77,20 @@ const FIXED_HOLIDAYS_MMDD = [
   "01-01", "03-01", "05-05", "06-06", "08-15", "10-03", "10-09", "12-25",
 ];
 export function nextTradingDayIsCertain(asOf: string): boolean {
+  return tradingWindowIsCertain(asOf, 5);
+}
+
+/** from 다음 날부터 daysAhead 일 안에 고정 공휴일이 하나도 없는가.
+ *
+ * 있으면 «단정하지 않는다» — 음력 명절(설·추석)은 여기 없으므로 이 검사를 통과해도
+ * 100% 는 아니다. 그래서 이건 **DB 휴장일 표가 그 구간을 못 덮을 때만 쓰는 폴백**이고,
+ * 호출부는 DB(getNthTradingDay)를 먼저 물어야 한다.
+ */
+export function tradingWindowIsCertain(asOf: string, daysAhead: number): boolean {
   const [y, m, dd] = asOf.split("-").map(Number);
   const from = new Date(Date.UTC(y, m - 1, dd));
-  // 후보일까지 + 대체공휴일 여파를 보려면 며칠 더 살핀다.
-  for (let i = 1; i <= 5; i++) {
+  // 대체공휴일 여파까지 보려면 창 끝에서 며칠 더 살핀다.
+  for (let i = 1; i <= daysAhead + 3; i++) {
     const d = new Date(from);
     d.setUTCDate(d.getUTCDate() + i);
     const mmdd = `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
@@ -89,4 +99,20 @@ export function nextTradingDayIsCertain(asOf: string): boolean {
     if (FIXED_HOLIDAYS_MMDD.includes(mmdd)) return false;
   }
   return true;
+}
+
+/** asOf 다음 N번째 «거래일» 라벨 — ⚠️ 주말만 건너뛴다(공휴일 모름).
+ *
+ * 반드시 tradingWindowIsCertain 으로 먼저 물어보고 쓸 것. 청산 기한처럼 2~4주 앞을
+ * 가리키는 값은 창이 길어 공휴일이 낄 확률도 그만큼 높다.
+ */
+export function nthTradingDayLabel(asOf: string, n: number): string {
+  const [y, m, dd] = asOf.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, dd));
+  let seen = 0;
+  while (seen < n) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) seen += 1;
+  }
+  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${WEEKDAYS[d.getUTCDay()]})`;
 }

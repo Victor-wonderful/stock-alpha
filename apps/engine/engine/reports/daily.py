@@ -766,9 +766,14 @@ def resolve_pick_status(
     # 보유 상한 — 기간이 있으면 그 프로파일이 정한다(단기 5 / 중기 10 / 장기 20).
     # 없는 옛 픽만 스타일 타임아웃(swing 10 / position 60)으로 폴백한다.
     # ⚠️ 게이트가 그 기간으로 기대값을 쟀으므로 판정도 같은 기간이어야 한다.
+    # 목표가에 닿았을 때 무엇을 하는가 — 기간 프로파일이 정한다(HorizonProfile.
+    # target_action). 기간 없는 옛 픽만 "sell"(목표에서 판다)로 폴백한다.
+    target_action = "sell"
     if pick.get("horizon"):
         from engine.signals.horizons import get_profile
-        timeout = get_profile(pick["horizon"], pick.get("setup")).bars
+        prof = get_profile(pick["horizon"], pick.get("setup"))
+        timeout = prof.bars
+        target_action = prof.target_action
     else:
         timeout = _TIMEOUT_BARS.get(pick.get("style"), 10)
     # 진입 규칙이 next_open 이면 시가 시장가라 «항상 체결»이다 — 체결 확인은 옛
@@ -779,6 +784,55 @@ def resolve_pick_status(
     as_of = date.fromisoformat(str(pick["as_of"]))
     cal_expired = (today - as_of).days >= PICK_EXPIRE_DAYS
     last_cl = _bar_lhc(bars[-1])[2]
+
+    # ── 채택 규칙(target_action="trail") — 목표에서 팔지 않는다 ──
+    #
+    # 2026-08-22 실험(12개 비교에서 예외 없이 우세)으로 채택한 규칙인데, 이 함수가
+    # 그걸 안 보고 있었다(2026-08-22 발견). 게이트·백테스트는 _exit_scalein 의 trail
+    # 경로로 기대값을 쟀는데 라이브 판정은 아래 스케일아웃(tp1 에서 절반 익절)으로
+    # 픽을 닫고 있었다 — **검증한 규칙과 실제 기록이 다른** 상태였다. 이 함수의
+    # 독스트링이 "백테스트와 동일 청산으로 단일화"라고 적어 둔 그 약속을 지킨다.
+    #
+    # trail 에서는 tp2 를 쓰지 않는다(_exit_scalein 이 tp 를 하나만 받는다).
+    #   손절 이탈        → 전량 청산 (stopped)
+    #   목표 도달        → **팔지 않고** 손절을 진입가(본전)로 올린다. 안 닫는다.
+    #   본전 이탈(전환 후) → 본전 청산 (breakeven) — 손절이 아니라 무승부다
+    #   기간 만료        → 그날 종가 전량 (expired)
+    if target_action == "trail" and e is not None:
+        # tp1_hit 은 여기서 «본전스톱으로 전환됨»을 뜻한다(1차 익절이 아니다).
+        trailed = bool(pick.get("tp1_hit"))
+        eff_stop = e if trailed else s
+        filled = trailed or next_open
+        for k, bar in enumerate(bars):
+            lo, hi, cl = _bar_lhc(bar)
+            if not filled:
+                if lo <= e:
+                    filled = True      # 같은 봉의 손절/목표를 이어서 본다(보수적)
+                elif k + 1 >= timeout:
+                    return _close_patch("unfilled", today, cl, None)
+                else:
+                    continue
+            # 손절을 목표보다 먼저 본다 — 백테스트와 같은 순서(보수적). 전환된 봉에서
+            # 곧바로 본전에 걸리는 일도 이 순서 덕에 생기지 않는다.
+            if eff_stop is not None and lo <= eff_stop:
+                return _close_patch(
+                    "breakeven" if trailed else "stopped",
+                    today, eff_stop, eff_stop / e - 1)
+            if not trailed and t1 is not None and hi >= t1:
+                trailed = True
+                eff_stop = e           # 본전으로 올린다. 팔지 않는다.
+            if k + 1 >= timeout:
+                return _close_patch("expired", today, cl, cl / e - 1,
+                                    tp1_hit=trailed or None)
+        if cal_expired:
+            if not filled:
+                return _close_patch("unfilled", today, last_cl, None)
+            return _close_patch("expired", today, last_cl, last_cl / e - 1,
+                                tp1_hit=trailed or None)
+        if trailed and not pick.get("tp1_hit"):
+            # 비종결 — 전환됐다는 사실만 기록한다(다음 배치가 이어서 본다).
+            return {"tp1_hit": True, "tp1_hit_at": today.isoformat()}
+        return None
 
     # ── 옛 픽(tp2 없음) 또는 진입가 결손 → 단일 청산 ──
     # 진입가가 없는 픽은 체결 여부를 물을 수 없다 → 예전 동작 그대로(체결된 셈).

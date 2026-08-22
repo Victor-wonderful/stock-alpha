@@ -73,14 +73,14 @@ export function HomePickCard({
   const stop = pick.stop_loss;
   const last = price?.close ?? null;
 
-  // 상승여력 = 목표가 대비 «현재가». 목표 수익률(진입가 대비)과 다르다 — 진입 전에는
-  // 예상 진입가가 곧 발행일 종가라 두 값이 같지만, 사고 나면 갈라진다(종목이 오르면
-  // 수익은 늘고 남은 여력은 줄어든다). /focus 대기 목록이 쓰던 정의와 같다.
-  const upside = last != null && last > 0 && target != null ? target / last - 1 : null;
   const stopPct = last != null && last > 0 && stop != null ? stop / last - 1 : null;
-  const gain = entry != null && target != null ? target - entry : null;
+  // 1주당 리스크 = 진입가 − 손절가. 실제로 거는 돈이다.
+  //
+  // 예전엔 여기에 「손익비 2.6R」과 「상승여력 +8.6%」을 뒀는데 둘 다 «목표가에서
+  // 판다»를 전제한 값이라, 목표에서 팔지 않는 지금 규칙에서는 실현되지 않는 숫자였다
+  // (2026-08-22 Victor 지적). 2차 목표도 같은 이유로 뺐다 — trail 경로는 tp 를 하나만
+  // 쓴다(_exit_scalein). 남은 건 «내가 얼마를 거는가»뿐이고, 그건 정확하다.
   const risk = entry != null && stop != null ? entry - stop : null;
-  const rr = gain != null && risk != null && risk > 0 ? gain / risk : null;
   // 권장 비중은 DB 의 weight 가 아니라 «읽는 시점 계산»이다. 엔진은 사용자와 무관한
   // 값만 저장하고 weight 는 null 로 둔다 — 비중은 그 사람의 risk_per_trade_pct 에
   // 달렸기 때문이다. pick.weight 를 그대로 찍었더니 0.0% 가 나왔다(2026-08-22).
@@ -130,31 +130,31 @@ export function HomePickCard({
           sub={planDay ? `${planDay} 시가` : "다음 거래일 시가"}
         />
         <Cell
-          label="목표가"
-          value={target != null ? won(target) : "—"}
-          sub={pick.tp2_price != null ? `2차 ${won(pick.tp2_price)}` : undefined}
-        />
-        <Cell
-          label="상승여력"
-          tone="up"
-          value={upside != null ? fmtPct(upside) : "—"}
-          sub="목표까지"
-        />
-        <Cell
           label="손절가"
           tone="down"
           value={stop != null ? won(stop) : "—"}
-          sub={stopPct != null ? fmtPct(stopPct) : undefined}
+          sub={stopPct != null ? `${fmtPct(stopPct)} · 전량 매도` : "전량 매도"}
         />
         <Cell
-          label="손익비"
-          value={rr != null ? `${rr.toFixed(1)}R` : "—"}
-          sub={gain != null && risk != null ? `${won(gain)} : ${won(risk)}` : undefined}
+          label="본전 도달가"
+          tone="up"
+          value={target != null ? won(target) : "—"}
+          sub="닿으면 손절이 본전으로"
+        />
+        <Cell
+          label="청산 기한"
+          value={exitDay ?? (spec ? `${spec.bars}거래일` : "—")}
+          sub="그날 종가에 전량"
         />
         <Cell
           label="권장 비중"
           value={sizePct != null ? `${sizePct.toFixed(1)}%` : "—"}
           sub={`계좌 리스크 ${riskPct}%`}
+        />
+        <Cell
+          label="1주당 리스크"
+          value={risk != null ? `${won(risk)}원` : "—"}
+          sub="진입 − 손절"
         />
       </div>
 
@@ -164,13 +164,14 @@ export function HomePickCard({
           {planDay ? `${planDay} 시가 매수` : "다음 거래일 시가 매수"}
         </span>
         <span className="text-text-mute">→</span>
-        <span>목표 닿으면 팔지 않고 손절을 본전으로</span>
+        <span>
+          {target != null ? `${won(target)} 닿으면` : "본전 도달가에 닿으면"} 손절을{" "}
+          {entry != null ? `${won(entry)}(본전)` : "본전"}으로 올림
+        </span>
         <span className="text-text-mute">→</span>
         <span>손절 닿으면 전량 매도</span>
         <span className="text-text-mute">→</span>
-        <span>
-          {exitDay ?? `${spec?.bars ?? "-"}거래일째`} 종가에 정리
-        </span>
+        <span>{exitDay ?? `${spec?.bars ?? "-"}거래일째`} 종가에 전량 매도</span>
         <Link
           href={`/stocks/${pick.symbol}`}
           className="ml-auto shrink-0 font-semibold text-accent hover:underline"

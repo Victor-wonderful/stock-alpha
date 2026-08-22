@@ -19,7 +19,9 @@ import {
   fmtPct,
   nextTradingDayIsCertain,
   nextTradingDayLabel,
+  nthTradingDayLabel,
   tradingDayLabel,
+  tradingWindowIsCertain,
 } from "@/lib/format";
 import { horizonSpec } from "@/lib/holding";
 
@@ -142,7 +144,7 @@ export default async function HomePage() {
   // 진입일(nextDay)을 모르거나 휴장일 표가 그 구간을 못 덮으면 날짜를 비운다 —
   // 틀린 날짜보다 「10거래일」이 정직하다.
   const exitDays = new Map<number, string | null>();
-  if (nextDay) {
+  {
     const barsList = [
       ...new Set(
         preview
@@ -152,9 +154,23 @@ export default async function HomePage() {
     ];
     const resolved = await Promise.all(
       // 진입일 자체가 1거래일째다 — 10거래일 보유면 진입일 뒤로 9거래일 더 간다.
-      barsList.map((b) => getNthTradingDay(nextDay, b - 1)),
+      barsList.map((b) => (nextDay ? getNthTradingDay(nextDay, b - 1) : null)),
     );
-    barsList.forEach((b, i) => exitDays.set(b, resolved[i]));
+    barsList.forEach((b, i) => {
+      // 1순위는 DB 휴장일 표. 그게 그 구간을 못 덮으면(지금이 그렇다 — 시드 파일의
+      // holidays 가 비어 있어 holiday-coverage 마커가 없다) 주말만 건너뛴 추정으로
+      // 물러선다. 단 그 창에 고정 공휴일이 하나라도 낄 수 있으면 날짜를 비운다 —
+      // 「10거래일째」가 틀린 날짜보다 정직하다. 홈의 «다음 거래일» 라벨과 같은 규칙.
+      // 세는 기준이 다르면 하루가 어긋난다. 진입일부터 세면 진입일이 1거래일째라
+      // b-1 을 더하고, 분석일부터 세면 진입일이 이미 +1 이므로 b 를 더한다.
+      const from = nextDay ?? asOf;
+      const n = nextDay ? b - 1 : b;
+      const fallback =
+        from && tradingWindowIsCertain(from, b * 2)
+          ? nthTradingDayLabel(from, n)
+          : null;
+      exitDays.set(b, resolved[i] ? tradingDayLabel(resolved[i]!) : fallback);
+    });
   }
   // 손절까지 3% 이내로 붙은 픽. toStopPct 는 «현재가 → 손절가» 비율이라 롱에서는
   // 음수이고 0 에 가까울수록 코앞이다(-0.03 = 3% 남음). 단위가 %가 아니라 비율이라
