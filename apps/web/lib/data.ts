@@ -1189,6 +1189,60 @@ export async function getNextTradingDay(asOf: string): Promise<string | null> {
   }
 }
 
+/** asOf 다음 N번째 거래일. 휴장일 표가 그 구간을 못 덮으면 null(단정하지 않는다).
+ *
+ * 픽 카드의 «청산 기한»에 쓴다 — 기간(중기 10거래일)이 끝나면 그날 종가에 전량
+ * 정리한다는 규칙이 화면 어디에도 없었다(2026-08-22). 진입일부터 세므로 호출부는
+ * 진입일(= 발행일 다음 거래일)을 넘긴다.
+ *
+ * getNextTradingDay 를 N번 부르면 왕복이 N회다. 여기서는 휴장일을 한 번만 읽고
+ * 메모리에서 센다.
+ */
+export async function getNthTradingDay(
+  asOf: string,
+  n: number,
+): Promise<string | null> {
+  if (n <= 0) return null;
+  try {
+    const supabase = createPublicClient();
+    // 10거래일이면 최장 3주 남짓이지만, 연휴가 겹칠 수 있어 넉넉히 본다.
+    const to = new Date(Date.parse(asOf + "T00:00:00Z") + (n * 3 + 30) * 864e5)
+      .toISOString()
+      .slice(0, 10);
+    const { data: marker } = await supabase
+      .from("market_calendar")
+      .select("date")
+      .eq("event_key", "holiday-coverage")
+      .limit(1);
+    const confirmedThrough = marker?.[0]?.date ? String(marker[0].date) : null;
+    if (!confirmedThrough || confirmedThrough <= asOf) return null;
+
+    const { data } = await supabase
+      .from("market_calendar")
+      .select("date")
+      .eq("kind", "holiday")
+      .gt("date", asOf)
+      .lte("date", to)
+      .limit(200);
+
+    const holidays = new Set(((data ?? []) as { date: string }[]).map((r) => String(r.date)));
+    const d = new Date(Date.parse(asOf + "T00:00:00Z"));
+    let seen = 0;
+    for (let i = 0; i < n * 3 + 30; i++) {
+      d.setUTCDate(d.getUTCDate() + 1);
+      const iso = d.toISOString().slice(0, 10);
+      // 확정 기한 너머는 답하지 않는다 — 그 뒤 휴장은 표에 없을 뿐 없는 게 아니다.
+      if (iso > confirmedThrough) return null;
+      const wd = d.getUTCDay();
+      if (wd === 0 || wd === 6 || holidays.has(iso)) continue;
+      if (++seen === n) return iso;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
   try {
     const supabase = createPublicClient();
