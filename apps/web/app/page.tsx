@@ -7,6 +7,7 @@ import { HomeOpenPicks } from "@/components/HomeOpenPicks";
 import { HomeOpenSummary } from "@/components/HomeOpenSummary";
 import { HomePicksTable } from "@/components/HomePicksTable";
 import { RecentReports, WeeklyBriefs } from "@/components/HomeSections";
+import { ExpertNotes } from "@/components/ExpertNotes";
 import { HomeTopNews } from "@/components/HomeTopNews";
 import {
   getBlogPosts,
@@ -20,6 +21,7 @@ import {
   getTradingCalendar,
   getOpenPicks,
   getRecommendations,
+  getExpertNotes,
   getReports,
   getTopNews,
   getWeeklyReports,
@@ -115,6 +117,7 @@ export default async function HomePage() {
   //    그때는 홈을 로그인 뒤로 감추지 않는다 — 홈은 공개 화면이다(Victor, 2026-08-22).
   const [
     quotes, recs, brief, marketState, openPicks, weekly, blogPosts, reports, cal, topNews,
+    expertNotes,
   ] = await Promise.all([
       getMarketQuotes(),
       getRecommendations(),
@@ -133,6 +136,8 @@ export default async function HomePage() {
       // getNthTradingDay 를 부르면 픽 10건에 왕복 20회다.
       getTradingCalendar(),
       getTopNews(6),
+      // 전문가 추천 — 사람이 고른 종목. 엔진이 건드리지 않는 콘텐츠라 조회만 한다.
+      getExpertNotes(4),
     ]);
 
   const picks = recs.data;
@@ -418,6 +423,16 @@ export default async function HomePage() {
             />
           </div>
         </section>
+
+        {/* ── 밴드 2.5 · 전문가 추천 ──
+            엔진 픽 아래, 진행 중 위. «오늘 뭘 사나»의 두 번째 대답이라 그 옆에 두되
+            모양을 표가 아니라 카드로 갈랐다 — 진입가·손절가가 없는 것을 표로 그리면
+            사용자가 «이것도 검증된 것»으로 읽는다(2026-08-23 Victor: 추적하지 않는다).
+            글이 하나도 없으면 섹션이 스스로 «아직 없습니다»를 말한다 — 자리를 지워
+            버리면 첫 글이 올라온 날 화면 구조가 통째로 바뀐다. */}
+        <div className="mt-12">
+          <ExpertNotes notes={expertNotes} />
+        </div>
 
         {/* ── 밴드 3 · 읽을 것 ──
             우측 사이드바 배치를 걷어냈다(2026-08-23 Victor — "섹션 배치를 우측에

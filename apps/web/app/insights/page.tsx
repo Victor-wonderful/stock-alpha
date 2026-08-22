@@ -4,9 +4,11 @@ import {
   getWeeklyReports,
   getMacroSeries,
   getBlogPosts,
+  getExpertNotes,
   pickBlogPosts,
 } from "@/lib/data";
 import { WeeklyBriefs, MacroSection, BlogPosts } from "@/components/HomeSections";
+import { ExpertNotes } from "@/components/ExpertNotes";
 
 /**
  * 인사이트 — 「읽을 것」이 모이는 곳.
@@ -24,12 +26,14 @@ export const metadata = {
 };
 
 export default async function InsightsPage() {
-  const [weekly, macro, blogPosts] = await Promise.all([
+  const [weekly, macro, blogPosts, expertNotes] = await Promise.all([
     getWeeklyReports(20),
     // 제외 목록을 비운다 — 원달러가 USDKRW(네이버, 매일)로 바뀌어 더는 지연된
     // 시리즈가 아니다. 티커와 값이 갈리던 원인이었다(2026-08-22).
     getMacroSeries(),
     getBlogPosts(),
+    // 전문가 추천 — 홈은 4건만, 여기가 전체 목록이다.
+    getExpertNotes(24),
   ]);
 
   const weeklyPosts = pickBlogPosts(blogPosts, "view", "weekly", 20);
@@ -38,7 +42,13 @@ export default async function InsightsPage() {
   const taken = new Set([...weeklyPosts, ...macroPosts].map((p) => p.url));
   const otherPosts = blogPosts.filter((p) => !taken.has(p.url)).slice(0, 20);
 
-  const empty = weekly.length === 0 && macro.length === 0 && blogPosts.length === 0;
+  // 전문가 추천도 조건에 넣는다 — 엔진 산출물이 다 비어도 사람 글이 있으면 화면은
+  // 비어 있지 않다(2026-08-23).
+  const empty =
+    weekly.length === 0 &&
+    macro.length === 0 &&
+    blogPosts.length === 0 &&
+    expertNotes.length === 0;
 
   return (
     <AppShell
@@ -54,6 +64,9 @@ export default async function InsightsPage() {
         // 되돌린다 — 제목과 첫 섹션 사이는 AppShell 의 mb-6 로 충분하다.
         // (-mt-12 로 당겼더니 제목 위로 올라타 겹쳤다)
         <div className="[&>section:first-child]:mt-0">
+          {/* 사람이 고른 종목 — 엔진 산출물보다 위에 둔다. 여기는 «읽을 것»이고,
+              읽는 사람에게는 사람이 쓴 글이 먼저다. */}
+          <ExpertNotes notes={expertNotes} moreHref={null} />
           <WeeklyBriefs posts={weeklyPosts} reports={weekly} moreHref={null} />
           <MacroSection posts={macroPosts} indicators={macro} moreHref={null} />
           {otherPosts.length > 0 && (

@@ -1360,6 +1360,71 @@ export async function getTopNews(limit = 6, days = 2): Promise<TopNewsItem[]> {
   }
 }
 
+export interface ExpertNote {
+  id: number;
+  expertName: string;
+  expertHeadline: string | null;
+  avatarUrl: string | null;
+  symbol: string | null;
+  name: string | null;
+  asOf: string;
+  stance: "buy" | "watch";
+  summary: string;
+  tags: string[];
+}
+
+/** 전문가 추천 — 사람이 고른 종목. **추적하지 않는다**.
+ *
+ * 2026-08-23 Victor: "전문가 픽은 추적할 필요 없어. 이것은 시스템이 아니라 여러
+ * 전문가들이 참여해서 추천해준다는 거지."
+ *
+ * ⚠️ 「오늘의 픽」과 다른 물건이다. 저건 게이트를 통과한 실행 계획(진입가·손절가·기간)
+ * 이고 엔진이 매일 상태를 갱신한다. 이건 의견이라 상태도 수익률도 없다 — 그래서
+ * 화면에서 모양을 다르게 그려야 한다(표가 아니라 카드). 같은 모양으로 그리면
+ * 사용자가 «이것도 검증된 것»으로 읽고, 손절 없이 산 뒤 당황한다.
+ */
+export async function getExpertNotes(limit = 6): Promise<ExpertNote[]> {
+  try {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .from("expert_notes")
+      .select(
+        "id,as_of,stance,summary,tags,experts(name,headline,avatar_url,active),instruments(symbol,name)",
+      )
+      .eq("published", true)
+      .order("as_of", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit * 2);
+    const rows = (data ?? []) as unknown as {
+      id: number;
+      as_of: string;
+      stance: string;
+      summary: string;
+      tags: string[] | null;
+      experts: { name: string; headline: string | null; avatar_url: string | null; active: boolean } | null;
+      instruments: { symbol: string; name: string } | null;
+    }[];
+    return rows
+      .filter((r) => r.experts?.active !== false)
+      .slice(0, limit)
+      .map((r) => ({
+        id: r.id,
+        expertName: r.experts?.name ?? "—",
+        expertHeadline: r.experts?.headline ?? null,
+        avatarUrl: r.experts?.avatar_url ?? null,
+        symbol: r.instruments?.symbol ?? null,
+        name: r.instruments?.name ?? null,
+        asOf: r.as_of,
+        stance: r.stance === "buy" ? "buy" : "watch",
+        summary: r.summary,
+        tags: r.tags ?? [],
+      }));
+  } catch {
+    // 표가 아직 없거나(마이그레이션 전) 비어 있으면 조용히 빈 목록 — 화면이 스스로 숨는다.
+    return [];
+  }
+}
+
 export async function getTradingCalendar(): Promise<{
   confirmedThrough: string | null;
   nth: (from: string, n: number) => string | null;
