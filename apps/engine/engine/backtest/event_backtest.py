@@ -42,6 +42,65 @@ def _exit_single(df, i, n, entry, stop, tp, timeout, costs):
     return costs.net_pnl(entry, exit_price), exit_price - entry, exit_idx - i
 
 
+def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell"):
+    """분할 진입 — 나눠 사고 한 번에 판다.
+
+    legs: [(비중, 진입가), ...] 1차가 맨 앞. 1차는 진입 봉에 체결된 것으로 보고,
+    2차 이후는 보유 중 저가가 그 가격 이하로 내려온 봉에서 체결된다. 청산은 전량
+    동시(손절 / 목표 / 기간 만료).
+
+    ⚠️ 손익 회계 — 반환하는 net/gross 는 «전량 체결을 가정한 계획 포지션 1주당» 값이다.
+    2·3차가 안 채워지면 그만큼 작은 포지션이므로 손익도 비례해 작아진다. 안 산 몫을
+    벌었다고 세면 분할 진입이 공짜로 유리해 보인다.
+
+    ⚠️ 손절선은 **1차 진입 시점에 확정**돼 움직이지 않는다(구조가 정하는 값이다).
+    분할이 낮추는 건 평단이지 손절이 아니다 — 손절을 평단 따라 내리면 «틀렸는데
+    더 버티는» 규칙이 되고, 그건 분할 진입이 아니라 그냥 손절 폐지다.
+
+    같은 봉에서 추가 체결과 청산이 겹치면 **체결을 먼저** 본다(보수적 — 더 산 뒤
+    손절되는 쪽이 손실이 크다).
+
+    target_action — 목표가에 닿았을 때 무엇을 하는가.
+      "sell"  (기본) 목표가에 전량 청산. 상방이 목표에서 잘린다.
+      "trail" **팔지 않고 손절을 평단(본전)으로 올린 뒤 기간까지 보유한다.**
+              파는 주체는 기간이고 목표는 안전장치가 된다 — 되돌림은 막으면서
+              상방은 안 자른다. 목표를 아예 끄면(use_targets=False) 되돌림을 그대로
+              맞고, 목표에 팔면 크게 가는 종목을 놓친다. 그 사이를 노린다.
+
+    반환: (net_pnl, gross_pnl, bars, filled_w, avg_entry)
+    """
+    total_w = sum(w for w, _ in legs)
+    filled: list[tuple[float, float]] = [legs[0]]      # 1차는 진입 봉에 체결
+    pending = list(legs[1:])
+    cap = min(i + timeout, n - 1)
+    exit_price = None
+    idx = cap
+    eff_stop = stop
+    trailed = False
+    for j in range(i + 1, cap + 1):
+        lo, hi = float(df["low"].iloc[j]), float(df["high"].iloc[j])
+        while pending and lo <= pending[0][1]:         # 추가 체결(보수적: 먼저)
+            filled.append(pending.pop(0))
+        if lo <= eff_stop:
+            exit_price, idx = eff_stop, j
+            break
+        if hi >= tp:
+            if target_action != "trail":
+                exit_price, idx = tp, j
+                break
+            if not trailed:                            # 목표 도달 → 본전 스톱으로 전환
+                trailed = True
+                eff_stop = sum(w * e for w, e in filled) / sum(w for w, _ in filled)
+    if exit_price is None:                             # 기간 만료 → 종가
+        exit_price = float(df["close"].iloc[cap])
+        idx = cap
+    net = sum(w * costs.net_pnl(e, exit_price) for w, e in filled) / total_w
+    gross = sum(w * (exit_price - e) for w, e in filled) / total_w
+    filled_w = sum(w for w, _ in filled) / total_w
+    avg_entry = sum(w * e for w, e in filled) / sum(w for w, _ in filled)
+    return net, gross, idx - i, filled_w, avg_entry
+
+
 def _exit_scaleout(df, i, n, entry, stop, tp1, tp2, timeout, costs):
     """분할청산 — tp1 에서 W1 익절 + 잔량 본전(entry)스톱 후 tp2 런.
 
@@ -114,6 +173,11 @@ def backtest_playbook(
     entry_mode: str = "signal",
     stop_atr_mult: float | None = None,   # 실험: 손절 ATR 배수 override
     struct_stop: bool = True,             # 실험: 구조 손절 당김 on/off
+    timeout_bars: int | None = None,      # 실험: 보유 상한(봉) override — 고정 보유기간
+    use_targets: bool = True,             # 실험: False 면 목표가 청산을 끈다
+    scale_in: tuple[tuple[float, float], ...] | None = None,
+    target_action: str = "sell",          # "trail" 이면 목표에서 안 팔고 본전스톱
+    tp_atr_mults: tuple[float, ...] | None = None,   # 목표 ATR 배수 override
 ) -> list[Trade]:
     """단일 종목·단일 플레이북 백테스트 → 트레이드 리스트.
 
@@ -132,6 +196,19 @@ def backtest_playbook(
       "open"   — 다음 봉 시가에 시장가 진입. 갭업분을 그대로 지불하되 반드시 체결된다.
                  레벨(손절·목표)은 그 시가 기준으로 다시 계산한다 — 안 그러면
                  설계한 손익비가 깨진다.
+
+    scale_in: 분할 진입. ((비중, ATR 하락배수), ...) 형태로 1차가 맨 앞이다.
+      예) ((0.5, 0.0), (0.5, 1.0)) = 진입가에 절반, 진입가-1×ATR 에 나머지 절반.
+      2차 이후는 보유 중 그 가격에 «닿아야» 체결된다 — 안 닿으면 그만큼만 보유한다.
+
+      왜 하락 분할인가: 이 시장은 일간 중앙 변동이 3.26%p 라 진입 직후 며칠은
+      노이즈가 지배한다. 발행 픽 실측에서 최대 역행 중앙값이 -11.4% 인데 92% 는
+      진입가 위로 올라간 적이 있다 — **방향은 자주 맞는데 진입 시점이 나쁘다.**
+      분할은 그 시점 리스크를 나눈다. 반대로 상승 분할(피라미딩)은 시점 리스크를
+      줄이지 못한다.
+
+      ⚠️ 손절선은 1차 진입 기준으로 확정되고 움직이지 않는다. R 은 «계획 평단»
+      (전량 체결 가정) 기준이라 단일 진입과 같은 자로 비교된다.
     """
     if costs is None:
         costs = CostModel()
@@ -183,6 +260,7 @@ def backtest_playbook(
             support=cand.support, resistance=cand.resistance,
             setup=cand.setup, tp_r_mults=tp_r_mults,
             stop_atr_mult=stop_atr_mult, struct_stop=struct_stop,
+            tp_atr_mults=tp_atr_mults,
         )
         entry = lv.entry_price
         stop = lv.stop_loss
@@ -210,21 +288,42 @@ def backtest_playbook(
                 support=cand.support, resistance=cand.resistance,
                 setup=cand.setup, tp_r_mults=tp_r_mults,
                 stop_atr_mult=stop_atr_mult, struct_stop=struct_stop,
+                tp_atr_mults=tp_atr_mults,
             )
             entry, stop, tp = lv.entry_price, lv.stop_loss, lv.tp1
             i_entry = i + 1
 
+        # 분할 진입 — 계획 평단(전량 체결 가정)으로 R 을 잰다. 실제로 2·3차가
+        # 안 채워지면 손익이 비례해 작아지므로 «안 산 몫»을 벌었다고 세지 않는다.
+        legs = None
+        if scale_in:
+            legs = tuple((w, entry - d * cand.atr) for w, d in scale_in)
+            total_w = sum(w for w, _ in legs)
+            entry = sum(w * e for w, e in legs) / total_w      # 계획 평단
         risk = entry - stop
         # 노이즈 수준 손절폭 배제 — 라이브 시그널(generate)과 동일 기준(levels).
         if risk <= 0 or risk < min_risk_floor(entry, cand.atr):
             i += 1
             continue
 
-        timeout = _TIMEOUT_BARS.get(eff_style, 10)
+        # 보유 상한 — 기본은 스타일별(_TIMEOUT_BARS). timeout_bars 를 주면 그 값으로
+        # 고정한다("N일 보유 추천"). use_targets=False 면 목표가 청산을 끄고 손절과
+        # 기간 만료만 남긴다 — «N일 뒤에 판다»를 그대로 재현하는 모드다.
+        timeout = timeout_bars or _TIMEOUT_BARS.get(eff_style, 10)
         # 청산: 단일(tp1 전량) 또는 스케일아웃(tp1 50%+본전스톱 후 tp2 런).
         # 청산 추적은 «진입한 봉»부터 — 지정가 체결이 늦어지면 그만큼 늦게 시작한다.
         # (타임아웃은 진입 봉 기준으로 새로 센다 — 못 산 기간까지 보유로 치면 안 된다)
-        if scaleout:
+        if legs is not None or target_action == "trail":
+            eff_legs = legs if legs is not None else ((1.0, entry),)
+            pnl, gross, bars, _fw, _avg = _exit_scalein(
+                df, i_entry, n, eff_legs, stop,
+                tp if use_targets else float("inf"), timeout, costs,
+                target_action=target_action)
+        elif not use_targets:
+            # 목표 없음 — 손절 아니면 기간 만료 종가. tp 를 도달 불가 값으로 둔다.
+            pnl, gross, bars = _exit_single(
+                df, i_entry, n, entry, stop, float("inf"), timeout, costs)
+        elif scaleout:
             pnl, gross, bars = _exit_scaleout(
                 df, i_entry, n, entry, stop, tp, lv.tp2, timeout, costs)
         else:
