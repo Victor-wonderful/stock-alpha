@@ -139,6 +139,12 @@ export default async function HomePage() {
   const nearStop = openPicks.filter(
     (p) => p.toStopPct != null && p.toStopPct >= -0.03,
   ).length;
+  // 「진행 중」이 status='open' 만 세는 바람에, 오늘 낸 픽이 있는데도 0건이 떴다
+  // (2026-08-22 Victor 지적). 새 규칙은 «다음 거래일 시가 진입»이라 발행 당일 픽은
+  // 항상 pending 이다 — 아직 안 산 것이지 없는 게 아니다. 그대로 두면 「오늘의 픽」
+  // 카드엔 종목이 있는데 옆 카드는 «없습니다»라 두 카드가 서로 모순돼 보인다.
+  // todayPicks 가 이미 status 를 들고 있어 조회를 더 하지 않는다.
+  const pendingCount = todayPicks.filter((p) => p.status === "pending").length;
 
   return (
     <div className="flex min-h-screen flex-col bg-bg">
@@ -310,9 +316,21 @@ export default async function HomePage() {
                   보유가 없으면 문장 한 줄로 말하고, 한 건이라도 있으면 숫자로 돌아간다. */}
               {openPicks.length === 0 ? (
                 <p className="text-[12.5px] leading-relaxed text-text-mute">
-                  보유 중인 픽이 없습니다.
-                  <br />
-                  손절 근접도 없습니다.
+                  {pendingCount > 0 ? (
+                    <>
+                      아직 산 픽이 없습니다.
+                      <br />
+                      오늘 낸{" "}
+                      <span className="font-semibold text-text-dim">{pendingCount}건</span>이{" "}
+                      {planDay ?? "다음 거래일"} 시가 진입을 기다립니다.
+                    </>
+                  ) : (
+                    <>
+                      보유 중인 픽이 없습니다.
+                      <br />
+                      손절 근접도 없습니다.
+                    </>
+                  )}
                 </p>
               ) : (
                 <div className="flex items-baseline gap-5">
@@ -326,6 +344,14 @@ export default async function HomePage() {
                       {nearStop}건
                     </p>
                   </div>
+                  {/* 보유가 있는 날에도 «오늘 낸 건 아직 안 샀다»를 같이 말해야
+                      「오늘의 픽」 카드의 건수와 어긋나지 않는다. */}
+                  {pendingCount > 0 && (
+                    <div>
+                      <p className="text-[11px] text-text-mute">진입 대기</p>
+                      <p className="tnum text-2xl font-bold text-text-dim">{pendingCount}건</p>
+                    </div>
+                  )}
                 </div>
               )}
             </section>
