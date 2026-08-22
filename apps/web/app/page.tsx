@@ -9,6 +9,7 @@ import {
   getMarketQuotes,
   getMarketState,
   getMorningBrief,
+  getNewsEvents,
   getNextTradingDay,
   getNthTradingDay,
   getOpenPicks,
@@ -136,6 +137,13 @@ export default async function HomePage() {
   const previewPrices =
     preview.length > 0
       ? await getLatestPricesBySymbols(preview.map((p) => p.symbol))
+      : null;
+  // 픽 종목의 최근 보도 — «왜 샀나»가 아니라 «무슨 일이 있었나»다. 뉴스는 매수 신호가
+  // 아니다(PEAD 실측 -0.02). 제목·링크 없이 «같은 날 몇 개 매체가 다뤘나»만 센다.
+  // 심볼을 통째로 넘기는 벌크 조회라 픽이 몇 건이든 왕복 2회다.
+  const previewNews =
+    preview.length > 0
+      ? await getNewsEvents(preview.map((p) => p.symbol), { minOutlets: 2, days: 10 })
       : null;
 
   // 청산 기한 — «진입 후 N거래일이 되면 그날 종가에 전량 정리»가 규칙인데 화면 어디에도
@@ -285,6 +293,7 @@ export default async function HomePage() {
                   planDay={planDay}
                   exitDay={exitDays.get(horizonSpec(p.horizon)?.bars ?? -1) ?? null}
                   riskPct={DEFAULT_RISK_PER_TRADE_PCT}
+                  events={previewNews?.get(p.symbol) ?? []}
                 />
               ))}
             </ul>

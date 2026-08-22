@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { TRADE_SETUP_LABELS } from "@stock-alpha/db";
-import type { LatestPrice } from "@/lib/data";
+import type { LatestPrice, NewsEvent } from "@/lib/data";
 import type { RecommendationView } from "@/lib/types";
 import { fmtPct } from "@/lib/format";
 import { horizonSpec } from "@/lib/holding";
@@ -53,9 +53,12 @@ export function HomePickCard({
   planDay,
   exitDay,
   riskPct,
+  events,
 }: {
   pick: RecommendationView;
   price: LatestPrice | null;
+  /** 최근 10일 보도 사건 — 같은 날 2개 이상 매체가 다룬 것만. */
+  events?: NewsEvent[];
   /** 진입 예정일 라벨 — "8월 24일(월)". 휴장일 표가 못 덮으면 null. */
   planDay: string | null;
   /** 청산 기한 라벨 — 진입 후 N거래일째. 표가 못 덮으면 null. */
@@ -172,6 +175,40 @@ export function HomePickCard({
         <span>손절 닿으면 전량 매도</span>
         <span className="text-text-mute">→</span>
         <span>{exitDay ?? `${spec?.bars ?? "-"}거래일째`} 종가에 전량 매도</span>
+      </div>
+
+      {/* ── 최근 보도 ──
+          기사 제목·본문은 쓰지 않는다(언론사 저작물). 외부 링크도 없다. «같은 날 여러
+          매체가 동시에 다뤘다»는 사실만 세고 그 옆에 그날 등락을 붙인다 —
+          components/RecentCoverage 와 같은 규약이다.
+
+          ⚠️ 이건 «왜 샀나»가 아니라 «무슨 일이 있었나»다. 뉴스는 매수 신호가 아니다
+          (PEAD 실측 -0.02). 그래서 픽 근거 표(위)와 줄을 갈라 아래에 둔다. */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-border px-4 py-2.5 text-[11px]">
+        <span className="shrink-0 font-semibold text-text-dim">최근 보도</span>
+        {!events || events.length === 0 ? (
+          <span className="text-text-mute">최근 10일 눈에 띄는 보도 없음</span>
+        ) : (
+          events.slice(0, 3).map((e) => (
+            <span key={e.date} className="flex items-baseline gap-1.5">
+              <span className="tnum text-text-mute">
+                {e.date.slice(5).replace("-", "/")}
+              </span>
+              <span className="rounded-[4px] bg-surface-2 px-1.5 py-px font-semibold text-text-dim">
+                {e.outletCount}개 매체
+              </span>
+              {e.changePct != null && (
+                <span
+                  className={`tnum font-medium ${
+                    e.changePct >= 0 ? "text-good" : "text-bad"
+                  }`}
+                >
+                  {fmtPct(e.changePct)}
+                </span>
+              )}
+            </span>
+          ))
+        )}
         <Link
           href={`/stocks/${pick.symbol}`}
           className="ml-auto shrink-0 font-semibold text-accent hover:underline"
