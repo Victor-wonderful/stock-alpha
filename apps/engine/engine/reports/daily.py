@@ -156,7 +156,8 @@ def passed_setups_from_db() -> set[str]:
     ):
         if bt.get("setup"):
             latest[(bt["setup"], bt.get("horizon") or bt.get("style") or "")] = bt
-    return passed_setups_from_rows(latest)
+    from engine.backtest.runner import drop_superseded_style_rows
+    return passed_setups_from_rows(drop_superseded_style_rows(latest))
 
 
 def passed_setups_from_rows(latest: dict[tuple[str, str], dict]) -> set[str]:
@@ -181,7 +182,9 @@ def gate_expectancy_from_db(as_of: str | None = None) -> dict[tuple[str, str], f
 
     as_of: 주면 그 날 이전 적재분만 — 과거일 백필의 시점 정합성(passed_combos_from_db 참조).
     """
-    from engine.backtest.runner import _within, gate_cutoff
+    from engine.backtest.runner import (
+        _within, drop_superseded_style_rows, gate_cutoff,
+    )
     cutoff = gate_cutoff(as_of)
     latest: dict[tuple[str, str], dict] = {}
     for bt in sorted(
@@ -191,6 +194,7 @@ def gate_expectancy_from_db(as_of: str | None = None) -> dict[tuple[str, str], f
         axis = bt.get("horizon") or bt.get("style")
         if bt.get("setup") and axis and _within(bt, cutoff):
             latest[(bt["setup"], axis)] = bt
+    latest = drop_superseded_style_rows(latest)
     return {
         k: float(bt["expectancy_r"])
         for k, bt in latest.items()

@@ -233,6 +233,36 @@ def _load_prev_verdicts(entry_mode: str = GATE_ENTRY_MODE) -> dict[tuple[str, st
     return latest
 
 
+HORIZON_AXIS = frozenset({"short", "mid", "long"})
+
+
+def drop_superseded_style_rows(
+    latest: dict[tuple[str, str], dict],
+) -> dict[tuple[str, str], dict]:
+    """기간 판정이 있는 셋업에서 «옛 스타일 축» 행을 버린다. (순수 함수)
+
+    왜 필요한가 (2026-08-22) — backtests 에는 두 세대가 섞여 있다(옛 style 1,518행 /
+    새 horizon 66행). 최신행 맵의 키가 (setup, 축값) 이라 «(capitulation, swing)» 과
+    «(capitulation, short)» 가 **서로 다른 키로 공존**한다. 그래서
+
+      · 기간 축에서 탈락한 셋업이 두 달 전 swing 행 덕에 통과로 남고,
+      · horizon 없는 옛 플랜이 그 옛 swing 행에 대조돼 발행된다
+        (_plan_gate_ok 의 style 폴백) — **두 세대가 서로를 검증한다**.
+
+    이건 메모리의 «61커밋 뒤처진 배포가 6주간 추세픽을 통과시킨» 사고와 같은 종류다.
+    같은 셋업에 새 축 판정이 하나라도 있으면 그게 옛 축을 대체한 것으로 본다.
+
+    ⚠️ 적용 시점(2026-08-22) 실측으로 통과 셋업 집합은 바뀌지 않는다(10개 동일).
+       바뀌는 건 passed_combos 의 축값에서 'swing' 3건이 빠지는 것 — 재발 차단이 목적.
+    """
+    superseded = {setup for (setup, axis) in latest if axis in HORIZON_AXIS}
+    return {
+        (setup, axis): bt
+        for (setup, axis), bt in latest.items()
+        if not (setup in superseded and axis not in HORIZON_AXIS)
+    }
+
+
 def apply_hysteresis(raw: bool, prev: dict | None) -> bool:
     """게이트 히스테리시스 (순수) — 경계선 셋업의 일일 PASS/FAIL 플립 억제.
 
@@ -287,6 +317,7 @@ def passed_combos_from_db(as_of: str | None = None) -> dict[str, list[str]]:
         axis = bt.get("horizon") or bt.get("style")
         if bt.get("setup") and axis and _within(bt, cutoff):
             latest[(bt["setup"], axis)] = bt
+    latest = drop_superseded_style_rows(latest)
     out: dict[str, list[str]] = {}
     for (setup, style), bt in latest.items():
         if bt.get("passed"):

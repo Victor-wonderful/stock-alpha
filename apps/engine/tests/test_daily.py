@@ -52,6 +52,35 @@ def _move_entry(r: dict, entry: float) -> dict:
     return r
 
 
+# ── 두 세대(스타일/기간) 백테스트 행 정리 ──────────────────────────────
+def test_horizon_rows_supersede_style_rows():
+    from engine.backtest.runner import drop_superseded_style_rows
+    latest = {
+        ("capitulation", "swing"): {"passed": True},    # 옛 축 — 대체돼야 한다
+        ("capitulation", "short"): {"passed": True},
+        ("factor_composite", ""): {"passed": True},     # 축 없는 옛 행 — 남는다
+        ("median", "position"): {"passed": True},       # 기간 판정 없음 — 남는다
+    }
+    out = drop_superseded_style_rows(latest)
+    assert ("capitulation", "swing") not in out
+    assert ("capitulation", "short") in out
+    assert ("factor_composite", "") in out
+    assert ("median", "position") in out
+
+
+def test_horizon_fail_is_not_rescued_by_old_style_row():
+    """기간 축에서 탈락했는데 두 달 전 swing 행이 통과로 되살리는 사고 차단."""
+    from engine.backtest.runner import drop_superseded_style_rows
+    from engine.reports.daily import passed_setups_from_rows
+    ok = {"win_rate": 0.5, "avg_rr": 2.0, "mdd": 0.1, "expectancy_r": 0.3,
+          "passed": True}
+    bad = {**ok, "passed": False, "expectancy_r": -0.3}
+    latest = {("capitulation", "swing"): ok, ("capitulation", "short"): bad}
+    assert "capitulation" in passed_setups_from_rows(latest)          # 옛 동작
+    assert "capitulation" not in passed_setups_from_rows(
+        drop_superseded_style_rows(latest))                            # 고친 뒤
+
+
 # ── 4국면 레짐 라우팅 ────────────────────────────────────────────────
 def test_regime_router_by_market_state():
     # 상승추세 — 추세추종 허용, 평균회귀 억제
