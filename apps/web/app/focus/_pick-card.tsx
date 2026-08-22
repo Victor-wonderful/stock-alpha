@@ -19,6 +19,14 @@ import type { RecommendationView, ReportListItem } from "@/lib/types";
 
 function RatingBadge({ rating }: { rating: string | null }) {
   if (!rating) return null;
+  // «거래 부적합»은 픽 카드에 띄우지 않는다 — 추천하면서 부적합이라 적으면 모순이다.
+  //
+  // 이 rating 은 리포트를 만든 날의 게이트로 계산된 값이라 게이트가 바뀌면 어긋난다
+  // (2026-08-22: 8/21 리포트가 옛 게이트로 «통과 셋업 없음 → 거래 부적합»을 찍었는데
+  // 새 게이트에서는 그 종목의 double_bottom 이 통과한다). 발행 여부는 엔진이 «지금»
+  // 기준으로 판단하므로, 카드에 실린 픽은 이미 거래 가능 판정을 받은 것이다.
+  // 종목 상세(/stocks)에서는 리포트 원문 그대로 보여준다 — 거기선 그날의 판정이 맞다.
+  if (rating === "거래 부적합") return null;
   const v =
     rating === "매수"
       ? "bull"

@@ -147,9 +147,20 @@ export default async function FocusContent() {
   const picksToday = latestRepDay
     ? allPicks.filter((p) => p.as_of === latestRepDay)
     : allPicks;
-  // 같은 날 픽이라도 최신 리포트가 '거래 부적합'이면 무효(리포트 재생성 후 픽 미갱신) → 숨김.
-  const isInvalid = (p: (typeof allPicks)[number]) =>
-    repForGuard.get(p.symbol)?.rating === "거래 부적합";
+  // 픽이 리포트보다 «오래된» 경우만 숨긴다.
+  //
+  // 예전엔 '최신 리포트가 거래 부적합이면 숨김'이었는데, 그 rating 은 리포트를 만든 날의
+  // 게이트로 계산된 값이라 게이트가 바뀌면 어긋난다. 2026-08-22 실제 사례 — 8/21 리포트는
+  // 옛 게이트로 «통과 셋업 없음 → 거래 부적합»이 찍혔는데, 새 게이트에서는 그 종목의
+  // double_bottom 이 통과한다. 엔진은 그걸 보고 픽을 냈는데 화면이 이 가드로 다시 가렸다.
+  //
+  // 무엇을 발행할지는 엔진이 정한다(engine/reports/daily.select_picks — 종목 성질 +
+  // 셋업×기간 게이트를 «지금» 기준으로 본다). 화면이 더 거친 신호(셋업 단위·그날 기준
+  // rating)로 그 결정을 뒤집으면 안 된다. 여기서는 날짜 어긋남만 잡는다.
+  const isInvalid = (p: (typeof allPicks)[number]) => {
+    const rep = repForGuard.get(p.symbol);
+    return Boolean(rep?.as_of && p.as_of && rep.as_of > p.as_of);
+  };
   const stalePicks = picksToday.filter(isInvalid);
   const picks = picksToday.filter((p) => !isInvalid(p));
   // 카드용 미니 스노우플레이크 5축 — 픽 종목만 벌크 1회 조회(실패 시 빈 Map).
