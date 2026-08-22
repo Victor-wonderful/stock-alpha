@@ -14,15 +14,7 @@ import { fmtPct } from "@/lib/format";
  * 둘이 되어 어느 쪽이 «오늘»인지 흐려진다. 여기는 흰 패널 + 좌측 레일로 격을 낮춘다 —
  * 오늘의 판정이 주인공이고 이건 그 다음이다.
  */
-export function HomeOpenSummary({
-  picks,
-  pendingCount = 0,
-  planDay,
-}: {
-  picks: OpenPick[];
-  pendingCount?: number;
-  planDay?: string | null;
-}) {
+export function HomeOpenSummary({ picks }: { picks: OpenPick[] }) {
   const withRet = picks.filter((p) => p.returnPct != null);
   const avgRet =
     withRet.length > 0
@@ -49,12 +41,13 @@ export function HomeOpenSummary({
         )}
       </div>
 
+      {/* ⚠️ 대기 건수·진입 예정일은 여기서 말하지 않는다 — 우측 카드 자리가 그걸
+          말한다. 좌우가 같은 문장을 두 번 하면 밴드 전체가 헛돈다(2026-08-22). 
+          좌는 «보유 전체가 어떤가», 우는 «종목별로 어떤가»다. */}
       <p className="mt-2 text-[13px] leading-relaxed text-text-dim">
         {picks.length > 0
           ? "진입가 대비 현재 종가 기준입니다. 아직 팔지 않았으므로 확정 손익이 아닙니다."
-          : pendingCount > 0
-            ? `오늘 낸 ${pendingCount}건이 ${planDay ?? "다음 거래일"} 시가에 들어옵니다.`
-            : "체결된 픽이 생기면 여기에 쌓입니다."}
+          : "픽이 체결되면 보유 전체의 손익과 위험을 여기서 봅니다."}
       </p>
 
       {picks.length > 0 && (

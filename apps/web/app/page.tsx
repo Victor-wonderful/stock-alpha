@@ -408,14 +408,20 @@ export default async function HomePage() {
             </Link>
           </div>
 
-          {openPicks.length === 0 ? (
-            <HomeOpenPicks picks={[]} pendingCount={pendingCount} planDay={planDay} />
-          ) : (
-            <div className="grid items-start gap-x-8 gap-y-6 lg:grid-cols-[1fr_2fr]">
-              <HomeOpenSummary picks={openPicks} />
-              <HomeOpenPicks picks={openPicks} exitDays={openExitDays} />
-            </div>
-          )}
+          {/* 0 건이어도 좌우를 유지한다(2026-08-22 Victor). 처음엔 갈랐다가 좌우가
+              «1건이 8/24 시가에 들어옵니다»를 두 번 말해 합쳤는데, 답은 «합치기»가
+              아니라 «다른 말 하기»였다 — 좌는 보유 전체를, 우는 종목별을 말한다. */}
+          {/* 표가 8열이라 밴드 1(1fr_2fr)보다 우측을 조금 더 준다 — 760px 이 최소폭이고
+              그 아래로는 가로 스크롤이 생긴다. */}
+          <div className="grid items-start gap-x-8 gap-y-6 lg:grid-cols-[minmax(280px,1fr)_2.6fr]">
+            <HomeOpenSummary picks={openPicks} />
+            <HomeOpenPicks
+              picks={openPicks}
+              exitDays={openExitDays}
+              pendingCount={pendingCount}
+              planDay={planDay}
+            />
+          </div>
         </section>
 
         {/* ── 밴드 2 · 읽을 것 ── */}
