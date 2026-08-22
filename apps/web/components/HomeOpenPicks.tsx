@@ -25,8 +25,17 @@ function stopTone(toStopPct: number | null): string {
   return "text-text-mute";
 }
 
-export function HomeOpenPicks({ picks }: { picks: OpenPick[] }) {
-  if (picks.length === 0) return null;
+export function HomeOpenPicks({
+  picks,
+  pendingCount = 0,
+  planDay,
+}: {
+  picks: OpenPick[];
+  /** 오늘 발행분 중 아직 안 산 건수 — 빈 상태 문구에 쓴다. */
+  pendingCount?: number;
+  /** 그 대기 픽을 살 날 — "8월 24일(월)". 모르면 null. */
+  planDay?: string | null;
+}) {
   const won = (v: number) => Math.round(v).toLocaleString("ko-KR");
 
   return (
@@ -35,13 +44,37 @@ export function HomeOpenPicks({ picks }: { picks: OpenPick[] }) {
         <h2 className="text-sm font-bold text-text">
           진행 중{" "}
           <span className="text-[11px] font-medium text-text-mute">
-            이미 산 픽 {picks.length}건 · 손절 가까운 순
+            {picks.length > 0
+              ? `이미 산 픽 ${picks.length}건 · 손절 가까운 순`
+              : "이미 산 픽"}
           </span>
         </h2>
         <Link href="/picks" className="text-[11px] text-accent hover:underline">
           전체 기록 →
         </Link>
       </div>
+
+      {/* 0 건이어도 섹션은 남는다(2026-08-22 Victor — "진행 중 종목이 없을 수 없잖아,
+          섹션을 만들어놔라"). 자리를 지워버리면 보유가 생기는 날 화면 구조가 통째로
+          바뀌어, 매일 오는 사람이 «어제 보던 그 자리»를 잃는다.
+          네이비 패널에서 걷어낸 「대기」 정보를 이 빈 상태가 흡수한다 — «아직 없다»와
+          «곧 생긴다»는 한자리에서 말해야 이어진다. */}
+      {picks.length === 0 ? (
+        <div className="rounded-[12px] border border-dashed border-border bg-surface/50 px-5 py-7 text-center">
+          <p className="text-[13px] text-text-dim">아직 산 픽이 없습니다.</p>
+          <p className="mt-1 text-[12px] text-text-mute">
+            {pendingCount > 0 ? (
+              <>
+                <span className="tnum font-semibold text-text-dim">{pendingCount}건</span>이{" "}
+                {planDay ?? "다음 거래일"} 시가에 들어옵니다.
+              </>
+            ) : (
+              "픽이 체결되면 진입가 대비 손익과 손절까지 남은 거리가 여기 쌓입니다."
+            )}
+          </p>
+        </div>
+      ) : (
+      <>
 
       <div className="overflow-x-auto rounded-[12px] border border-border bg-surface">
         <table className="w-full min-w-[560px] text-[12.5px]">
@@ -110,6 +143,8 @@ export function HomeOpenPicks({ picks }: { picks: OpenPick[] }) {
         손절까지가 0에 가까울수록 코앞입니다 · 본전 도달가에 닿으면 손절이 진입가로
         올라가 그 뒤로는 손해 구간이 사라집니다
       </p>
+      </>
+      )}
     </section>
   );
 }

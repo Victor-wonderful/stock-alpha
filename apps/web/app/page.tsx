@@ -281,13 +281,14 @@ export default async function HomePage() {
                   ? "직전 거래일 종가로 분석해 다음 거래일 시가 진입을 전제로 계산했습니다."
                   : "기준을 통과한 종목이 없으면 억지로 채우지 않습니다. 쉬는 것도 판단입니다."}
               </p>
-              {/* ── 오늘 요약 ──
+              {/* ── 오늘 시장 한 줄 ──
                   예전엔 이 아래에 「오늘 시장은」·「진행 중」이 흰 카드 두 장으로 따로
-                  서 있었다. 셋 다 «오늘의 상태»인데 네이비 1 + 흰 카드 2 로 흩어져
-                  좁은 칸에서 조각처럼 보였다(2026-08-22 Victor — "영 이상하다").
-                  같은 것을 말하면 같은 면에 있어야 한다 — 한 패널로 합쳤다.
-                  네이비 위라 시세 적/청은 밝은 변형(up/down-on-navy)을 쓴다. */}
-              <dl className="mt-4 divide-y divide-on-navy/10 border-y border-on-navy/10">
+                  서 있었고(조각처럼 보였다), 합친 뒤에는 「보유」·「대기」 줄이 여기 있었다.
+                  둘 다 걷어냈다(2026-08-22 Victor — "대기는 필요 없고") — 「진행 중」이
+                  독립 섹션이 되면서 그 헤더가 이미 «이미 산 픽 N건»을 말한다.
+                  같은 사실을 두 번 말하지 않는다. 네이비 위라 시세 적/청은 밝은
+                  변형(up/down-on-navy)을 쓴다. */}
+              <dl className="mt-4 border-y border-on-navy/10">
                 {brief.data?.market && (
                   <div className="flex items-baseline gap-3 py-2.5">
                     <dt className="w-[52px] shrink-0 text-[12px] text-on-navy-3">시장</dt>
@@ -306,50 +307,6 @@ export default async function HomePage() {
                       className="shrink-0 text-[11px] text-on-navy-3 transition-colors hover:text-on-navy"
                     >
                       시장 →
-                    </Link>
-                  </div>
-                )}
-                <div className="flex items-baseline gap-3 py-2.5">
-                  <dt className="w-[52px] shrink-0 text-[12px] text-on-navy-3">보유</dt>
-                  <dd className="min-w-0 flex-1 text-[13px] text-on-navy-2">
-                    {openPicks.length === 0 ? (
-                      "아직 산 픽이 없습니다"
-                    ) : (
-                      <>
-                        <span className="tnum font-bold text-on-navy">{openPicks.length}건</span>
-                        {nearStop > 0 && (
-                          <>
-                            {" · 손절 근접 "}
-                            <span className="tnum font-bold text-down-on-navy">{nearStop}건</span>
-                          </>
-                        )}
-                      </>
-                    )}
-                  </dd>
-                  <Link
-                    href="/picks"
-                    className="shrink-0 text-[11px] text-on-navy-3 transition-colors hover:text-on-navy"
-                  >
-                    성과 →
-                  </Link>
-                </div>
-                {/* 「대기」는 보유와 **다른 줄**이다. 한 줄에 이어 붙였더니 보유 3건 +
-                    대기 2건인 날 "3건 보유 중 · 손절 근접 1건 · 2건이 8/24 진입 대기"가
-                    되어 450px 칸에서 세 줄로 접혔다(2026-08-22). 보유와 대기는 성격이
-                    다르다 — 하나는 «이미 산 것», 하나는 «아직 안 산 계획»이다. */}
-                {pendingCount > 0 && (
-                  <div className="flex items-baseline gap-3 py-2.5">
-                    <dt className="w-[52px] shrink-0 text-[12px] text-on-navy-3">대기</dt>
-                    <dd className="min-w-0 flex-1 text-[13px] text-on-navy-2">
-                      <span className="tnum font-bold text-on-navy">{pendingCount}건</span>
-                      {" — "}
-                      {planDay ?? "다음 거래일"} 시가에 삽니다
-                    </dd>
-                    <Link
-                      href="/focus"
-                      className="shrink-0 text-[11px] text-on-navy-3 transition-colors hover:text-on-navy"
-                    >
-                      오늘의 픽 →
                     </Link>
                   </div>
                 )}
@@ -411,9 +368,9 @@ export default async function HomePage() {
               「오늘의 픽」이 «오늘 살 것»이라면 이건 «이미 산 것»이다. 매일 값이 바뀌는
               건 이쪽인데 홈에는 건수만 있었다(2026-08-22 Victor). 조회는 안 늘었다 —
               getOpenPicks(30) 을 이미 부르고 `.length` 만 쓰고 있었다.
-              보유가 0 건이면 스스로 렌더하지 않는다(네이비 패널이 «아직 없습니다»를
-              이미 말한다). */}
-          <HomeOpenPicks picks={openPicks} />
+              0 건이어도 자리를 지킨다 — 보유가 생기는 날 구조가 통째로 바뀌면 매일
+              오는 사람이 «어제 보던 그 자리»를 잃는다. 빈 상태가 대기 건수를 말한다. */}
+          <HomeOpenPicks picks={openPicks} pendingCount={pendingCount} planDay={planDay} />
 
         </div>
 
