@@ -1483,6 +1483,123 @@ export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
   }
 }
 
+// ── 재현(시뮬레이션) 성과 — basket_type='resim_horizon' ────────────────────
+//
+// 2026-08-22 규칙 교체(지정가 진입 → 시가 진입 · 스타일 축 → 기간 축 · 목표를
+// 본전스톱 트리거로) 이전에 발행된 픽 43건을, 실제 과거 시세로 «새 규칙이었다면
+// 어땠을지» 다시 계산한 것이다(apps/engine/scripts/resim_picks_horizon.py).
+// 픽 1건이 기간 3벌로 펼쳐져 129행이다.
+//
+// ⚠️ 발행 기록이 아니다. 화면에서 반드시 «재현»으로 표기한다 — 실제로 내보낸 픽은
+//    daily_focus 뿐이고, 129개 조합 중 현 게이트를 통과하는 건 2개뿐이다.
+//    게이트 통과 여부는 conviction(1=통과, 0=미통과)에 실려 있다.
+export interface ResimHorizonStat {
+  horizon: string;
+  total: number;
+  open: number;
+  closed: number;
+  wins: number;
+  mean: number | null;
+  gatePassed: number;
+}
+
+export async function getResimHorizonStats(): Promise<Loaded<ResimHorizonStat[]>> {
+  const empty = { data: [] as ResimHorizonStat[], isSample: false };
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("recommendations")
+      .select(
+        "horizon,status,close_return_pct,conviction,as_of,closed_at,instruments(symbol)",
+      )
+      .eq("basket_type", "resim_horizon")
+      .limit(1000);
+    if (error || !data || data.length === 0) return empty;
+
+    // ⚠️ 발행 기록(getPickHistory)과 **같은 방식으로 중복을 제거**해야 한다.
+    // 그쪽은 «보유 중 재선정»을 한 포지션으로 합친다(43픽 → 35포지션). 재현만
+    // 픽 단위로 세면 같은 화면에 분모가 다른 두 숫자가 뜬다 — 비교가 거짓말이 된다.
+    // 기간이 다르면 다른 거래이므로 (종목 × 기간)으로 묶는다.
+    interface Row {
+      horizon: string;
+      symbol: string;
+      as_of: string;
+      closed_at: string | null;
+      status: string;
+      ret: number | null;
+      gate: boolean;
+    }
+    const rows: Row[] = (data as Record<string, unknown>[])
+      .map((r) => ({
+        horizon: (r.horizon as string) ?? "",
+        symbol:
+          ((r.instruments ?? {}) as Record<string, unknown>).symbol as string ?? "",
+        as_of: (r.as_of as string) ?? "",
+        closed_at: (r.closed_at as string) ?? null,
+        status: (r.status as string) ?? "open",
+        ret: (r.close_return_pct as number) ?? null,
+        gate: Number(r.conviction ?? 0) >= 1,
+      }))
+      .filter((r) => r.horizon);
+
+    const byKey = new Map<string, Row[]>();
+    for (const r of rows) {
+      const k = `${r.horizon}|${r.symbol}`;
+      const arr = byKey.get(k);
+      if (arr) arr.push(r);
+      else byKey.set(k, [r]);
+    }
+    const positions: Row[] = [];
+    for (const group of byKey.values()) {
+      group.sort((a, b) => a.as_of.localeCompare(b.as_of));
+      let cur: Row | null = null;
+      for (const r of group) {
+        const within = cur != null && (cur.closed_at == null || r.as_of <= cur.closed_at);
+        if (!within) {
+          cur = r;
+          positions.push(cur);
+        }
+      }
+    }
+
+    const byHz = new Map<string, ResimHorizonStat>();
+    const retCount = new Map<string, number>();
+    for (const r of positions) {
+      const cur =
+        byHz.get(r.horizon) ??
+        {
+          horizon: r.horizon,
+          total: 0,
+          open: 0,
+          closed: 0,
+          wins: 0,
+          mean: null as number | null,
+          gatePassed: 0,
+        };
+      cur.total += 1;
+      if (r.gate) cur.gatePassed += 1;
+      if (r.status === "open" || r.status === "pending") {
+        cur.open += 1;
+      } else {
+        cur.closed += 1;
+        if (r.ret != null) {
+          if (r.ret > 0) cur.wins += 1;
+          cur.mean = (cur.mean ?? 0) + r.ret;
+          retCount.set(r.horizon, (retCount.get(r.horizon) ?? 0) + 1);
+        }
+      }
+      byHz.set(r.horizon, cur);
+    }
+    for (const [hz, st] of byHz) {
+      const n = retCount.get(hz) ?? 0;
+      st.mean = n > 0 && st.mean != null ? st.mean / n : null;
+    }
+    return { data: [...byHz.values()], isSample: false };
+  } catch {
+    return empty;
+  }
+}
+
 export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> {
   try {
     const supabase = createPublicClient();
