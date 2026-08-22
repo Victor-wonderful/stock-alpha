@@ -82,3 +82,24 @@ def test_morning_fallback_brief():
 def test_morning_fallback_empty_picks():
     b = fallback_brief({"regime": None, "picks": []})
     assert b["watchpoints"] == ["오늘 기준 통과 픽 없음 — 신규 진입 관망."]
+
+
+# ── 발행 기간(장기 휴지, 2026-08-22) ──────────────────────────────────
+def test_publishable_combos_drops_long():
+    from engine.signals.horizons import PUBLISH_HORIZONS, publishable_combos
+    assert "long" not in PUBLISH_HORIZONS
+    out = publishable_combos({
+        "capitulation": ["short", "mid"],
+        "leader_trend": ["long"],          # 장기만 통과 → 발행 대상 아님
+        "vol_squeeze": ["short", "long"],  # 장기만 잘린다
+    })
+    assert out == {"capitulation": ["short", "mid"], "vol_squeeze": ["short"]}
+    assert "leader_trend" not in out
+
+
+def test_publishable_combos_keeps_gate_result_intact():
+    """게이트 판정 자체는 건드리지 않는다 — 입력 딕셔너리를 바꾸면 안 된다."""
+    from engine.signals.horizons import publishable_combos
+    gate = {"leader_trend": ["long"], "capitulation": ["short"]}
+    publishable_combos(gate)
+    assert gate == {"leader_trend": ["long"], "capitulation": ["short"]}

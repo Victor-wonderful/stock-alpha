@@ -23,7 +23,7 @@ import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PickCard } from "./_pick-card";
-import { HORIZONS } from "@/lib/holding";
+import { HORIZONS, isHorizonPaused } from "@/lib/holding";
 
 // 레짐 게이지 (3구간 바 + 마커)
 function RegimeGauge({ score, onNavy = false }: { score: number; onNavy?: boolean }) {
@@ -588,7 +588,11 @@ export default async function FocusContent() {
                     </div>
                     {group.length === 0 && (
                       <p className="rounded-[12px] border border-dashed border-border px-4 py-3 text-[12px] text-text-mute">
-                        이 기간에서 기준을 통과한 종목이 없습니다.
+                        {/* «오늘 안 나왔다»와 «아예 쉬는 중»은 다른 말이다.
+                            섞으면 사용자는 내일은 나오려나 하고 기다린다. */}
+                        {isHorizonPaused(hz.key)
+                          ? "발행을 쉬고 있습니다 — 지난 1년 재현에서 성적이 가장 낮아 단기·중기만 내보냅니다."
+                          : "이 기간에서 기준을 통과한 종목이 없습니다."}
                       </p>
                     )}
                     {group.map((p, i) => (

@@ -51,6 +51,23 @@ export const HORIZONS: HorizonSpec[] = [
   },
 ];
 
+// 지금 «발행»하는 기간. 카탈로그(HORIZONS)와 다르다 — 게이트·백테스트는 세 기간을
+// 그대로 재고, 사용자에게 내보내는 것만 줄인다.
+//
+// ⚠️ 엔진의 단일 출처를 복제한 것이다: apps/engine/engine/signals/horizons.py
+//    PUBLISH_HORIZONS. 엔진에서 바꾸면 여기도 바꿔야 한다.
+//
+// 장기를 쉬는 이유(2026-08-22) — 지난 1년 재현에서 셋 중 가장 낮았다
+// (단기 +0.331R · 중기 +0.457R · 장기 +0.204R). 게다가 장기 조합은 최근 60거래일
+// 기대값이 -0.18~-0.37R 로 엣지가 죽어 있고, 그 조합들을 빼고 다시 뽑으면 +0.040R
+// 까지 내려간다 — 빼도 문제, 둬도 문제였다.
+export const PUBLISH_HORIZONS: readonly Horizon[] = ["short", "mid"];
+
+/** 지금 발행을 쉬는 기간인가 — 화면이 «0건»과 «쉬는 중»을 구분하려고 쓴다. */
+export function isHorizonPaused(horizon: string | null | undefined): boolean {
+  return Boolean(horizon) && !PUBLISH_HORIZONS.includes(horizon as Horizon);
+}
+
 const BY_KEY = new Map(HORIZONS.map((h) => [h.key as string, h]));
 
 /** 기간 도입 전 픽·시그널만 쓰는 폴백. 스타일이 보유기간을 정하던 시절의 값. */
