@@ -4,7 +4,7 @@ import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
 import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts, getSignalsBySetups, getBacktests, countSignalsForCombos } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
-import { holdingLabel, holdingApprox } from "@/lib/holding";
+import { holdingLabel, holdingApprox, horizonLabel } from "@/lib/holding";
 import type { SignalView } from "@/lib/types";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -190,15 +190,22 @@ export default async function ScreenerPage({
   // 중 통과 조합은 123건뿐). 셋업 필터 목록도 코드에 하드코딩돼 실제 게이트와
   // 어긋나 있었다. 판정을 backtests 에서 읽어 행마다 표시한다.
   const gate = await getBacktests();
+  // 축은 기간(short/mid/long)이다. 기간 도입 전 행만 style 로 폴백한다.
   const passingCombos = new Set(
-    gate.data.filter((b) => b.passed).map((b) => `${b.setup}|${b.style ?? ""}`),
+    gate.data
+      .filter((b) => b.passed)
+      .map((b) => `${b.setup}|${b.horizon ?? b.style ?? ""}`),
   );
-  const isVerified = (setup: string, style: string) =>
-    passingCombos.has(`${setup}|${style}`);
+  const isVerified = (setup: string, horizon: string | null | undefined, style: string) =>
+    passingCombos.has(`${setup}|${horizon ?? style}`);
   const verifiedCount = await countSignalsForCombos(
     gate.data
-      .filter((b) => b.passed && b.style)
-      .map((b) => ({ setup: b.setup as string, style: b.style as string })),
+      .filter((b) => b.passed)
+      .map((b) => ({
+        setup: b.setup as string,
+        horizon: (b.horizon as string) ?? null,
+        style: (b.style as string) ?? null,
+      })),
   );
 
   // 현재가 — 진입가만 보여주면 "지금 사도 되는 자리인가"를 판단할 수 없다.
@@ -469,9 +476,11 @@ export default async function ScreenerPage({
                               {STYLE_LABELS[r.style] ?? r.style}
                             </span>
                             <span className="text-[10px] text-text-mute">
-                              {holdingLabel(r.style)}
+                              {horizonLabel(r.horizon)
+                                ? `${horizonLabel(r.horizon)} · ${holdingLabel(r.horizon, r.style)}`
+                                : holdingLabel(r.horizon, r.style)}
                             </span>
-                            {!isVerified(r.setup, r.style) && (
+                            {!isVerified(r.setup, r.horizon, r.style) && (
                               <span className="text-[10px] font-semibold text-warn">
                                 ⚠ 미검증
                               </span>
@@ -605,15 +614,20 @@ export default async function ScreenerPage({
                       {/* 보유기간 — "언제까지 들고 있나"에 화면이 답해야 한다.
                           엔진이 이 기간이 지나면 종가로 자동 청산한다. */}
                       <td className="px-3 py-3 whitespace-nowrap">
-                        <span className="text-[11px] font-semibold text-text-dim">
-                          {holdingLabel(s.style)}
-                        </span>
-                        {holdingApprox(s.style) && (
-                          <span className="ml-1 text-[10px] text-text-mute">
-                            {holdingApprox(s.style)}
+                        {horizonLabel(s.horizon) && (
+                          <span className="mr-1 rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
+                            {horizonLabel(s.horizon)}
                           </span>
                         )}
-                        {!isVerified(s.setup, s.style) && (
+                        <span className="text-[11px] font-semibold text-text-dim">
+                          {holdingLabel(s.horizon, s.style)}
+                        </span>
+                        {holdingApprox(s.horizon, s.style) && (
+                          <span className="ml-1 text-[10px] text-text-mute">
+                            {holdingApprox(s.horizon, s.style)}
+                          </span>
+                        )}
+                        {!isVerified(s.setup, s.horizon, s.style) && (
                           <span className="mt-0.5 block text-[10px] font-semibold text-warn">
                             ⚠ 미검증 — 발행 대상 아님
                           </span>

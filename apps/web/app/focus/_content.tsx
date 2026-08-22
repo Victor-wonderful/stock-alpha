@@ -23,6 +23,7 @@ import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PickCard } from "./_pick-card";
+import { HORIZONS } from "@/lib/holding";
 
 // 레짐 게이지 (3구간 바 + 마커)
 function RegimeGauge({ score, onNavy = false }: { score: number; onNavy?: boolean }) {
@@ -572,20 +573,63 @@ export default async function FocusContent() {
                 </div>
               )
             ) : (
-              picks.map((p, i) => (
-                <PickCard
-                  key={p.symbol}
-                  pick={p}
-                  rank={i + 1}
-                  report={reportBySymbol.get(p.symbol)}
-                  riskPct={riskPct}
-                  mini={snowMap.get(p.symbol)?.axes}
-                  lastPrice={priceMap.get(p.symbol)?.close ?? null}
-                  changePct={priceMap.get(p.symbol)?.changePct ?? null}
-                  priceDate={priceMap.get(p.symbol)?.date ?? null}
-                />
-              ))
+              // 기간별 구역 — 같은 날 추천이라도 단기·중기·장기는 «다른 거래»다.
+              // 보유기간이 다르면 진입 방식(분할 여부)·청산 시점·성과 집계가 전부
+              // 갈리므로 한 줄로 세우면 사용자가 섞어 읽는다.
+              HORIZONS.map((hz) => {
+                const group = picks.filter((p) => p.horizon === hz.key);
+                if (group.length === 0) return null;
+                return (
+                  <section key={hz.key} className="space-y-3">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <h3 className="text-[13px] font-bold text-text">
+                        {hz.label} 추천
+                      </h3>
+                      <span className="text-[11px] text-text-dim">
+                        최대 {hz.bars}거래일 · {hz.approx}
+                      </span>
+                      <span className="text-[11px] text-text-mute">
+                        {hz.scaleIn ? "분할 매수" : "시가 전량 매수"}
+                      </span>
+                      <span className="tnum ml-auto text-[11px] text-text-mute">
+                        {group.length}건
+                      </span>
+                    </div>
+                    {group.map((p, i) => (
+                      <PickCard
+                        key={p.symbol}
+                        pick={p}
+                        rank={i + 1}
+                        report={reportBySymbol.get(p.symbol)}
+                        riskPct={riskPct}
+                        mini={snowMap.get(p.symbol)?.axes}
+                        lastPrice={priceMap.get(p.symbol)?.close ?? null}
+                        changePct={priceMap.get(p.symbol)?.changePct ?? null}
+                        priceDate={priceMap.get(p.symbol)?.date ?? null}
+                      />
+                    ))}
+                  </section>
+                );
+              })
             )}
+            {/* 기간이 없는 옛 픽 — 전환 전 발행분이라 구역에 안 잡힌다. 숨기면
+                사용자는 픽이 사라진 걸로 본다. */}
+            {picks.filter((p) => !p.horizon).length > 0 &&
+              picks
+                .filter((p) => !p.horizon)
+                .map((p, i) => (
+                  <PickCard
+                    key={p.symbol}
+                    pick={p}
+                    rank={i + 1}
+                    report={reportBySymbol.get(p.symbol)}
+                    riskPct={riskPct}
+                    mini={snowMap.get(p.symbol)?.axes}
+                    lastPrice={priceMap.get(p.symbol)?.close ?? null}
+                    changePct={priceMap.get(p.symbol)?.changePct ?? null}
+                    priceDate={priceMap.get(p.symbol)?.date ?? null}
+                  />
+                ))}
             {picks.length > 0 && (
               <p className="mt-1 text-[11px] text-text-mute">
                 권장 비중 = 손절 시 손실이 계좌의 {riskPct}%가 되도록 역산(상한 25%) ·{" "}

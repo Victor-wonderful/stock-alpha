@@ -82,6 +82,7 @@ function mapSignal(row: Record<string, unknown>, riskPct: number): SignalView {
     currency: (inst.currency as string) ?? "KRW",
     signal_type: row.signal_type as SignalView["signal_type"],
     style: row.style as SignalView["style"],
+    horizon: (row.horizon as string) ?? null,
     setup: row.setup as SignalView["setup"],
     session: row.session as SignalView["session"],
     strength: Number(row.strength ?? 0),
@@ -348,18 +349,20 @@ export async function getSignalsBySetups(
  * 세야 한다 — 화면에 보이는 100건만 세면 전체를 오도한다.
  */
 export async function countSignalsForCombos(
-  combos: { setup: string; style: string }[],
+  combos: { setup: string; horizon?: string | null; style?: string | null }[],
 ): Promise<number> {
   if (combos.length === 0) return 0;
   try {
     const supabase = createPublicClient();
     const counts = await Promise.all(
-      combos.map(async ({ setup, style }) => {
-        const { count } = await supabase
+      combos.map(async ({ setup, horizon, style }) => {
+        // 축은 기간이다. 기간 도입 전 판정만 style 로 센다.
+        let q = supabase
           .from("signals")
           .select("id", { count: "exact", head: true })
-          .eq("setup", setup)
-          .eq("style", style);
+          .eq("setup", setup);
+        q = horizon ? q.eq("horizon", horizon) : q.eq("style", style ?? "");
+        const { count } = await q;
         return count ?? 0;
       }),
     );
@@ -731,7 +734,7 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("recommendations")
-      .select("instrument_id,basket_type,style,weight,conviction,thesis,entry_price,target_price,tp2_price,stop_loss,as_of,setup,entry_rule,status,instruments(symbol,name)")
+      .select("instrument_id,basket_type,style,weight,conviction,thesis,entry_price,target_price,tp2_price,stop_loss,as_of,setup,entry_rule,status,horizon,instruments(symbol,name)")
       .order("as_of", { ascending: false })
       .order("conviction", { ascending: false })
       .limit(100);
@@ -764,6 +767,7 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
         setup: (r.setup as string) ?? null,
         entry_rule: (r.entry_rule as string) ?? null,
         status: (r.status as string) ?? null,
+        horizon: (r.horizon as string) ?? null,
       };
     });
     return { data: rows, isSample: false };
@@ -1351,6 +1355,9 @@ export function pickBlogPosts(
 // 종가 기반(장중 터치 미반영) — 목표/손절 "도달"은 종가 기준 근사임을 화면에 고지.
 export interface PickRecord {
   as_of: string;
+  /** 보유기간(short/mid/long) — 성과를 (전략 × 기간)으로 나누는 축. 옛 픽은 null. */
+  horizon: string | null;
+  setup: string | null;
   symbol: string;
   name: string;
   entry_price: number | null;
@@ -1478,7 +1485,7 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
     const { data, error } = await supabase
       .from("recommendations")
       .select(
-        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,instrument_id,status,closed_at,exit_price,close_return_pct,instruments(symbol,name)",
+        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,instrument_id,status,closed_at,exit_price,close_return_pct,horizon,setup,instruments(symbol,name)",
       )
       .eq("basket_type", "daily_focus")
       .order("as_of", { ascending: false })
@@ -1493,6 +1500,8 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
         const stop = r.stop_loss as number | null;
         const base = {
           as_of: r.as_of as string,
+          horizon: (r.horizon as string) ?? null,
+          setup: (r.setup as string) ?? null,
           symbol: (inst.symbol as string) ?? "",
           name: (inst.name as string) ?? "",
           entry_price: entry,
@@ -1602,7 +1611,7 @@ export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
     const { data, error } = await supabase
       .from("backtests")
       .select(
-        "setup,style,ic,sharpe,mdd,turnover,win_rate,avg_rr,expectancy_r,passed,period,params,created_at",
+        "setup,style,horizon,ic,sharpe,mdd,turnover,win_rate,avg_rr,expectancy_r,passed,period,params,created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
@@ -1611,7 +1620,9 @@ export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
     // 화면에는 현행 판정 하나만. 과거 런 혼재는 모순된 PASS/FAIL 로 보임.
     const seen = new Set<string>();
     const latest = (data as Record<string, unknown>[]).filter((r) => {
-      const key = `${r.setup}|${r.style ?? ""}`;
+      // 축이 기간으로 바뀌었다 — 같은 셋업의 기간별 판정이 서로 덮어쓰지 않게
+      // 축 값을 키에 넣는다.
+      const key = `${r.setup}|${r.horizon ?? r.style ?? ""}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -1619,6 +1630,7 @@ export async function getBacktests(): Promise<Loaded<BacktestView[]>> {
     const rows: BacktestView[] = latest.map((r: Record<string, unknown>) => ({
       setup: r.setup as BacktestView["setup"],
       style: r.style as BacktestView["style"],
+      horizon: (r.horizon as string) ?? null,
       ic: r.ic as number | null,
       sharpe: r.sharpe as number | null,
       mdd: r.mdd as number | null,

@@ -6,6 +6,7 @@ import {
   NON_TRADE_PICK_STATUSES,
   type PickRecord,
 } from "@/lib/data";
+import { HORIZONS, horizonLabel } from "@/lib/holding";
 import { fmtPct, fmtPrice } from "@/lib/format";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -122,6 +123,69 @@ export default async function PicksPage({
             </div>
           ))}
         </div>
+
+        {/* 기간별 트랙레코드 — 이 개편의 핵심 실익.
+            전체를 한 덩어리로 세면 «어느 전략의 어느 기간이 되는가»를 알 수 없다.
+            단기는 5거래일이면 완결되므로 발행 일주일 뒤부터 진짜 성적이 쌓인다. */}
+        {all.some((r) => r.horizon) && (
+          <div className="rounded-[12px] border border-border bg-surface">
+            <div className="border-b border-border px-4 py-2.5">
+              <span className="text-[12px] font-bold text-text">기간별 성과</span>
+              <span className="ml-2 text-[11px] text-text-mute">
+                보유기간이 다르면 다른 거래다 — 따로 센다
+              </span>
+            </div>
+            <div className="divide-y divide-border-soft">
+              {HORIZONS.map((hz) => {
+                const rows = all.filter((r) => r.horizon === hz.key);
+                const tr = rows.filter((r) => !NON_TRADE_PICK_STATUSES.has(r.status));
+                const won = rows.filter((r) => r.status === "목표 도달");
+                const lost = rows.filter((r) => r.status === "손절");
+                const done = rows.filter((r) => r.closed && r.return_pct != null);
+                const mean =
+                  done.length > 0
+                    ? done.reduce((a, r) => a + (r.return_pct ?? 0), 0) / done.length
+                    : null;
+                return (
+                  <div
+                    key={hz.key}
+                    className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 text-[12px]"
+                  >
+                    <span className="min-w-[8rem] font-bold text-text">
+                      {hz.label}
+                      <span className="ml-1.5 text-[11px] font-normal text-text-mute">
+                        최대 {hz.bars}거래일
+                      </span>
+                    </span>
+                    {rows.length === 0 ? (
+                      <span className="text-text-mute">아직 발행 없음</span>
+                    ) : (
+                      <>
+                        <span className="tnum text-text-dim">발행 {rows.length}건</span>
+                        <span className="tnum text-text-dim">거래 {tr.length}건</span>
+                        <span className="tnum text-good">목표 {won.length}</span>
+                        <span className="tnum text-bad">손절 {lost.length}</span>
+                        <span
+                          className={`tnum ml-auto font-semibold ${
+                            mean == null ? "text-text-mute" : mean >= 0 ? "text-good" : "text-bad"
+                          }`}
+                        >
+                          {mean == null ? "확정 없음" : `평균 ${fmtPct(mean)}`}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              {all.filter((r) => !r.horizon).length > 0 && (
+                <div className="px-4 py-3 text-[11px] text-text-mute">
+                  기간 도입(2026-08-22) 전 발행 {all.filter((r) => !r.horizon).length}건은
+                  기간 구분이 없어 위 집계에서 빠집니다 — 전체 통계에는 포함됩니다.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 상태 필터 */}
         <div className="flex flex-wrap items-center gap-2">
