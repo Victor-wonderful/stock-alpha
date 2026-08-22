@@ -105,10 +105,14 @@ DOWNTREND_BLOCKED_SETUPS = frozenset({"anchor_pullback"})
 
 
 def _pick_suppressed(setup: str | None, market_state: str | None, risk_off: bool) -> bool:
-    """국면별 픽 억제 판정 — 4국면(market_state) 라우팅.
+    """국면별 픽 억제 판정 — 3국면(market_state) 라우팅.
 
     추세장=추세추종 / 횡보=평균회귀 / 하락추세=역추세·수급. 수급(flow_accumulation)은
-    전 국면 허용(어디서도 억제 안 함). market_state 미상이면 구 risk_off 로직(하위호환).
+    전 국면 허용(어디서도 억제 안 함). market_state 미상이면 구 risk_off 로직(하위호환)
+    — 이 폴백은 «레짐 행이 아직 없는 날» 을 위한 것이지 축 부재와는 무관하다.
+
+    ⚠️ 이 라우팅은 아직 «교과서 매핑» 이다(추세장=추세추종 …). 국면별 실측은
+    하락장만 있고 횡보는 없다 → scripts/diag_regime_expectancy 로 재측정 중.
     """
     if market_state is None:
         return bool(
@@ -123,9 +127,9 @@ def _pick_suppressed(setup: str | None, market_state: str | None, risk_off: bool
             or setup in RANGE_SETUPS
             or setup in DOWNTREND_BLOCKED_SETUPS          # 역추세·수급만
         )
-    if market_state == "range":
-        return setup in TREND_PICK_SETUPS or setup in COUNTERTREND_SETUPS  # 평균회귀·수급
-    return setup in TREND_PICK_SETUPS or setup in RANGE_SETUPS  # transition — 보수적
+    # range — 평균회귀·수급만. «전환» 국면은 2026-08-22 에 없앴다(ER 축 제거,
+    # engine/market/regime 참조). 그런 값을 가진 행은 DB 에도 없었다.
+    return setup in TREND_PICK_SETUPS or setup in COUNTERTREND_SETUPS
 
 
 def passed_setups_from_db() -> set[str]:
