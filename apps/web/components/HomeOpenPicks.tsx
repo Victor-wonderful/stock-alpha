@@ -179,45 +179,31 @@ export function HomeOpenPicks({
   // 섹션을 만들어놔라"). 자리를 지워버리면 보유가 생기는 날 화면 구조가 통째로 바뀌어
   // 매일 오는 사람이 «어제 보던 그 자리»를 잃는다.
   if (picks.length === 0) {
+    // 자리를 «채우려» 하지 않는다. 처음엔 유령 행("진입가 —, 수익률 —, …")을 그렸는데
+    // 미리보기가 아니라 **고장난 표**로 읽혔다(2026-08-22 Victor — "이게 뭐야?").
+    // 없는 것은 없다고 한 줄로 말하고, 자리는 작게 잡는다.
     return (
-      <div className="rounded-[12px] border border-dashed border-border-strong bg-surface px-5 py-8">
-        <p className="text-center text-[15px] font-bold text-text">
-          아직 보유 중인 픽이 없습니다
-        </p>
-        <p className="mx-auto mt-2 max-w-[420px] text-center text-[12.5px] leading-relaxed text-text-dim">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-border bg-surface px-5 py-4">
+        <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-text-dim">
+          <span className="font-semibold text-text">아직 보유 중인 픽이 없습니다</span>
           {pendingCount > 0 ? (
             <>
-              오늘의 픽{" "}
+              {" — 오늘의 픽 "}
               <span className="tnum font-semibold text-text">{pendingCount}건</span>이{" "}
               <span className="font-semibold text-text">{planDay ?? "다음 거래일"}</span>{" "}
               시가에 체결되면 여기에 나타납니다.
             </>
           ) : (
-            <>픽이 체결되면 여기에 나타납니다.</>
+            <>. 픽이 체결되면 여기에 나타납니다.</>
           )}
         </p>
-
-        {/* 빈 자리에 «무엇이 들어올지»를 라벨로 보여준다. 점선 상자에 한 줄만 쓰면
-            무엇을 기다리는 자리인지 알 수 없어 그냥 «빈 화면»으로 읽힌다
-            (2026-08-22 Victor — "표시가 하나도 없다"). */}
-        <div className="mx-auto mt-5 grid max-w-[560px] grid-cols-3 gap-px overflow-hidden rounded-[8px] border border-border-soft bg-border-soft sm:grid-cols-6">
-          {["진입가", "현재 손익률", "손절가", "본전 도달가", "보유", "청산 예정일"].map((l) => (
-            <div key={l} className="bg-surface-2 px-2 py-2.5 text-center">
-              <p className="truncate text-[10px] text-text-mute">{l}</p>
-              <p className="mt-1 text-[13px] font-bold text-border-strong">—</p>
-            </div>
-          ))}
-        </div>
-
         {pendingCount > 0 && (
-          <div className="mt-5 text-center">
-            <Link
-              href="/focus"
-              className="inline-flex rounded-[9px] border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-text transition-colors hover:bg-surface-2"
-            >
-              오늘의 픽 보기
-            </Link>
-          </div>
+          <Link
+            href="/focus"
+            className="shrink-0 text-[12px] font-semibold text-accent hover:underline"
+          >
+            오늘의 픽 보기 →
+          </Link>
         )}
       </div>
     );
