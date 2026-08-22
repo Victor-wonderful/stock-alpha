@@ -14,6 +14,9 @@ export interface SignalView {
   currency: string;
   signal_type: SignalKind;
   style: TradeStyle;
+  // 보유기간(2026-08-22~) — short/mid/long. 스타일이 아니라 이 값이 보유상한·
+  // 손절·목표를 정한다. 기간 도입 전 시그널은 null.
+  horizon?: string | null;
   setup: TradeSetup;
   session: TradeSession;
   strength: number;
@@ -111,12 +114,17 @@ export interface RecommendationView {
   // 'limit'(옛 픽) = 전일 종가 지정가.
   entry_rule?: string | null;
   status?: string | null;
+  // 보유기간(2026-08-22~) — short/mid/long. 손절·목표·보유상한을 이 기간이 정한다.
+  // 없는 값은 기간 도입 전 픽(스타일이 기간을 정하던 시절).
+  horizon?: string | null;
 }
 
 // ── 전략·백테스트 ──
 export interface BacktestView {
   setup: TradeSetup;
   style: TradeStyle | null;
+  /** 판정이 가정한 보유기간(short/mid/long). 기간 축 도입 전 행은 null. */
+  horizon?: string | null;
   ic: number | null;
   sharpe: number | null;
   mdd: number | null;
