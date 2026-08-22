@@ -88,11 +88,18 @@ function OpenPickCard({ pick, exitDay }: { pick: OpenPick; exitDay: string | nul
           value={pick.entry != null ? won(pick.entry) : "—"}
           sub={`${pick.asOf.slice(5).replace("-", "/")} 발행`}
         />
+        {/* «수익률»은 누적인지 오늘치인지 모호하다. 진입가 대비 **지금** 값이므로
+            이름을 그대로 적는다(2026-08-22 Victor). 보조에는 1주당 손익 금액을 —
+            비율만 보면 «얼마 벌었나»가 안 잡힌다. */}
         <PickCell
-          label="수익률"
+          label="현재 손익률"
           tone={pick.returnPct == null ? "plain" : pick.returnPct >= 0 ? "up" : "down"}
           value={pick.returnPct != null ? fmtPct(pick.returnPct) : "—"}
-          sub="진입가 대비"
+          sub={
+            pick.entry != null && pick.last != null
+              ? `1주당 ${pick.last - pick.entry >= 0 ? "+" : ""}${won(pick.last - pick.entry)}원`
+              : "진입가 대비"
+          }
         />
         <PickCell
           label="손절가"
@@ -173,18 +180,45 @@ export function HomeOpenPicks({
   // 매일 오는 사람이 «어제 보던 그 자리»를 잃는다.
   if (picks.length === 0) {
     return (
-      <div className="rounded-[12px] border border-dashed border-border bg-surface/50 px-5 py-10 text-center">
-        <p className="text-[13px] text-text-dim">아직 산 픽이 없습니다.</p>
-        <p className="mt-1 text-[12px] text-text-mute">
+      <div className="rounded-[12px] border border-dashed border-border-strong bg-surface px-5 py-8">
+        <p className="text-center text-[15px] font-bold text-text">
+          아직 보유 중인 픽이 없습니다
+        </p>
+        <p className="mx-auto mt-2 max-w-[420px] text-center text-[12.5px] leading-relaxed text-text-dim">
           {pendingCount > 0 ? (
             <>
-              <span className="tnum font-semibold text-text-dim">{pendingCount}건</span>이{" "}
-              {planDay ?? "다음 거래일"} 시가에 들어옵니다.
+              오늘의 픽{" "}
+              <span className="tnum font-semibold text-text">{pendingCount}건</span>이{" "}
+              <span className="font-semibold text-text">{planDay ?? "다음 거래일"}</span>{" "}
+              시가에 체결되면 여기에 나타납니다.
             </>
           ) : (
-            "픽이 체결되면 수익률과 손절까지 남은 거리가 여기 쌓입니다."
+            <>픽이 체결되면 여기에 나타납니다.</>
           )}
         </p>
+
+        {/* 빈 자리에 «무엇이 들어올지»를 라벨로 보여준다. 점선 상자에 한 줄만 쓰면
+            무엇을 기다리는 자리인지 알 수 없어 그냥 «빈 화면»으로 읽힌다
+            (2026-08-22 Victor — "표시가 하나도 없다"). */}
+        <div className="mx-auto mt-5 grid max-w-[560px] grid-cols-3 gap-px overflow-hidden rounded-[8px] border border-border-soft bg-border-soft sm:grid-cols-6">
+          {["진입가", "현재 손익률", "손절가", "본전 도달가", "보유", "청산 예정일"].map((l) => (
+            <div key={l} className="bg-surface-2 px-2 py-2.5 text-center">
+              <p className="truncate text-[10px] text-text-mute">{l}</p>
+              <p className="mt-1 text-[13px] font-bold text-border-strong">—</p>
+            </div>
+          ))}
+        </div>
+
+        {pendingCount > 0 && (
+          <div className="mt-5 text-center">
+            <Link
+              href="/focus"
+              className="inline-flex rounded-[9px] border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-text transition-colors hover:bg-surface-2"
+            >
+              오늘의 픽 보기
+            </Link>
+          </div>
+        )}
       </div>
     );
   }

@@ -383,39 +383,40 @@ export default async function HomePage() {
         </div>
 
         {/* ── 밴드 2 · 진행 중 ──
-            밴드 1 과 같은 짝이다 — 좌 = 전체가 어떤가(요약), 우 = 종목별로 어떤가(카드).
-            카드 모양은 「오늘의 픽」과 같다(Victor 요청). 같은 종류의 것(한 종목의 매매
-            계획)이라 다른 모양으로 그릴 이유가 없다. 다만 칸의 내용이 다르다:
+            보유가 있으면 밴드 1 과 같은 짝이 된다 — 좌 = 전체가 어떤가(요약),
+            우 = 종목별로 어떤가(카드). 카드 모양은 「오늘의 픽」과 같다(Victor 요청):
               오늘의 픽 = «앞으로 어떻게 할 것인가» (비중 · 1주당 리스크)
               진행 중   = «지금 어디까지 왔나»     (수익률 · 보유일수 · 남은 거리)
-            0 건이어도 밴드는 남는다 — 보유가 생기는 날 구조가 통째로 바뀌면 매일 오는
+
+            ⚠️ 0 건이면 **좌우로 가르지 않는다**. 처음엔 갈랐더니 좌측 요약과 우측 빈
+            상자가 «1건이 8/24 시가에 들어옵니다»를 나란히 두 번 말했다(2026-08-22
+            Victor — "표시가 하나도 없다"). 빈 것을 둘로 나누면 두 배로 비어 보인다.
+            섹션 자체는 남는다 — 보유가 생기는 날 구조가 통째로 바뀌면 매일 오는
             사람이 «어제 보던 그 자리»를 잃는다. */}
-        <div className="mt-12 grid items-start gap-x-8 gap-y-6 lg:grid-cols-[1fr_2fr]">
-          <HomeOpenSummary
-            picks={openPicks}
-            pendingCount={pendingCount}
-            planDay={planDay}
-          />
-          <div>
-            <div className="mb-3 flex items-baseline justify-between gap-3">
-              <h2 className="text-sm font-bold text-text">
-                진행 중{" "}
-                <span className="text-[11px] font-medium text-text-mute">
-                  {openPicks.length > 0 ? "손절 가까운 순" : "이미 산 픽"}
-                </span>
-              </h2>
-              <Link href="/picks" className="text-[11px] text-accent hover:underline">
-                전체 기록 →
-              </Link>
-            </div>
-            <HomeOpenPicks
-              picks={openPicks}
-              exitDays={openExitDays}
-              pendingCount={pendingCount}
-              planDay={planDay}
-            />
+        <section className="mt-12">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-bold text-text">
+              진행 중{" "}
+              <span className="text-[11px] font-medium text-text-mute">
+                {openPicks.length > 0
+                  ? `이미 산 픽 ${openPicks.length}건 · 손절 가까운 순`
+                  : "이미 산 픽"}
+              </span>
+            </h2>
+            <Link href="/picks" className="text-[11px] text-accent hover:underline">
+              전체 기록 →
+            </Link>
           </div>
-        </div>
+
+          {openPicks.length === 0 ? (
+            <HomeOpenPicks picks={[]} pendingCount={pendingCount} planDay={planDay} />
+          ) : (
+            <div className="grid items-start gap-x-8 gap-y-6 lg:grid-cols-[1fr_2fr]">
+              <HomeOpenSummary picks={openPicks} />
+              <HomeOpenPicks picks={openPicks} exitDays={openExitDays} />
+            </div>
+          )}
+        </section>
 
         {/* ── 밴드 2 · 읽을 것 ── */}
         <div className="mt-12 grid items-start gap-x-8 gap-y-10 lg:grid-cols-[2fr_1fr]">

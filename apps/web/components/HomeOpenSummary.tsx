@@ -44,7 +44,7 @@ export function HomeOpenSummary({
           <span
             className={`tnum text-[15px] font-bold ${avgRet >= 0 ? "text-good" : "text-bad"}`}
           >
-            평균 {fmtPct(avgRet)}
+            현재 손익률 평균 {fmtPct(avgRet)}
           </span>
         )}
       </div>
