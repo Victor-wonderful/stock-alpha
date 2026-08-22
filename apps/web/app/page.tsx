@@ -38,11 +38,12 @@ import { horizonSpec } from "@/lib/holding";
  * 요약본이라 섹션 8개 중 7개가 중복이었고, 첫 화면에 종목이 하나도 없었다.
  * 그래서 여기서는 **상태만** 보여주고 실행 계획은 「오늘의 픽」으로 보낸다.
  *
- *   홈        = 국면 · 오늘 몇 건 · 진행 중 몇 건 · 어디로 갈까   ← 상태판
- *   오늘의 픽 = 선정 과정 · 기간별 진입/손절/본전스톱 · 빈 날 화면 ← 실행 계획
+ *   홈        = 오늘 살 것을 «끝까지» (상위 3건, 레벨·비중·청산 기한까지)
+ *   오늘의 픽 = 전 기간 · 선정 과정 · 대기 목록 · 시장 브리프 등 «전부와 그 근거»
  *
- * 그래서 여기엔 픽을 **상위 3건까지만** 이름·기간·셋업 수준으로 얹는다. 표·필터·
- * 가격 레벨을 넣는 순간 두 화면이 같아진다 — 그게 예전 홈이 실패한 이유다.
+ * ⚠️ 2026-08-22 에 이 경계를 옮겼다. 원래는 «홈=상태판 / 픽=실행 계획»이었는데, 픽이
+ * 하루 0~1건인 지금 그렇게 가르면 홈이 «오리온이 있다»만 말하고 끝나 반이 빈다.
+ * 그래도 «전부»는 오늘의 픽이 갖는다 — 홈은 3건까지다(PICKS_MAX=5).
  *
  * 시황·최근 보도는 「시장」, 주간 브리핑 본문은 「인사이트」가 갖는다. 여기서는
  * 링크만 건다.
@@ -279,6 +280,67 @@ export default async function HomePage() {
                   ? "직전 거래일 종가로 분석해 다음 거래일 시가 진입을 전제로 계산했습니다."
                   : "기준을 통과한 종목이 없으면 억지로 채우지 않습니다. 쉬는 것도 판단입니다."}
               </p>
+              {/* ── 오늘 요약 ──
+                  예전엔 이 아래에 「오늘 시장은」·「진행 중」이 흰 카드 두 장으로 따로
+                  서 있었다. 셋 다 «오늘의 상태»인데 네이비 1 + 흰 카드 2 로 흩어져
+                  좁은 칸에서 조각처럼 보였다(2026-08-22 Victor — "영 이상하다").
+                  같은 것을 말하면 같은 면에 있어야 한다 — 한 패널로 합쳤다.
+                  네이비 위라 시세 적/청은 밝은 변형(up/down-on-navy)을 쓴다. */}
+              <dl className="mt-4 divide-y divide-on-navy/10 border-y border-on-navy/10">
+                {brief.data?.market && (
+                  <div className="flex items-baseline gap-3 py-2.5">
+                    <dt className="w-[52px] shrink-0 text-[12px] text-on-navy-3">시장</dt>
+                    <dd className="min-w-0 flex-1 text-[13px] text-on-navy-2">
+                      오른 종목{" "}
+                      <span className="tnum font-bold text-up-on-navy">
+                        {brief.data.market.advancers.toLocaleString("ko-KR")}
+                      </span>{" "}
+                      · 내린 종목{" "}
+                      <span className="tnum font-bold text-down-on-navy">
+                        {brief.data.market.decliners.toLocaleString("ko-KR")}
+                      </span>
+                    </dd>
+                    <Link
+                      href="/market"
+                      className="shrink-0 text-[11px] text-on-navy-3 transition-colors hover:text-on-navy"
+                    >
+                      시장 →
+                    </Link>
+                  </div>
+                )}
+                <div className="flex items-baseline gap-3 py-2.5">
+                  <dt className="w-[52px] shrink-0 text-[12px] text-on-navy-3">보유</dt>
+                  <dd className="min-w-0 flex-1 text-[13px] text-on-navy-2">
+                    {openPicks.length === 0 ? (
+                      <>아직 산 픽이 없습니다</>
+                    ) : (
+                      <>
+                        <span className="tnum font-bold text-on-navy">{openPicks.length}건</span>{" "}
+                        보유 중
+                        {nearStop > 0 && (
+                          <>
+                            {" · 손절 근접 "}
+                            <span className="tnum font-bold text-down-on-navy">{nearStop}건</span>
+                          </>
+                        )}
+                      </>
+                    )}
+                    {pendingCount > 0 && (
+                      <>
+                        {openPicks.length === 0 ? " — " : " · "}
+                        <span className="tnum font-bold text-on-navy">{pendingCount}건</span>이{" "}
+                        {planDay ?? "다음 거래일"} 진입 대기
+                      </>
+                    )}
+                  </dd>
+                  <Link
+                    href="/picks"
+                    className="shrink-0 text-[11px] text-on-navy-3 transition-colors hover:text-on-navy"
+                  >
+                    성과 →
+                  </Link>
+                </div>
+              </dl>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Link
                   href="/focus"
@@ -294,101 +356,10 @@ export default async function HomePage() {
                 </Link>
               </div>
             </section>
-
-            {/* ── 오늘 시장은 ──
-                아침 브리핑은 홈이 이미 통째로 조회하는데 날짜 한 줄만 쓰고 버리고 있었다
-                (2026-08-22). 시장 메뉴의 요약본을 만들지 않는다 — 그날 폭 한 문장과 링크
-                뿐이다. 지표·공시·레짐은 시장이 갖는다. */}
-            {brief.data?.market ? (
-              <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
-                <div className="mb-2 flex items-baseline justify-between gap-3">
-                  <h2 className="text-sm font-bold text-text">오늘 시장은</h2>
-                  <Link href="/market" className="text-[11px] text-accent hover:underline">
-                    시장 →
-                  </Link>
-                </div>
-                <p className="text-[14px] leading-relaxed text-text">
-                  오른 종목{" "}
-                  <span className="tnum font-bold text-good">
-                    {brief.data.market.advancers.toLocaleString("ko-KR")}
-                  </span>{" "}
-                  · 내린 종목{" "}
-                  <span className="tnum font-bold text-bad">
-                    {brief.data.market.decliners.toLocaleString("ko-KR")}
-                  </span>
-                </p>
-                <p className="mt-1.5 text-[11px] text-text-mute">
-                  {brief.data.market.as_of} 종가 기준
-                  {brief.data.market.baseline.up_rate_1d != null && (
-                    <>
-                      {" · "}보통은 10번 중{" "}
-                      {Math.round(brief.data.market.baseline.up_rate_1d * 10)}번쯤 오릅니다
-                    </>
-                  )}
-                </p>
-              </section>
-            ) : (
-              <div />
-            )}
-
-            {/* ── 진행 중 ── */}
-            <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
-                <div className="mb-3 flex items-baseline justify-between gap-3">
-                  <h2 className="text-sm font-bold text-text">진행 중</h2>
-                  <Link href="/picks" className="text-[11px] text-accent hover:underline">
-                    성과 →
-                  </Link>
-                </div>
-                {/* 숫자 크기는 «중요도»를 뜻하는데 0 은 중요하지 않다. 아무것도 없는 날
-                    "0건 0건"을 24px 볼드로 두 번 찍어 시선을 뺏고 있었다(2026-08-22).
-                    보유가 없으면 문장 한 줄로 말하고, 한 건이라도 있으면 숫자로 돌아간다. */}
-                {openPicks.length === 0 ? (
-                  <p className="text-[12.5px] leading-relaxed text-text-mute">
-                    {pendingCount > 0 ? (
-                      <>
-                        아직 산 픽이 없습니다.
-                        <br />
-                        오늘 낸{" "}
-                        <span className="font-semibold text-text-dim">{pendingCount}건</span>이{" "}
-                        {planDay ?? "다음 거래일"} 시가 진입을 기다립니다.
-                      </>
-                    ) : (
-                      <>
-                        보유 중인 픽이 없습니다.
-                        <br />
-                        손절 근접도 없습니다.
-                      </>
-                    )}
-                  </p>
-                ) : (
-                  <div className="flex items-baseline gap-5">
-                    <div>
-                      <p className="text-[11px] text-text-mute">보유 중</p>
-                      <p className="tnum text-2xl font-bold text-text">{openPicks.length}건</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-text-mute">손절 근접</p>
-                      <p className={`tnum text-2xl font-bold ${nearStop > 0 ? "text-bad" : "text-text-dim"}`}>
-                        {nearStop}건
-                      </p>
-                    </div>
-                    {/* 보유가 있는 날에도 «오늘 낸 건 아직 안 샀다»를 같이 말해야
-                        「오늘의 픽」 카드의 건수와 어긋나지 않는다. */}
-                    {pendingCount > 0 && (
-                      <div>
-                        <p className="text-[11px] text-text-mute">진입 대기</p>
-                        <p className="tnum text-2xl font-bold text-text-dim">{pendingCount}건</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-            </section>
-
           </div>
 
-          {/* ── 오늘의 픽 — 전폭 실행 카드 ──
-              표가 4열이라 사이드컬럼(1fr)에 넣으면 칸이 뭉개진다. 픽을 본문 폭 전체로
-              올리고, 상태 카드(진행 중·읽을 것)를 그 아래로 내렸다. */}
+          {/* ── 오늘의 픽 — 밴드 1 우측(2fr) ──
+              6칸 표라 넓은 쪽이 제자리다. 1fr(≈450px)에 넣으면 칸이 뭉개진다. */}
           <section>
             <div className="mb-3 flex items-baseline justify-between gap-3">
               <h2 className="text-sm font-bold text-text">오늘의 픽</h2>
