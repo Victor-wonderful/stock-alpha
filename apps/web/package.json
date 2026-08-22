@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:preview": "next dev --port 4010",
+    "dev:verify": "next dev",
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "next lint",
