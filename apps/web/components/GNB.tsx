@@ -18,17 +18,26 @@ import { VectaLogo } from "@/components/VectaLogo";
 // alpha-zone 은 추천 큐레이션에 흡수돼 더는 탐색 메뉴가 아님 → 추천 match 유지(레거시 라우트).
 // 2026-08-22 (IA 1단계): 「홈」을 지우고 추천을 그 자리에 올렸다. 홈은 독립 화면이
 // 아니라 다른 화면들의 요약본이었다(섹션 8개 중 7개가 중복). app/page.tsx 주석 참조.
+// 메뉴 8개 (2026-08-22 Victor 확정). 이름이 곧 «그 화면이 답하는 질문»이다.
+//   홈        오늘 무슨 일이 있었나 — 상태판
+//   오늘의 픽  그래서 뭘 사나 — 실행 계획(진입·손절·비중)
+//   스크리너   조건으로 찾는다 — 탐색 도구(매수 추천 아님)
+//   분석      이 종목 어때 — 개별 종목 판단
+//   시장      지금 장이 어떤가
+//   인사이트   읽을 것
+//   성과      우리가 잘하고 있나
+//   내 자산    내 조합은 괜찮나(관심·리스크 진단·알림)
+// ⚠️ 8개는 모바일 한 줄에 안 들어간다 — 모바일 이동은 하단 탭바가 맡는다
+//    (components/BottomNav). 이 nav 는 md 이상에서만 보인다.
 const NAV_ITEMS = [
-  { href: "/", label: "추천", exact: true, match: ["/focus", "/alpha-zone"] },
+  { href: "/", label: "홈", exact: true },
+  { href: "/focus", label: "오늘의 픽", match: ["/focus", "/alpha-zone"] },
   { href: "/screener", label: "스크리너" },
-  { href: "/reports", label: "종목", match: ["/reports", "/stocks"] },
+  { href: "/reports", label: "분석", match: ["/reports", "/stocks"] },
   { href: "/market", label: "시장" },
-  // ⑥ 인사이트 = /insights(주간 브리핑·매크로 — 「읽을 것」).
-  // 2026-08-20 추가: 홈에 주간 브리핑 섹션을 세웠는데 정작 «전체 보기»가 갈 데가 없었다.
-  // /market 은 지표·레짐 화면이지 브리핑 목록이 아니다. 브리핑이 쌓일수록 그 공백이 커진다.
   { href: "/insights", label: "인사이트" },
-  { href: "/watchlist", label: "내 자산", match: ["/watchlist", "/diagnosis", "/alerts"] },
   { href: "/picks", label: "성과" },
+  { href: "/watchlist", label: "내 자산", match: ["/watchlist", "/diagnosis", "/alerts"] },
 ] as const;
 
 export function GNB() {
@@ -47,8 +56,10 @@ export function GNB() {
         </Link>
 
         {/* 네비게이션 — min-w-0 이 있어야 flex 자식이 실제로 줄어들어 스크롤이 생긴다 */}
+        {/* 모바일(md 미만)에서는 숨긴다 — 375px 에서 메뉴 3개만 보이고 나머지는 옆으로
+            밀어야 나왔다. 이동은 하단 탭바(components/BottomNav)가 맡는다. */}
         <nav
-          className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+          className="no-scrollbar hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto md:flex"
           aria-label="주 메뉴"
         >
           {NAV_ITEMS.map((item) => {

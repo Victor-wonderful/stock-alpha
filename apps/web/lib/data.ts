@@ -739,6 +739,11 @@ export async function getRecommendations(): Promise<Loaded<RecommendationView[]>
     const { data, error } = await supabase
       .from("recommendations")
       .select("instrument_id,basket_type,style,weight,conviction,thesis,entry_price,target_price,tp2_price,stop_loss,as_of,setup,entry_rule,status,horizon,instruments(symbol,name)")
+      // 재현(시뮬레이션) 바스켓은 «발행»이 아니다 — 추천 목록에 섞이면 안 된다.
+      // 2026-08-22 실제로 섞여 홈·오늘의 픽에 계산값 20건이 추천으로 떴다.
+      // 이 함수는 바스켓별 최신 as_of 행을 남기는 구조라, 새 바스켓이 생기면
+      // 자동으로 딸려 들어온다. 발행 아닌 바스켓은 여기서 명시적으로 뺀다.
+      .neq("basket_type", "resim_horizon")
       .order("as_of", { ascending: false })
       .order("conviction", { ascending: false })
       .limit(100);

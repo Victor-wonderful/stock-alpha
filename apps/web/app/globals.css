@@ -176,3 +176,11 @@ body {
     animation-iteration-count: infinite !important;
   }
 }
+
+/* 모바일 하단 탭바(components/BottomNav) 높이만큼 본문 아래를 비운다.
+   안 비우면 마지막 카드가 탭바에 가린다. md 이상에서는 탭바가 없으므로 0. */
+@media (max-width: 767px) {
+  body {
+    padding-bottom: calc(58px + env(safe-area-inset-bottom));
+  }
+}

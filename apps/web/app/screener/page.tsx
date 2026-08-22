@@ -257,7 +257,7 @@ export default async function ScreenerPage({
         </span>
       }
     >
-      {/* 스크리너 = 독립 시그널 탐색 메뉴(IA 2026-06-24). 추천 탭·국면 헤더 없음 — 순수 탐색 도구. */}
+      {/* 스크리너 = 독립 시그널 탐색 메뉴. 추천 탭·국면 헤더 없음 — 순수 탐색 도구. */}
       {isSample && (
         <div className="mb-4">
           <SampleBadge />

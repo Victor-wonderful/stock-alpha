@@ -119,13 +119,7 @@ function HowItWorks({ analyzed }: { analyzed: number }) {
   );
 }
 
-export default async function FocusContent({
-  hero,
-}: {
-  /** 본문 맨 위에 얹을 것 — 홈(`/`)이 비로그인 방문자에게 배너를 넣는다.
-   *  이 화면이 곧 홈이라 배너를 «화면 밖»에 둘 자리가 없다(GNB·main 을 여기서 그린다). */
-  hero?: React.ReactNode;
-} = {}) {
+export default async function FocusContent() {
   const [recs, allReports, history, brief, riskPct, marketState, backtests] =
     await Promise.all([
       getRecommendations(),
@@ -271,12 +265,11 @@ export default async function FocusContent({
     <div className="flex min-h-screen flex-col bg-bg">
       <GNB />
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-7 py-7 pb-10">
-        {hero}
         {/* ── 페이지 헤더 ── */}
         <div id="today-picks" className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold text-text">추천</h1>
+              <h1 className="text-xl font-bold text-text">오늘의 픽</h1>
               {basisDay && (
                 <span className="rounded-[999px] bg-surface-3 px-2.5 py-1 text-[10px] font-semibold text-text-dim">
                   {basisDay} 종가 분석
