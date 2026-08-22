@@ -1,0 +1,135 @@
+{
+  "generatedAt": "2026-08-22",
+  "start": "2025-08-12",
+  "end": "2026-08-21",
+  "tradingDays": 250,
+  "universe": 870,
+  "picksMax": 5,
+  "entryMode": "open",
+  "candidates": 12985,
+  "variants": {
+    "current": {
+      "label": "현재 게이트",
+      "combos": 12,
+      "byHorizon": [
+        {
+          "horizon": "short",
+          "n": 446,
+          "wins": 182,
+          "meanR": 0.3308,
+          "medianR": -0.3393,
+          "meanRetPct": 0.2772
+        },
+        {
+          "horizon": "mid",
+          "n": 388,
+          "wins": 164,
+          "meanR": 0.4568,
+          "medianR": -0.0601,
+          "meanRetPct": 0.2337
+        },
+        {
+          "horizon": "long",
+          "n": 259,
+          "wins": 94,
+          "meanR": 0.2038,
+          "medianR": -0.0906,
+          "meanRetPct": 0.1514
+        }
+      ]
+    },
+    "recentFloor": {
+      "label": "최근 60일 기대값 ≥ 0",
+      "combos": 8,
+      "byHorizon": [
+        {
+          "horizon": "short",
+          "n": 446,
+          "wins": 182,
+          "meanR": 0.3308,
+          "medianR": -0.3393,
+          "meanRetPct": 0.2772
+        },
+        {
+          "horizon": "mid",
+          "n": 388,
+          "wins": 164,
+          "meanR": 0.4568,
+          "medianR": -0.0601,
+          "meanRetPct": 0.2337
+        },
+        {
+          "horizon": "long",
+          "n": 190,
+          "wins": 64,
+          "meanR": 0.0396,
+          "medianR": -0.137,
+          "meanRetPct": 0.0645
+        }
+      ]
+    }
+  },
+  "recentByCombo": {
+    "anchor_pullback:mid": {
+      "n": 1,
+      "meanR": null,
+      "faded": false
+    },
+    "bayes:long": {
+      "n": 56,
+      "meanR": -0.3728,
+      "faded": true
+    },
+    "capitulation:mid": {
+      "n": 345,
+      "meanR": 0.1149,
+      "faded": false
+    },
+    "capitulation:short": {
+      "n": 361,
+      "meanR": 0.322,
+      "faded": false
+    },
+    "double_bottom:mid": {
+      "n": 65,
+      "meanR": 0.2994,
+      "faded": false
+    },
+    "double_bottom:short": {
+      "n": 71,
+      "meanR": 0.3952,
+      "faded": false
+    },
+    "leader_trend:long": {
+      "n": 88,
+      "meanR": -0.1757,
+      "faded": true
+    },
+    "oversold_bounce:short": {
+      "n": 180,
+      "meanR": 0.6045,
+      "faded": false
+    },
+    "pead:long": {
+      "n": 4,
+      "meanR": null,
+      "faded": false
+    },
+    "pullback:long": {
+      "n": 7,
+      "meanR": null,
+      "faded": false
+    },
+    "sortino:long": {
+      "n": 70,
+      "meanR": -0.3192,
+      "faded": true
+    },
+    "vol_squeeze:short": {
+      "n": 181,
+      "meanR": -0.5194,
+      "faded": true
+    }
+  },
+  "caveat": "종목 간 순위는 리포트 점수 대신 조합 기대값·거래대금으로 근사했다. 그 외 진입·청산·게이트·국면 억제는 라이브와 같은 코드다."
+}

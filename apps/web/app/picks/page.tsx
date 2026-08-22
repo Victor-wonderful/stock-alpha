@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
+import { BackfillTrackRecord } from "@/components/BackfillTrackRecord";
 import {
   getPickHistory,
   getResimHorizonStats,
@@ -190,6 +191,9 @@ export default async function PicksPage({
             </div>
           </div>
         )}
+
+        {/* 지난 1년 재현 — 표본이 가장 큰 성과 근거라 재현 블록 중 맨 위에 둔다. */}
+        <BackfillTrackRecord />
 
         {/* 규칙 교체 재현 — 발행 기록이 아니라 «계산»이다.
             2026-08-22 에 진입·축·청산 규칙을 한꺼번에 바꿨는데, 그 이전 픽은 전부
