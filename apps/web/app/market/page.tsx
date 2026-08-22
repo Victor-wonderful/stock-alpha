@@ -1,14 +1,18 @@
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
+import { MarketBrief } from "@/components/MarketBrief";
+import { RecentCoverage } from "@/components/RecentCoverage";
 import { Badge } from "@/components/ui/badge";
 import { SampleBadge } from "@/components/ui";
 import { Sparkline } from "@/components/ui/Sparkline";
 import {
+  getEventEvidence,
+  getLatestDisclosures,
   getMarket,
   getMarketQuotes,
+  getMorningBrief,
+  getNextTradingDay,
   getSignalSectorCounts,
-  getLatestDisclosures,
-  getEventEvidence,
 } from "@/lib/data";
 import {
   VERDICT_CLASS,
@@ -136,12 +140,31 @@ export default async function MarketPage() {
   const maxMom = Math.max(...sectors.map((s) => Math.abs(s.momentum)), 1);
   const maxSignalCnt = Math.max(...signalSectors.map((s) => s.count), 1);
 
+  // 오늘의 시황 — 2026-08-22 에 홈에서 옮겨 왔다(IA 1단계).
+  // 내용은 «전망»이 아니라 «오늘 무슨 일이 있었나 + 과거 같은 상황의 빈도»다.
+  // 442거래일 측정에서 무조건 "오른다"의 적중률이 55.3%였다 — 전망을 쓰면 그 55%가
+  // 시스템 실력으로 읽힌다. MarketBrief 는 기준선과 뚜렷한 차이가 없으면 아예
+  // 표시하지 않는다(components/MarketBrief 주석). 그 판단을 잃지 않으려고 옮겼다.
+  const brief = await getMorningBrief();
+  const briefAsOf = brief.data?.as_of ?? null;
+  const briefPlanDay = briefAsOf ? await getNextTradingDay(briefAsOf) : null;
+
   return (
     <AppShell
       title="시장"
       subtitle="매크로 · 레짐 · 섹터 로테이션"
       badge={isSample ? <SampleBadge /> : undefined}
     >
+      {brief.data?.market && (
+        <section className="mb-5 rounded-[12px] border border-border-soft bg-surface/40 p-5">
+          <MarketBrief market={brief.data.market} planDay={briefPlanDay} />
+        </section>
+      )}
+
+      {/* 최근 보도 — 2026-08-22 에 홈에서 옮겨 왔다(IA 1단계). 보도는 종목 판단이
+          아니라 «맥락»이라 시장이 제자리다. */}
+      <RecentCoverage />
+
       {/* ── 공시 모음 ──
           호재·중립·악재를 좌우중간 3열로 모두 보여준다. 한 덩어리로 뽑아 자르면
           건수 많은 방향이 나머지를 밀어내 통째로 사라진다(초기 구현에서 악재 30건이

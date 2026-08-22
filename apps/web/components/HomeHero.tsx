@@ -42,7 +42,7 @@ export function HomeHero() {
 
         <div className="flex flex-wrap items-center gap-[11px] pt-1 xl:pt-0.5">
           <Link
-            href="/focus"
+            href="#today-picks"
             className="inline-flex min-h-10 items-center rounded-[9px] bg-accent px-6 text-[14px] font-semibold text-on-navy transition-colors duration-200 hover:bg-accent-2"
           >
             오늘의 추천<span className="hidden sm:inline"> 보기</span>

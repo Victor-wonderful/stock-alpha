@@ -16,9 +16,10 @@ import { VectaLogo } from "@/components/VectaLogo";
 // 우측 아이콘: 검색→/reports(종목 검색 허브), 알림→/alerts.
 // match: 통합 메뉴는 흡수한 구 라우트도 활성으로 표시(③ 종목=리포트·종목상세, ⑥ 내 자산=관심·진단).
 // alpha-zone 은 추천 큐레이션에 흡수돼 더는 탐색 메뉴가 아님 → 추천 match 유지(레거시 라우트).
+// 2026-08-22 (IA 1단계): 「홈」을 지우고 추천을 그 자리에 올렸다. 홈은 독립 화면이
+// 아니라 다른 화면들의 요약본이었다(섹션 8개 중 7개가 중복). app/page.tsx 주석 참조.
 const NAV_ITEMS = [
-  { href: "/", label: "홈", exact: true },
-  { href: "/focus", label: "추천", match: ["/focus", "/alpha-zone"] },
+  { href: "/", label: "추천", exact: true, match: ["/focus", "/alpha-zone"] },
   { href: "/screener", label: "스크리너" },
   { href: "/reports", label: "종목", match: ["/reports", "/stocks"] },
   { href: "/market", label: "시장" },
@@ -53,9 +54,12 @@ export function GNB() {
           {NAV_ITEMS.map((item) => {
             const matchPaths =
               "match" in item && item.match ? item.match : [item.href];
+            // exact 항목("/")은 startsWith 로 판정할 수 없다 — 모든 경로가 걸린다.
+            // 그래서 href 는 정확히, match 목록은 접두어로 본다.
+            const hit = (p: string) => path === p || path.startsWith(p + "/");
             const active = ("exact" in item && item.exact)
-              ? path === item.href
-              : matchPaths.some((p) => path === p || path.startsWith(p + "/"));
+              ? path === item.href || matchPaths.some(hit)
+              : matchPaths.some(hit);
             return (
               <Link
                 key={item.href}
