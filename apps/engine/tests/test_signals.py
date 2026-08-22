@@ -245,3 +245,47 @@ def test_all_horizons_use_trail_on_target():
     from engine.signals.horizons import all_profiles
 
     assert all(p.target_action == "trail" for p in all_profiles())
+
+
+# ── 기간별 발행 (horizons_by_setup) ──
+
+def test_generate_signals_emits_one_row_per_horizon():
+    """한 트리거가 통과 기간마다 1행 — 손절·목표는 그 기간 프로파일로 산출된다."""
+    from engine.signals.horizons import get_profile
+
+    df = _uptrend()
+    rows = generate_signals(
+        df, instrument_id=3, risk_per_trade_pct=1.0, rs_rank=0.9,
+        horizons_by_setup={"leader_trend": ["short", "long"]},
+    )
+    lt = [r for r in rows if r["setup"] == "leader_trend"]
+    assert {r["horizon"] for r in lt} == {"short", "long"}
+    by = {r["horizon"]: r for r in lt}
+    # 기간마다 보유상한 표기가 다르다
+    assert by["short"]["holding_horizon"] == f"{get_profile('short').bars}거래일"
+    assert by["long"]["holding_horizon"] == f"{get_profile('long').bars}거래일"
+    # 장기는 손절 배수가 커서(2.5×ATR) 손절이 더 멀다
+    assert by["long"]["stop_loss"] < by["short"]["stop_loss"]
+    # 매매 규칙이 payload 에 실려 화면이 문구를 만들 수 있다
+    assert by["long"]["level_payload"]["scale_in"] is not None
+    assert by["short"]["level_payload"]["target_action"] == "trail"
+
+
+def test_horizon_style_mapping_keeps_enum_valid():
+    """signals.style 은 enum 이라 기간 값을 담을 수 없다 — 반드시 유효한 스타일로."""
+    from engine.signals.horizons import HORIZONS, HORIZON_STYLE
+    from engine.signals.styles import STYLES
+
+    assert set(HORIZON_STYLE) == set(HORIZONS)
+    assert all(v in STYLES for v in HORIZON_STYLE.values())
+
+
+def test_horizons_take_precedence_over_styles():
+    df = _uptrend()
+    rows = generate_signals(
+        df, instrument_id=3, rs_rank=0.9,
+        styles_by_setup={"leader_trend": ["swing", "position"]},
+        horizons_by_setup={"leader_trend": ["short"]},
+    )
+    lt = [r for r in rows if r["setup"] == "leader_trend"]
+    assert len(lt) == 1 and lt[0]["horizon"] == "short"

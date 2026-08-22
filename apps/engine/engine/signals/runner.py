@@ -118,10 +118,13 @@ def run(
     setups: list[str] | None = None,
     enforce_gate: bool = False,
     as_of: str | None = None,
+    horizons_by_setup: dict[str, list[str]] | None = None,
 ) -> int:
     """활성 종목 전체에 대해 시그널 생성·적재.
 
     enforce_gate=True 면 백테스트 품질 게이트를 통과한 셋업만 발행(M6 연동).
+    horizons_by_setup 을 주면 «셋업 × 기간»으로 발행한다 — 손절·목표·보유상한이
+    그 기간 프로파일로 산출된다(docs/HORIZON_DESIGN.md). 주면 스타일 축은 무시된다.
     as_of 지정 시(YYYY-MM-DD) 최신 봉이 그날보다 낡은 종목은 제외 — 낡은 종가로
     '최신 시그널'을 만들지 않는다(freshness 종목별 가드, 2026-06-19 사고 방지).
     """
@@ -177,6 +180,7 @@ def run(
                 earnings=earnings_map.get(iid),
                 disclosures=discl_map.get(iid),
                 styles_by_setup=styles_by_setup,
+                horizons_by_setup=horizons_by_setup,
             )
         )
 
@@ -196,7 +200,8 @@ def run(
     # "cannot affect row a second time"(21000) 으로 거부. 강도 높은 쪽 유지.
     uniq: dict[tuple, dict] = {}
     for r in all_rows:
-        k = (r["instrument_id"], r["style"], r["setup"], r["session"], r["signal_type"])
+        k = (r["instrument_id"], r["style"], r["setup"], r["session"],
+             r["signal_type"], r.get("horizon"))
         cur = uniq.get(k)
         if cur is None or (r.get("strength") or 0) > (cur.get("strength") or 0):
             uniq[k] = r
@@ -207,7 +212,7 @@ def run(
     # 자연키 업서트 — 재실행해도 중복 누적 없이 같은 시그널을 갱신(0010).
     n = upsert(
         "signals", all_rows,
-        on_conflict="instrument_id,style,setup,session,signal_type",
+        on_conflict="instrument_id,style,setup,session,signal_type,horizon",
     )
     log.info("signals.run.done", rows=n, instruments=len(frames))
     return n

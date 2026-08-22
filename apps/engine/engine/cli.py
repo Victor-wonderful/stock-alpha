@@ -455,12 +455,18 @@ def daily(
 
     # br.run() 은 (셋업×스타일) 매트릭스 → {(setup, style): passed}. 튜플 키를
     # setup 문자열로 풀어야 한다(시그널 발행 필터는 셋업 단위, 스타일 게이팅은 내부 처리).
-    gate = br.run()
-    passed_pairs = [(setup, style) for (setup, style), ok in gate.items() if ok]
-    passed = sorted({setup for setup, _ in passed_pairs})
+    # 게이트를 «셋업 × 기간»으로 돌리고, 통과한 조합 그대로 발행한다.
+    # 게이트가 재는 규칙(진입·손절·목표·보유상한)과 발행 규칙이 같은 프로파일에서
+    # 나오므로 둘이 어긋날 수 없다 — 그 어긋남이 2026-08-21 에 고친 결함이었다.
+    gate = br.run(axis="horizon")
+    passed_pairs = [(setup, h) for (setup, h), ok in gate.items() if ok]
+    horizons_by_setup: dict[str, list[str]] = {}
+    for setup, h in passed_pairs:
+        horizons_by_setup.setdefault(setup, []).append(h)
+    passed = sorted(horizons_by_setup)
     typer.echo(
         "[3/5] backtest gate passed: "
-        f"{', '.join(f'{s}:{st}' for s, st in passed_pairs) or '(없음)'}"
+        f"{', '.join(f'{s}:{h}' for s, h in passed_pairs) or '(없음)'}"
     )
 
     # factor_composite 는 횡단면 백테스트(backtest-factor) 판정을 따른다 —
@@ -468,7 +474,8 @@ def daily(
     setups = list(passed)
     if "factor_composite" in rd.passed_setups_from_db():
         setups.append("factor_composite")
-    n = sr.run(setups=setups, as_of=target)
+    n = sr.run(setups=setups, as_of=target,
+               horizons_by_setup=horizons_by_setup)
     typer.echo(f"[4/5] signals: {n} rows ({', '.join(setups) or '(없음)'})")
 
     r = rd.run_daily(use_llm=llm, cap=cap, as_of=as_of)

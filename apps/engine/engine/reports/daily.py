@@ -146,11 +146,12 @@ def passed_setups_from_db() -> set[str]:
     latest: dict[tuple[str, str], dict] = {}
     for bt in sorted(
         select_all("backtests",
-                   "setup,style,win_rate,avg_rr,mdd,expectancy_r,passed,created_at"),
+                   "setup,style,horizon,win_rate,avg_rr,mdd,expectancy_r,passed,"
+                   "created_at"),
         key=lambda b: b.get("created_at") or "",
     ):
         if bt.get("setup"):
-            latest[(bt["setup"], bt.get("style") or "")] = bt
+            latest[(bt["setup"], bt.get("horizon") or bt.get("style") or "")] = bt
     return passed_setups_from_rows(latest)
 
 
@@ -159,6 +160,8 @@ def passed_setups_from_rows(latest: dict[tuple[str, str], dict]) -> set[str]:
 
     스타일별 판정이 있는 셋업은 스타일 없는 옛 행을 무시한다(위 docstring 참조).
     """
+    # 기간 축 행은 style 이 비어 있고 horizon 에 값이 있다 — 키에 이미 축 값이
+    # 들어와 있으므로 «스타일 없는 옛 행» 규칙과 섞이지 않는다.
     has_style = {setup for (setup, style) in latest if style}
     out: set[str] = set()
     for (setup, style), bt in latest.items():
@@ -178,11 +181,12 @@ def gate_expectancy_from_db(as_of: str | None = None) -> dict[tuple[str, str], f
     cutoff = gate_cutoff(as_of)
     latest: dict[tuple[str, str], dict] = {}
     for bt in sorted(
-        select_all("backtests", "setup,style,expectancy_r,created_at"),
+        select_all("backtests", "setup,style,horizon,expectancy_r,created_at"),
         key=lambda b: b.get("created_at") or "",
     ):
-        if bt.get("setup") and bt.get("style") and _within(bt, cutoff):
-            latest[(bt["setup"], bt["style"])] = bt
+        axis = bt.get("horizon") or bt.get("style")
+        if bt.get("setup") and axis and _within(bt, cutoff):
+            latest[(bt["setup"], axis)] = bt
     return {
         k: float(bt["expectancy_r"])
         for k, bt in latest.items()
@@ -327,7 +331,10 @@ def _plan_gate_ok(row: dict, passed_combos: dict[str, list[str]] | None) -> bool
     """
     if passed_combos is None:
         return True
-    return row.get("style") in passed_combos.get(row.get("setup") or "", [])
+    # 축이 «기간»으로 바뀌었다(2026-08-22). 플랜에 horizon 이 있으면 그걸로 대조하고,
+    # 없는 옛 리포트는 style 로 폴백한다 — 전환 중 두 세대가 섞여도 조용히 틀리지 않게.
+    axis = row.get("horizon") or row.get("style")
+    return axis in passed_combos.get(row.get("setup") or "", [])
 
 
 def _rr_ok(row: dict, min_rr: float = PICKS_MIN_RR) -> bool:
@@ -374,7 +381,8 @@ def _best_plan(
     def key(row: dict) -> tuple[float, float]:
         exp = None
         if expectancy_by_combo is not None:
-            exp = expectancy_by_combo.get((row.get("setup"), row.get("style")))
+            exp = expectancy_by_combo.get(
+                (row.get("setup"), row.get("horizon") or row.get("style")))
         return (
             exp if exp is not None else float("-inf"),
             float(row.get("strength") or 0),
@@ -494,6 +502,7 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             "tp2_price": top_plan.get("tp2"),   # 스케일아웃 잔량 런 목표(있으면 분할청산)
             "stop_loss": top_plan.get("stop_loss"),
             "as_of": r["as_of"],
+            "horizon": top_plan.get("horizon"),
             "status": "pending",                # 진입 대기 — 시가 확정 전
             "entry_rule": ENTRY_RULE,
             "plan_payload": _plan_payload(top_plan),
@@ -601,7 +610,14 @@ def resolve_pick_status(
     s = float(stop) if stop is not None else None
     t1 = float(tp1) if tp1 is not None else None
     t2 = float(tp2) if tp2 is not None else None
-    timeout = _TIMEOUT_BARS.get(pick.get("style"), 10)
+    # 보유 상한 — 기간이 있으면 그 프로파일이 정한다(단기 5 / 중기 10 / 장기 20).
+    # 없는 옛 픽만 스타일 타임아웃(swing 10 / position 60)으로 폴백한다.
+    # ⚠️ 게이트가 그 기간으로 기대값을 쟀으므로 판정도 같은 기간이어야 한다.
+    if pick.get("horizon"):
+        from engine.signals.horizons import get_profile
+        timeout = get_profile(pick["horizon"], pick.get("setup")).bars
+    else:
+        timeout = _TIMEOUT_BARS.get(pick.get("style"), 10)
     # 진입 규칙이 next_open 이면 시가 시장가라 «항상 체결»이다 — 체결 확인은 옛
     # limit 픽(전일 종가 지정가)에만 의미가 있다. 이때 bars 는 «진입 봉부터»
     # (manage_picks 가 confirmed_at 이상으로 잘라 준다) — 백테스트도 진입 봉부터
@@ -813,7 +829,7 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
     open_picks = (
         client.table("recommendations")
         .select("id,as_of,entry_price,target_price,tp2_price,stop_loss,"
-                "tp1_hit,style,instrument_id,entry_rule,confirmed_at")
+                "tp1_hit,style,setup,horizon,instrument_id,entry_rule,confirmed_at")
         .eq("basket_type", "daily_focus").eq("status", "open").execute()
     ).data or []
 

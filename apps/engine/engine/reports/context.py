@@ -188,6 +188,7 @@ def build_plan(
             "tp2": float(s["tp2"]) if s.get("tp2") is not None else None,
             "tp3": float(s["tp3"]) if s.get("tp3") is not None else None,
             "risk_reward": float(s["risk_reward"]) if s.get("risk_reward") is not None else None,
+            "horizon": s.get("horizon"),
             "holding_horizon": s.get("holding_horizon"),
             "rationale": s.get("llm_rationale"),
             "valid_until": s.get("valid_until"),

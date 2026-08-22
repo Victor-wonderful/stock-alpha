@@ -417,3 +417,24 @@ def test_target_trail_protects_with_breakeven_stop():
         df, 0, len(df), ((1.0, 100.0),), 95.0, 110.0, 5, _FreeCosts(),
         target_action="trail")
     assert gross == pytest.approx(0.0)
+
+
+def test_precomputed_detections_give_identical_trades():
+    """사전계산 재사용이 결과를 바꾸면 안 된다 — 속도 최적화지 규칙 변경이 아니다."""
+    import numpy as np
+    from engine.backtest.event_backtest import backtest_playbook, precompute_detections
+
+    rng = np.random.default_rng(7)
+    n = 220
+    close = 100 * np.cumprod(1 + rng.normal(0.001, 0.02, n))
+    df = pd.DataFrame({
+        "open": close * 0.998, "high": close * 1.015,
+        "low": close * 0.985, "close": close,
+        "volume": rng.uniform(800, 3000, n),
+    })
+    for setup in ("breakout", "oversold_bounce", "double_bottom"):
+        base = backtest_playbook(df, setup, entry_mode="open")
+        det = precompute_detections(df, setup)
+        fast = backtest_playbook(df, setup, entry_mode="open", detections=det)
+        assert [t.r_multiple for t in base] == [t.r_multiple for t in fast], setup
+        assert [t.entry_ts for t in base] == [t.entry_ts for t in fast], setup
