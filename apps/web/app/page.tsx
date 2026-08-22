@@ -312,24 +312,16 @@ export default async function HomePage() {
                   <dt className="w-[52px] shrink-0 text-[12px] text-on-navy-3">보유</dt>
                   <dd className="min-w-0 flex-1 text-[13px] text-on-navy-2">
                     {openPicks.length === 0 ? (
-                      <>아직 산 픽이 없습니다</>
+                      "아직 산 픽이 없습니다"
                     ) : (
                       <>
-                        <span className="tnum font-bold text-on-navy">{openPicks.length}건</span>{" "}
-                        보유 중
+                        <span className="tnum font-bold text-on-navy">{openPicks.length}건</span>
                         {nearStop > 0 && (
                           <>
                             {" · 손절 근접 "}
                             <span className="tnum font-bold text-down-on-navy">{nearStop}건</span>
                           </>
                         )}
-                      </>
-                    )}
-                    {pendingCount > 0 && (
-                      <>
-                        {openPicks.length === 0 ? " — " : " · "}
-                        <span className="tnum font-bold text-on-navy">{pendingCount}건</span>이{" "}
-                        {planDay ?? "다음 거래일"} 진입 대기
                       </>
                     )}
                   </dd>
@@ -340,6 +332,26 @@ export default async function HomePage() {
                     성과 →
                   </Link>
                 </div>
+                {/* 「대기」는 보유와 **다른 줄**이다. 한 줄에 이어 붙였더니 보유 3건 +
+                    대기 2건인 날 "3건 보유 중 · 손절 근접 1건 · 2건이 8/24 진입 대기"가
+                    되어 450px 칸에서 세 줄로 접혔다(2026-08-22). 보유와 대기는 성격이
+                    다르다 — 하나는 «이미 산 것», 하나는 «아직 안 산 계획»이다. */}
+                {pendingCount > 0 && (
+                  <div className="flex items-baseline gap-3 py-2.5">
+                    <dt className="w-[52px] shrink-0 text-[12px] text-on-navy-3">대기</dt>
+                    <dd className="min-w-0 flex-1 text-[13px] text-on-navy-2">
+                      <span className="tnum font-bold text-on-navy">{pendingCount}건</span>
+                      {" — "}
+                      {planDay ?? "다음 거래일"} 시가에 삽니다
+                    </dd>
+                    <Link
+                      href="/focus"
+                      className="shrink-0 text-[11px] text-on-navy-3 transition-colors hover:text-on-navy"
+                    >
+                      오늘의 픽 →
+                    </Link>
+                  </div>
+                )}
               </dl>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Link
