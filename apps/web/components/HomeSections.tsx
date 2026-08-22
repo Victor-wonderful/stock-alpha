@@ -170,19 +170,77 @@ function MacroRows({ items }: { items: MacroSeriesView[] }) {
   );
 }
 
+/** 좁은 칸(사이드바)용 매크로 행 — 설명문을 뺀다.
+ *
+ * 기본 MacroRows 는 «날짜 · 라벨+값 · 설명 한 줄 · 변화»를 한 줄에 늘어놓아 폭이
+ * 800px 이상일 때 읽힌다. 420px 사이드바에서는 설명이 잘려 «— 전 세계 자산 가격을…»
+ * 같은 토막만 남는다(2026-08-22). 잘린 설명은 없는 설명보다 나쁘다.
+ * 그래서 좁은 칸에서는 지표판처럼 **라벨 · 값 · 변화**만 세운다. */
+function MacroCompactRows({ items }: { items: MacroSeriesView[] }) {
+  return (
+    <ul className="mt-4 overflow-hidden rounded-[12px] border border-border bg-surface">
+      {items.map((m, i) => {
+        const up = m.change >= 0;
+        return (
+          <li
+            key={m.series_id}
+            className={`flex items-baseline gap-3 px-4 py-2.5 ${
+              i > 0 ? "border-t border-border-soft" : ""
+            }`}
+          >
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-text-dim">
+              {m.label}
+            </span>
+            <span className="tnum shrink-0 text-[14px] font-bold text-text">
+              {m.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+              {m.unit}
+            </span>
+            <span
+              className={`tnum w-[52px] shrink-0 text-right text-[11.5px] font-semibold ${
+                up ? "text-good" : "text-bad"
+              }`}
+            >
+              {up ? "+" : ""}
+              {m.change.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** 매크로 — 블로그 `view/macro` 글. 글이 아직 없으면 같은 자리에 지표를 세운다.
  *  세 섹션은 홈의 뼈대라 하나가 통째로 빠지면 화면이 무너진다. 글이 생기면 글이 이긴다. */
 export function MacroSection({
   posts,
   indicators,
   moreHref = "/insights",
+  compact = false,
 }: {
   posts: BlogPost[];
   indicators: MacroSeriesView[];
   moreHref?: string | null;
+  /** 좁은 칸(사이드바)에 놓을 때 — 제목을 작게 하고 설명문을 뺀다. */
+  compact?: boolean;
 }) {
   const hasPosts = posts.length > 0;
   if (!hasPosts && indicators.length === 0) return null;
+  if (compact) {
+    return (
+      <section>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-bold text-text">매크로</h2>
+          {moreHref && (
+            <Link href={moreHref} className="text-[11px] text-accent hover:underline">
+              전체 보기 →
+            </Link>
+          )}
+        </div>
+        <MacroCompactRows items={indicators} />
+      </section>
+    );
+  }
   return (
     <section className="mt-12">
       <SectionHead
