@@ -4,6 +4,7 @@ import { DEFAULT_RISK_PER_TRADE_PCT } from "@/lib/position";
 import { GNB } from "@/components/GNB";
 import { HomeHero } from "@/components/HomeHero";
 import { HomeOpenPicks } from "@/components/HomeOpenPicks";
+import { HomeOpenSummary } from "@/components/HomeOpenSummary";
 import { HomePickCard } from "@/components/HomePickCard";
 import { MacroSection, RecentReports, WeeklyBriefs } from "@/components/HomeSections";
 import {
@@ -16,6 +17,7 @@ import {
   getNewsEvents,
   getNextTradingDay,
   getNthTradingDay,
+  getTradingCalendar,
   getOpenPicks,
   getRecommendations,
   getReports,
@@ -110,8 +112,9 @@ export default async function HomePage() {
   //
   // ⚠️ 인증을 제대로 붙일 때 «로그인 사용자에게 히어로를 어떻게 할지»를 다시 정한다.
   //    그때는 홈을 로그인 뒤로 감추지 않는다 — 홈은 공개 화면이다(Victor, 2026-08-22).
-  const [quotes, recs, brief, marketState, openPicks, weekly, macro, blogPosts, reports] =
-    await Promise.all([
+  const [
+    quotes, recs, brief, marketState, openPicks, weekly, macro, blogPosts, reports, cal,
+  ] = await Promise.all([
       getMarketQuotes(),
       getRecommendations(),
       getMorningBrief(),
@@ -125,6 +128,9 @@ export default async function HomePage() {
       getMacroSeries(["DEXKOUS"]),
       getBlogPosts(),
       getReports(3),
+      // 거래일 계산기 — 휴장일을 한 번만 읽고 메모리에서 센다. 보유 픽마다
+      // getNthTradingDay 를 부르면 픽 10건에 왕복 20회다.
+      getTradingCalendar(),
     ]);
 
   const picks = recs.data;
@@ -207,6 +213,15 @@ export default async function HomePage() {
   // 카드엔 종목이 있는데 옆 카드는 «없습니다»라 두 카드가 서로 모순돼 보인다.
   // todayPicks 가 이미 status 를 들고 있어 조회를 더 하지 않는다.
   const pendingCount = todayPicks.filter((p) => p.status === "pending").length;
+  // 보유 픽의 청산 예정일 — 발행일 다음 거래일이 진입일(1거래일째)이므로 발행일에서
+  // 기간(bars)만큼 세면 마지막 날이다. 달력을 이미 읽어 뒀으니 조회는 안 는다.
+  const openExitDays = new Map<string, string | null>(
+    openPicks.map((p) => {
+      const bars = horizonSpec(p.horizon)?.bars;
+      const iso = bars ? cal.nth(p.asOf, bars) : null;
+      return [p.symbol, iso ? tradingDayLabel(iso) : null];
+    }),
+  );
   // 블로그 글이 있으면 그걸 쓰고, 없으면 엔진 산출물이 그 자리를 지킨다(컴포넌트가 판단).
   const weeklyPosts = pickBlogPosts(blogPosts, "view", "weekly", 3);
   const macroPosts = pickBlogPosts(blogPosts, "view", "macro", 3);
@@ -364,14 +379,42 @@ export default async function HomePage() {
             )}
           </section>
 
-          {/* ── 진행 중 ──
-              「오늘의 픽」이 «오늘 살 것»이라면 이건 «이미 산 것»이다. 매일 값이 바뀌는
-              건 이쪽인데 홈에는 건수만 있었다(2026-08-22 Victor). 조회는 안 늘었다 —
-              getOpenPicks(30) 을 이미 부르고 `.length` 만 쓰고 있었다.
-              0 건이어도 자리를 지킨다 — 보유가 생기는 날 구조가 통째로 바뀌면 매일
-              오는 사람이 «어제 보던 그 자리»를 잃는다. 빈 상태가 대기 건수를 말한다. */}
-          <HomeOpenPicks picks={openPicks} pendingCount={pendingCount} planDay={planDay} />
 
+        </div>
+
+        {/* ── 밴드 2 · 진행 중 ──
+            밴드 1 과 같은 짝이다 — 좌 = 전체가 어떤가(요약), 우 = 종목별로 어떤가(카드).
+            카드 모양은 「오늘의 픽」과 같다(Victor 요청). 같은 종류의 것(한 종목의 매매
+            계획)이라 다른 모양으로 그릴 이유가 없다. 다만 칸의 내용이 다르다:
+              오늘의 픽 = «앞으로 어떻게 할 것인가» (비중 · 1주당 리스크)
+              진행 중   = «지금 어디까지 왔나»     (수익률 · 보유일수 · 남은 거리)
+            0 건이어도 밴드는 남는다 — 보유가 생기는 날 구조가 통째로 바뀌면 매일 오는
+            사람이 «어제 보던 그 자리»를 잃는다. */}
+        <div className="mt-12 grid items-start gap-x-8 gap-y-6 lg:grid-cols-[1fr_2fr]">
+          <HomeOpenSummary
+            picks={openPicks}
+            pendingCount={pendingCount}
+            planDay={planDay}
+          />
+          <div>
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h2 className="text-sm font-bold text-text">
+                진행 중{" "}
+                <span className="text-[11px] font-medium text-text-mute">
+                  {openPicks.length > 0 ? "손절 가까운 순" : "이미 산 픽"}
+                </span>
+              </h2>
+              <Link href="/picks" className="text-[11px] text-accent hover:underline">
+                전체 기록 →
+              </Link>
+            </div>
+            <HomeOpenPicks
+              picks={openPicks}
+              exitDays={openExitDays}
+              pendingCount={pendingCount}
+              planDay={planDay}
+            />
+          </div>
         </div>
 
         {/* ── 밴드 2 · 읽을 것 ── */}

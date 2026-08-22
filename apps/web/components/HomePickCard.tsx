@@ -23,7 +23,7 @@ import { computePositionSizePct } from "@/lib/position";
  *   순서이기 때문이다.
  */
 
-function Cell({
+export function PickCell({
   label,
   value,
   sub,
@@ -127,34 +127,34 @@ export function HomePickCard({
 
       {/* 표 — 숫자만. 보조는 10자 이내. */}
       <div className="grid gap-px border-y border-border bg-border grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
-        <Cell
+        <PickCell
           label="진입가"
           value={entry != null ? won(entry) : "—"}
           sub={planDay ? `${planDay} 시가` : "다음 거래일 시가"}
         />
-        <Cell
+        <PickCell
           label="손절가"
           tone="down"
           value={stop != null ? won(stop) : "—"}
           sub={stopPct != null ? `${fmtPct(stopPct)} · 전량 매도` : "전량 매도"}
         />
-        <Cell
+        <PickCell
           label="본전 도달가"
           tone="up"
           value={target != null ? won(target) : "—"}
           sub="닿으면 손절이 본전으로"
         />
-        <Cell
+        <PickCell
           label="청산 기한"
           value={exitDay ?? (spec ? `${spec.bars}거래일` : "—")}
           sub="그날 종가에 전량"
         />
-        <Cell
+        <PickCell
           label="권장 비중"
           value={sizePct != null ? `${sizePct.toFixed(1)}%` : "—"}
           sub={`계좌 리스크 ${riskPct}%`}
         />
-        <Cell
+        <PickCell
           label="1주당 리스크"
           value={risk != null ? `${won(risk)}원` : "—"}
           sub="진입 − 손절"

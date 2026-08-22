@@ -1243,6 +1243,63 @@ export async function getNthTradingDay(
   }
 }
 
+/** 거래일 계산기 — 휴장일을 **한 번만** 읽고 메모리에서 센다.
+ *
+ * getNthTradingDay 는 부를 때마다 market_calendar 를 두 번 조회한다. 보유 픽이 여러 건
+ * 이고 발행일이 제각각이면 그만큼 왕복이 는다(픽 10건이면 20회). 화면 하나가 쓰는
+ * 거래일 계산은 같은 휴장일 표를 보므로 한 번 읽어 함수로 넘긴다.
+ *
+ * confirmed 가 false 면 nth() 는 항상 null 이다 — 휴장 목록이 그 구간을 못 덮으면
+ * 날짜를 단정하지 않는다(틀린 날짜보다 「N거래일째」가 정직하다).
+ */
+export async function getTradingCalendar(): Promise<{
+  confirmedThrough: string | null;
+  nth: (from: string, n: number) => string | null;
+}> {
+  const none = { confirmedThrough: null, nth: () => null };
+  try {
+    const supabase = createPublicClient();
+    const { data: marker } = await supabase
+      .from("market_calendar")
+      .select("date")
+      .eq("event_key", "holiday-coverage")
+      .limit(1);
+    const confirmedThrough = marker?.[0]?.date ? String(marker[0].date) : null;
+    if (!confirmedThrough) return none;
+
+    const { data } = await supabase
+      .from("market_calendar")
+      .select("date")
+      .eq("kind", "holiday")
+      .lte("date", confirmedThrough)
+      .limit(2000);
+    const holidays = new Set(
+      ((data ?? []) as { date: string }[]).map((r) => String(r.date)),
+    );
+
+    return {
+      confirmedThrough,
+      nth(from: string, n: number): string | null {
+        if (n <= 0 || from > confirmedThrough) return null;
+        const d = new Date(Date.parse(from + "T00:00:00Z"));
+        let seen = 0;
+        // n 거래일이면 최장 n*2+30 일 안에 반드시 나온다(연휴를 넉넉히 잡아도).
+        for (let i = 0; i < n * 2 + 30; i++) {
+          d.setUTCDate(d.getUTCDate() + 1);
+          const iso = d.toISOString().slice(0, 10);
+          if (iso > confirmedThrough) return null;
+          const wd = d.getUTCDay();
+          if (wd === 0 || wd === 6 || holidays.has(iso)) continue;
+          if (++seen === n) return iso;
+        }
+        return null;
+      },
+    };
+  } catch {
+    return none;
+  }
+}
+
 export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
   try {
     const supabase = createPublicClient();
@@ -1492,6 +1549,9 @@ export type OpenPick = {
   toTargetPct: number | null;  // 현재가에서 목표까지 남은 거리
   toStopPct: number | null;    // 현재가에서 손절까지 남은 거리(양수 = 아직 여유)
   tp1Hit: boolean;
+  // 카드가 「오늘의 픽」과 같은 머리줄(기간 칩·셋업 칩)을 그리려면 필요하다.
+  horizon: string | null;
+  setup: string | null;
 };
 
 export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
@@ -1500,7 +1560,7 @@ export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
     const { data } = await supabase
       .from("recommendations")
       .select(
-        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,instruments(symbol,name)",
+        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,horizon,setup,instruments(symbol,name)",
       )
       .eq("basket_type", "daily_focus")
       .eq("status", "open")
@@ -1524,6 +1584,8 @@ export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
         stop: ((r.tp1_hit ? (r.entry_price as number) : (r.stop_loss as number)) ??
           null) as number | null,
         tp1Hit: Boolean(r.tp1_hit),
+        horizon: (r.horizon as string) ?? null,
+        setup: (r.setup as string) ?? null,
       };
     });
 
