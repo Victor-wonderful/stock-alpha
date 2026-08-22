@@ -91,11 +91,28 @@ def test_regime_router_by_market_state():
     assert _pick_suppressed("sigma", "downtrend", True)
     assert not _pick_suppressed("oversold_bounce", "downtrend", True)
     assert not _pick_suppressed("flow_accumulation", "downtrend", True)
-    # 횡보 — 추세·역추세 억제, 평균회귀 허용(시그마 부활 지점)
-    assert _pick_suppressed("kalman", "range", False)
-    assert not _pick_suppressed("sigma", "range", False)
-    assert _pick_suppressed("oversold_bounce", "range", False)
-    assert not _pick_suppressed("flow_accumulation", "range", False)
+    # 횡보 — 이름이 아니라 «측정된 (셋업 × 기간)»만 연다(2026-08-22 재측정).
+    # 예전엔 "횡보=평균회귀"라 sigma·quantile 을 열고 역추세를 막았는데, 그 둘은
+    # 게이트를 통과한 적이 없어 횡보인 날이 구조적으로 발행 0건이었다.
+    assert not _pick_suppressed("capitulation", "range", False, "short")
+    assert not _pick_suppressed("capitulation", "range", False, "mid")
+    assert not _pick_suppressed("double_bottom", "range", False, "short")
+    assert not _pick_suppressed("double_bottom", "range", False, "mid")
+    assert not _pick_suppressed("oversold_bounce", "range", False, "short")
+    # 같은 셋업이라도 «측정 안 된 기간»은 막힌다 — 기간이 다르면 다른 거래다.
+    assert _pick_suppressed("oversold_bounce", "range", False, "mid")
+    assert _pick_suppressed("capitulation", "range", False, "long")
+    assert _pick_suppressed("double_bottom", "range", False, "long")
+    # 추세 계열은 그대로 막힌다.
+    assert _pick_suppressed("kalman", "range", False, "long")
+    # sigma 는 이제 막힌다 — 횡보 -0.078(20건)·최근 -0.637 이라 근거가 없었다.
+    assert _pick_suppressed("sigma", "range", False, "short")
+    # quantile 은 횡보 전체가 가장 좋아 보이지만 최근 구간이 -0.5~-0.7 이다(함정).
+    assert _pick_suppressed("quantile", "range", False, "short")
+    # 수급도 횡보에서는 빠진다 — 단기 최근 +0.017 로 사실상 0, 중장기는 음수.
+    assert _pick_suppressed("flow_accumulation", "range", False, "short")
+    # 기간이 없는 옛 플랜은 어느 조합인지 특정할 수 없다 → 횡보에서 발행 안 함.
+    assert _pick_suppressed("capitulation", "range", False, None)
 
 
 def test_regime_router_backward_compat():
