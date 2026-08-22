@@ -1257,12 +1257,6 @@ export async function getNthTradingDay(
  * confirmed 가 false 면 nth() 는 항상 null 이다 — 휴장 목록이 그 구간을 못 덮으면
  * 날짜를 단정하지 않는다(틀린 날짜보다 「N거래일째」가 정직하다).
  */
-/** 게이지용 부호 붙은 % — lib/format.fmtPct 와 같은 규약(비율 → 백분율). */
-function fmtPctRaw(v: number): string {
-  const p = v * 100;
-  return `${p >= 0 ? "+" : ""}${p.toFixed(1)}%`;
-}
-
 export interface TopNewsItem {
   id: number;
   headline: string;
@@ -1271,51 +1265,16 @@ export interface TopNewsItem {
   publishedAt: string;
   /** 제목에서 잡힌 시장 키워드 — 왜 «시장 뉴스»로 골랐는지의 근거. */
   topics: string[];
-  /** 그 주제가 가리키는 지표의 «지금 값». 해석은 붙이지 않는다 — 값만 말한다. */
-  gauges: { label: string; value: string; change: string; up: boolean }[];
   /** 이 기사가 걸려 있는 종목 수 — 여럿이면 개별 기업이 아니라 시황 기사다. */
   breadth: number;
 }
 
-/** 증시 전체에 영향을 주는 «시장 키워드». 제목에 있으면 시황 기사로 본다.
- *
- * series 가 있으면 그 키워드가 가리키는 지표다 — 화면이 «그래서 그 값이 지금 얼마인지»
- * 를 붙일 수 있게 연결해 둔다(2026-08-23). 값은 붙이되 «그래서 오를 것»은 쓰지 않는다:
- * 이 제품은 측정한 것만 말한다. 뉴스와 주가의 상관은 재봤을 때 거의 없었다(PEAD -0.02).
- */
-const MARKET_KEYWORDS: { word: string; series?: string }[] = [
-  { word: "코스피", series: "KOSPI" },
-  { word: "코스닥", series: "KOSDAQ" },
-  { word: "증시" },
-  { word: "환율", series: "USDKRW" },
-  { word: "원달러", series: "USDKRW" },
-  { word: "달러", series: "USDKRW" },
-  { word: "금리", series: "DGS10" },
-  { word: "국채", series: "DGS10" },
-  { word: "기준금리", series: "DGS10" },
-  { word: "연준" },
-  { word: "Fed" },
-  { word: "FOMC" },
-  { word: "금통위" },
-  { word: "한은" },
-  { word: "외국인" },
-  { word: "기관" },
-  { word: "수급" },
-  { word: "물가" },
-  { word: "인플레" },
-  { word: "CPI" },
-  { word: "유가", series: "DCOILWTICO" },
-  { word: "나스닥", series: "NASDAQCOM" },
-  { word: "다우" },
-  { word: "S&P", series: "SP500" },
-  { word: "뉴욕증시" },
-  { word: "무역" },
-  { word: "관세" },
-  { word: "경기" },
-  { word: "공매도" },
-  { word: "지수" },
-  { word: "변동성", series: "VIXCLS" },
-  { word: "VIX", series: "VIXCLS" },
+/** 증시 전체에 영향을 주는 «시장 키워드». 제목에 있으면 시황 기사로 본다. */
+const MARKET_KEYWORDS = [
+  "코스피", "코스닥", "증시", "환율", "금리", "국채", "연준", "Fed", "FOMC",
+  "금통위", "한은", "기준금리", "외국인", "기관", "수급", "물가", "인플레",
+  "CPI", "유가", "달러", "나스닥", "다우", "S&P", "뉴욕증시", "무역", "관세",
+  "경기", "공매도", "지수",
 ];
 
 /** 개별 종목·정형 기사 — 시장 뉴스가 아니다. */
@@ -1340,27 +1299,6 @@ const NOT_MARKET = [/^\[?특징주/, /^기업 공시/, /^\[?표\s?\]/, /^\[포�
 export async function getTopNews(limit = 6, days = 2): Promise<TopNewsItem[]> {
   try {
     const supabase = createPublicClient();
-    // 주제 칩에 붙일 «지금 값». 지수·환율은 getMarketQuotes 가, 금리·유가는 macro 가
-    // 갖고 있어 둘 다 본다. 실패해도 뉴스는 뜬다(게이지만 비는 것).
-    const gaugeMap = new Map<
-      string,
-      { label: string; value: string; change: string; up: boolean }
-    >();
-    try {
-      const q = await getMarketQuotes();
-      for (const row of q.data) {
-        if (row.changePct == null) continue;
-        gaugeMap.set(row.id, {
-          label: row.label,
-          value:
-            row.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) + row.unit,
-          change: fmtPctRaw(row.changePct),
-          up: row.changePct >= 0,
-        });
-      }
-    } catch {
-      /* 게이지 없이 진행 */
-    }
     const since = new Date(Date.now() - days * 864e5).toISOString();
     const { data } = await supabase
       .from("news")
@@ -1400,8 +1338,7 @@ export async function getTopNews(limit = 6, days = 2): Promise<TopNewsItem[]> {
 
     return [...byArticle.values()]
       .map(({ rep, insts }) => {
-        const hit = MARKET_KEYWORDS.filter((k) => rep.headline.includes(k.word));
-        const topics = [...new Set(hit.map((k) => k.word))];
+        const topics = MARKET_KEYWORDS.filter((k) => rep.headline.includes(k));
         const excluded = NOT_MARKET.some((re) => re.test(rep.headline));
         return {
           id: rep.id,
@@ -1410,11 +1347,6 @@ export async function getTopNews(limit = 6, days = 2): Promise<TopNewsItem[]> {
           url: rep.url,
           publishedAt: rep.published_at,
           topics,
-          // 같은 지표를 가리키는 키워드가 여럿일 수 있다(금리·국채 → DGS10). 접는다.
-          gauges: [...new Set(hit.map((k) => k.series).filter(Boolean))]
-            .map((sid) => gaugeMap.get(sid as string))
-            .filter((g): g is NonNullable<typeof g> => Boolean(g))
-            .slice(0, 2),
           breadth: insts.size,
           score: excluded ? -99 : Math.max(0, insts.size - 1) + topics.length * 2,
         };
