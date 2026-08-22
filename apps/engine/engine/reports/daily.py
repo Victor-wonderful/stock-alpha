@@ -103,16 +103,60 @@ COUNTERTREND_SETUPS = frozenset({"oversold_bounce", "double_bottom", "capitulati
 # 에 없어 하락장에서 유일하게 허용됐다 — 즉 하락장에서 가장 나쁜 것만 통과시키고 있었다.
 DOWNTREND_BLOCKED_SETUPS = frozenset({"anchor_pullback"})
 
+# 횡보(range)에서 발행을 «허용»하는 (셋업 × 기간) 목록. 차단 목록이 아니라 허용 목록이다.
+#
+# 왜 뒤집었나 (2026-08-22) — 기존 규칙은 "횡보 = 평균회귀"라는 교과서 매핑이었고,
+# 그 결과 8/21(국면 range)에 리포트 플랜 588건이 전부 잘려 **발행 0건**이 됐다.
+# 게이트를 통과한 셋업은 전부 추세·역추세 계열이라 차단됐고, 횡보에 허용돼 있던
+# 평균회귀(sigma·quantile)는 게이트를 통과한 적이 없었다. 즉 횡보인 날은 구조적으로
+# 영구 빈 날이었다.
+#
+# 그래서 이름(추세/역추세/평균회귀)으로 나누던 것을 그만두고 **측정된 조합만 연다**.
+# 근거는 429거래일을 기간 축으로 분해한 실측(scripts/diag_regime_expectancy --axis horizon).
+# 조건 셋을 모두 만족하는 것만 넣었다: ①게이트 통과 ②횡보 기대값 양수 ③**최근 구간도**
+# 양수 ④표본이 해석 가능.
+#
+#                        횡보 기대값        최근 구간
+#     capitulation 단기   +0.098( 111)    +0.322( 361)
+#     capitulation 중기   +0.086( 100)    +0.115( 345)
+#     double_bottom 단기  +0.130( 204)    +0.395(  71)
+#     double_bottom 중기  +0.352( 175)    +0.299(  65)
+#     oversold_bounce 단기 +0.834(  29)   +0.605( 180)
+#
+# ⚠️ 최근 구간을 따로 보지 않으면 정반대 결론이 나온다. quantile 은 횡보 전체가
+#    +0.543/+1.162/+1.337 로 가장 좋아 보이는데 최근 구간이 -0.509/-0.727/-0.658 이다.
+#    예전 median 사고(+0.489 → -0.403)와 같은 패턴이라 넣지 않았다.
+# ⚠️ sigma 도 뺐다 — 지금 횡보에 허용돼 있지만 횡보 -0.078(20건)·최근 -0.637 이다.
+#    «허용돼 있으나 마나»가 아니라 «있으면 손해»였다.
+# ⚠️ flow_accumulation 은 전 국면 허용이었는데 횡보에서는 빠진다. 단기만 횡보 +0.441
+#    인데 최근 구간이 +0.017 로 사실상 0 이고, 중기·장기는 둘 다 음수다.
+# ⚠️ 기간이 다르면 다른 거래다. 같은 oversold_bounce 라도 스타일 축(swing)으로 재면
+#    횡보 -0.305 였는데 단기 프로파일(5일 보유·본전스톱)에서는 +0.834 다.
+RANGE_ALLOWED_COMBOS: frozenset[tuple[str, str]] = frozenset({
+    ("capitulation", "short"),
+    ("capitulation", "mid"),
+    ("double_bottom", "short"),
+    ("double_bottom", "mid"),
+    ("oversold_bounce", "short"),
+})
 
-def _pick_suppressed(setup: str | None, market_state: str | None, risk_off: bool) -> bool:
+
+def _pick_suppressed(
+    setup: str | None, market_state: str | None, risk_off: bool,
+    horizon: str | None = None,
+) -> bool:
     """국면별 픽 억제 판정 — 3국면(market_state) 라우팅.
 
-    추세장=추세추종 / 횡보=평균회귀 / 하락추세=역추세·수급. 수급(flow_accumulation)은
-    전 국면 허용(어디서도 억제 안 함). market_state 미상이면 구 risk_off 로직(하위호환)
-    — 이 폴백은 «레짐 행이 아직 없는 날» 을 위한 것이지 축 부재와는 무관하다.
+    상승추세=추세추종 / 하락추세=역추세·수급 / **횡보=측정된 조합만**(아래).
+    market_state 미상이면 구 risk_off 로직(하위호환) — 이 폴백은 «레짐 행이 아직 없는
+    날»을 위한 것이지 축 부재와는 무관하다.
 
-    ⚠️ 이 라우팅은 아직 «교과서 매핑» 이다(추세장=추세추종 …). 국면별 실측은
-    하락장만 있고 횡보는 없다 → scripts/diag_regime_expectancy 로 재측정 중.
+    horizon: 횡보 판정에만 쓴다. 횡보는 셋업이 아니라 **(셋업 × 기간)** 단위로 연다 —
+      같은 셋업도 기간에 따라 부호가 갈리기 때문이다(RANGE_ALLOWED_COMBOS 주석 참조).
+      기간이 없는 옛 플랜은 어느 조합인지 특정할 수 없으므로 횡보에서 발행하지 않는다.
+
+    ⚠️ 상승·하락 라우팅은 아직 셋업 이름 기준이다. 하락은 실측이 있고(2026-08-01),
+      상승은 아직 없다 — 다음 순서다.
     """
     if market_state is None:
         return bool(
@@ -127,9 +171,10 @@ def _pick_suppressed(setup: str | None, market_state: str | None, risk_off: bool
             or setup in RANGE_SETUPS
             or setup in DOWNTREND_BLOCKED_SETUPS          # 역추세·수급만
         )
-    # range — 평균회귀·수급만. «전환» 국면은 2026-08-22 에 없앴다(ER 축 제거,
-    # engine/market/regime 참조). 그런 값을 가진 행은 DB 에도 없었다.
-    return setup in TREND_PICK_SETUPS or setup in COUNTERTREND_SETUPS
+    # range — 측정된 (셋업 × 기간)만 연다. 이름으로 나누지 않는다.
+    # «전환» 국면은 2026-08-22 에 없앴다(ER 축 제거, engine/market/regime 참조).
+    # 그런 값을 가진 행은 DB 에도 없었다.
+    return (setup or "", horizon or "") not in RANGE_ALLOWED_COMBOS
 
 
 def passed_setups_from_db() -> set[str]:
@@ -461,7 +506,8 @@ def select_picks(reports: list[dict], *, max_picks: int = PICKS_MAX,
             row for row in (p.get("plan") or [])
             if row.get("style") in EOD_STYLES
             and row.get("setup") not in PICK_EXCLUDED_SETUPS
-            and not _pick_suppressed(row.get("setup"), market_state, risk_off)
+            and not _pick_suppressed(row.get("setup"), market_state, risk_off,
+                                     row.get("horizon"))
             and _plan_gate_ok(row, passed_combos)
             and _entry_actionable(row, close, max_entry_drift)
             and _rr_ok(row)

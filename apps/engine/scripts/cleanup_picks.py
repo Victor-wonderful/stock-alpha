@@ -131,7 +131,8 @@ def find_regime_violations(rows: list[dict], regime_by_date: dict[str, dict]) ->
         reg = regime_by_date.get(str(r.get("as_of"))) or {}
         if reg.get("regime") != "risk_off":
             continue
-        if _pick_suppressed(r.get("setup"), reg.get("market_state"), True):
+        if _pick_suppressed(r.get("setup"), reg.get("market_state"), True,
+                            r.get("horizon")):
             out.append(r)
     return out
 
