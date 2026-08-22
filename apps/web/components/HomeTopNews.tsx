@@ -76,6 +76,29 @@ export function HomeTopNews({ items }: { items: TopNewsItem[] }) {
                       </span>
                     )}
                   </span>
+                  {/* ── 그 주제의 «지금 값» ──
+                      2026-08-23 Victor 요청("증시에 어떤 영향을 미칠지"). 다만 «그래서
+                      오를 것»은 쓰지 않는다 — 이 제품은 측정한 것만 말하고, 뉴스와
+                      주가의 상관은 재봤을 때 거의 없었다(PEAD -0.02).
+                      해석 대신 «그 기사가 말하는 지표가 지금 얼마인가»를 붙인다.
+                      과거 빈도(「금리가 내린 날 다음 거래일 코스피가 오른 비율」)까지
+                      붙이려면 엔진이 새로 재야 한다 — 미완. */}
+                  {n.gauges.length > 0 && (
+                    <span className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      {n.gauges.map((g) => (
+                        <span
+                          key={g.label}
+                          className="tnum flex items-baseline gap-1.5 text-[11px]"
+                        >
+                          <span className="text-text-mute">{g.label}</span>
+                          <span className="font-semibold text-text">{g.value}</span>
+                          <span className={g.up ? "text-good" : "text-bad"}>
+                            {g.change}
+                          </span>
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </span>
               </a>
             </li>
