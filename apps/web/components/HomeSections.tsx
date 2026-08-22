@@ -124,6 +124,7 @@ const MACRO_DESC: Record<string, string> = {
   DGS10: "미국 10년물 국채 금리 — 전 세계 자산 가격을 재는 할인율의 기준",
   VIXCLS: "S&P 500 옵션이 예상하는 30일 변동성 — 흔히 공포지수라 부른다",
   DCOILWTICO: "서부텍사스산 원유 — 정유·화학·항공·해운의 원가",
+  USDKRW: "원달러 환율 — 외국인 수급과 수출 기업 실적의 전제",
   DEXKOUS: "원달러 환율 — 외국인 수급과 수출 기업 실적의 전제",
 };
 
@@ -177,10 +178,22 @@ function MacroRows({ items }: { items: MacroSeriesView[] }) {
  * 같은 토막만 남는다(2026-08-22). 잘린 설명은 없는 설명보다 나쁘다.
  * 그래서 좁은 칸에서는 지표판처럼 **라벨 · 값 · 변화**만 세운다. */
 function MacroCompactRows({ items }: { items: MacroSeriesView[] }) {
+  // 기준일을 반드시 적는다. 컴팩트로 줄이면서 뺐더니 4일 전 유가가 «오늘 값»처럼
+  // 보였다(2026-08-22 Victor — "매일 하는 브리핑인데 이상하다"). 지표마다 발표
+  // 주기가 달라 한 섹션 안에서 날짜가 갈리는 게 정상이고, 그래서 더 적어야 한다.
+  const today = new Date();
+  const daysAgo = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const d = Date.parse(iso + "T00:00:00Z");
+    if (Number.isNaN(d)) return null;
+    return Math.floor((Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - d) / 864e5);
+  };
   return (
     <ul className="mt-4 overflow-hidden rounded-[12px] border border-border bg-surface">
       {items.map((m, i) => {
         const up = m.change >= 0;
+        const ago = daysAgo(m.as_of);
+        const stale = ago != null && ago >= 3;
         return (
           <li
             key={m.series_id}
@@ -190,6 +203,13 @@ function MacroCompactRows({ items }: { items: MacroSeriesView[] }) {
           >
             <span className="min-w-0 flex-1 truncate text-[12.5px] text-text-dim">
               {m.label}
+              {m.as_of && (
+                <span
+                  className={`tnum ml-1.5 text-[10.5px] ${stale ? "text-warn" : "text-text-mute"}`}
+                >
+                  {m.as_of.slice(5).replace("-", "/")}
+                </span>
+              )}
             </span>
             <span className="tnum shrink-0 text-[14px] font-bold text-text">
               {m.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}

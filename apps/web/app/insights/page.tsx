@@ -26,7 +26,9 @@ export const metadata = {
 export default async function InsightsPage() {
   const [weekly, macro, blogPosts] = await Promise.all([
     getWeeklyReports(20),
-    getMacroSeries(["DEXKOUS"]),
+    // 제외 목록을 비운다 — 원달러가 USDKRW(네이버, 매일)로 바뀌어 더는 지연된
+    // 시리즈가 아니다. 티커와 값이 갈리던 원인이었다(2026-08-22).
+    getMacroSeries(),
     getBlogPosts(),
   ]);
 

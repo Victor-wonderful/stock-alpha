@@ -629,9 +629,14 @@ export async function getSignalsForSymbol(
 }
 
 // FRED series_id → 표시 메타. spark 는 최근 값 시퀀스.
+// ⚠️ 원달러는 USDKRW(네이버 환율 고시)다. FRED 의 DEXKOUS 는 최대 1주 지연이라
+// 2026-08-22 실측에서 8일 전(8/14) 값을 «오늘»처럼 보여주고 있었다 — 그때 티커는
+// 어제(8/21) 값을 쓰고 있어 한 화면에서 원달러가 1,414 원과 1,382 원으로 갈렸다.
+// 티커(getMarketQuotes)가 진작 USDKRW 를 쓰고 DEXKOUS 를 폴백으로만 두고 있었는데
+// 매크로 섹션만 옛 시리즈에 남아 있었다(engine/ingest/naver.py:262 주석 참조).
 const MACRO_META: Record<string, { label: string; unit: string }> = {
   DGS10: { label: "미 국채 10Y", unit: "%" },
-  DEXKOUS: { label: "원/달러", unit: "원" },
+  USDKRW: { label: "원/달러", unit: "원" },
   VIXCLS: { label: "VIX", unit: "" },
   DCOILWTICO: { label: "WTI 유가", unit: "$" },
 };
