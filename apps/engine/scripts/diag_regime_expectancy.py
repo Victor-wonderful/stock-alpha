@@ -44,6 +44,7 @@ from engine.liquidity import filter_liquid_frames
 from engine.logging import get_logger
 from engine.market.regime import ER_TREND, compute_regime, efficiency_ratio
 from engine.signals import playbooks
+from engine.signals.horizons import HORIZONS, backtest_kwargs, get_profile
 
 log = get_logger(__name__)
 
@@ -106,6 +107,9 @@ def main() -> None:
     ap.add_argument("--recent-bars", type=int, default=60,
                     help="'최근 구간'으로 볼 마지막 거래일 수")
     ap.add_argument("--bars", type=int, default=500)
+    # 축 — 발행은 2026-08-22 부터 기간 축이다. style 은 옛 축(비교용).
+    ap.add_argument("--axis", choices=["style", "horizon"], default="style",
+                    help="셋업을 스타일(swing/position)로 쪼갤지 기간(short/mid/long)으로 쪼갤지")
     args = ap.parse_args()
 
     frames = filter_liquid_frames(_load_active_frames(bars=args.bars))
@@ -139,7 +143,8 @@ def main() -> None:
     thr = GateThresholds()
 
     STATES = ["uptrend", "downtrend", "range", "transition", None]
-    hdr = (f"{'셋업:스타일':<30}" + "".join(f"{str(s or '미상'):>13}" for s in STATES)
+    axis_label = "기간" if args.axis == "horizon" else "스타일"
+    hdr = (f"{'셋업:' + axis_label:<30}" + "".join(f"{str(s or '미상'):>13}" for s in STATES)
            + f"{'최근구간':>13}")
     print("=" * len(hdr))
     print(f"국면별 기대값(R) — 진입일 기준 · entry_mode={GATE_ENTRY_MODE}")
@@ -150,14 +155,25 @@ def main() -> None:
     for setup in setups:
         if setup not in playbooks.ALL_DETECTORS:
             continue
-        for style in playbooks.testable_styles(setup):
+        # 기간 축에서는 일봉 검증이 불가한 셋업(종가베팅 등)을 건너뛴다 — runner 와 동일.
+        if args.axis == "horizon" and not playbooks.testable_styles(setup):
+            continue
+        axis_values = (HORIZONS if args.axis == "horizon"
+                       else playbooks.testable_styles(setup))
+        for value in axis_values:
+            # 기간 축은 손절·목표·분할진입을 프로파일이 정한다(runner.run 과 같은 경로).
+            prof = get_profile(value, setup) if args.axis == "horizon" else None
+            extra = backtest_kwargs(prof) if prof else {"scaleout": True}
             trades = []
             for iid, df in frames.items():
                 trades += backtest_playbook(
-                    df, setup, style_override=style, costs=costs, scaleout=True,
+                    df, setup,
+                    style_override="swing" if prof else value,
+                    costs=costs,
                     entry_mode=GATE_ENTRY_MODE,
                     flows=flows_map.get(iid), earnings=earnings_map.get(iid),
                     disclosures=discl_map.get(iid),
+                    **extra,
                 )
             if not trades:
                 continue
@@ -170,7 +186,7 @@ def main() -> None:
                     recent.append(t.r_multiple)
             g = evaluate_gate(trades, thr)
             mark = "*" if g.passed else " "
-            print(f"{setup + ':' + style:<29}{mark}"
+            print(f"{setup + ':' + value:<29}{mark}"
                   + "".join(_summary(by_state.get(s, [])) for s in STATES)
                   + _summary(recent))
 
