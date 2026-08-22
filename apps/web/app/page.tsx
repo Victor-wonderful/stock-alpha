@@ -297,7 +297,12 @@ export default async function HomePage() {
           )}
         </section>
 
-        <div className="grid items-start gap-5 lg:grid-cols-[1.6fr_1fr]">
+        {/* 아래 세 카드는 균등 3열이다. 예전엔 [1.6fr | 1fr] 이라 **넓은 칸(839px)에
+            제일 적은 내용**(「오늘 시장은」 한 문장)이 들어가고 좁은 칸(525px)에 카드가
+            둘 쌓여, 좌우 높이가 100px vs 253px 로 벌어졌다(2026-08-22 Victor 지적).
+            「오늘의 픽」의 빈 여백을 고쳐놓고 같은 실수를 옆 칸에서 반복한 것이다.
+            셋 다 «한 문장~두 줄»짜리 상태 카드라 폭을 다르게 줄 이유가 없다. */}
+        <div className="grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3">
           {/* ── 오늘 시장은 ──
               아침 브리핑은 홈이 이미 통째로 조회하는데 날짜 한 줄만 쓰고 버리고 있었다
               (2026-08-22). 시장 메뉴의 요약본을 만들지 않는다 — 그날 폭 한 문장과 링크
@@ -334,9 +339,8 @@ export default async function HomePage() {
             <div />
           )}
 
-          {/* ── 진행 중 · 읽을 것 ── */}
-          <div className="flex flex-col gap-5">
-            <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
+          {/* ── 진행 중 ── */}
+          <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
               <div className="mb-3 flex items-baseline justify-between gap-3">
                 <h2 className="text-sm font-bold text-text">진행 중</h2>
                 <Link href="/picks" className="text-[11px] text-accent hover:underline">
@@ -386,9 +390,10 @@ export default async function HomePage() {
                   )}
                 </div>
               )}
-            </section>
+          </section>
 
-            <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
+          {/* ── 읽을 것 ── */}
+          <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
               <div className="mb-3 flex items-baseline justify-between gap-3">
                 <h2 className="text-sm font-bold text-text">읽을 것</h2>
                 <Link href="/insights" className="text-[11px] text-accent hover:underline">
@@ -413,8 +418,7 @@ export default async function HomePage() {
                   ))}
                 </ul>
               )}
-            </section>
-          </div>
+          </section>
         </div>
       </main>
     </div>
