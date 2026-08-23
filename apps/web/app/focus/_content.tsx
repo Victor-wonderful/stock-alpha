@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PickCard } from "./_pick-card";
 import { HORIZONS, isHorizonPaused, horizonSpec } from "@/lib/holding";
+import { OpenPicksSummary } from "@/components/OpenPicksSummary";
 import { OpenPicksTable } from "@/components/OpenPicksTable";
 
 // 레짐 게이지 (3구간 바 + 마커)
@@ -177,15 +178,6 @@ export default async function FocusContent() {
     }),
   );
   const pendingCount = picksToday.filter((p) => p.status === "pending").length;
-  // 손절까지 3% 이내로 붙은 픽 — toStopPct 는 롱에서 음수이고 0 에 가까울수록 코앞이다.
-  const nearStop = openPicks.filter(
-    (p) => p.toStopPct != null && p.toStopPct >= -0.03,
-  ).length;
-  const withRet = openPicks.filter((p) => p.returnPct != null);
-  const avgRet =
-    withRet.length > 0
-      ? withRet.reduce((a, p) => a + (p.returnPct ?? 0), 0) / withRet.length
-      : null;
 
   // 트랙레코드 집계 — 엔진이 확정(0017)한 종료 픽만. 정직한 기대값 노출(신뢰).
   // 저승률·고R:R 추세전략은 손절이 잦아도 기대값이 양(+)이면 장기 수익이 난다는 걸
@@ -583,48 +575,6 @@ export default async function FocusContent() {
               </p>
             )}
 
-            {/* ── 진행 중 — 산 뒤 상태 ──
-                「오늘의 픽」 바로 아래에 둔다. 둘은 같은 것을 다른 시점에서 보는
-                화면이다(홈에서 정한 짝): 오늘의 픽 = 사기 전 계획, 진행 중 = 산 뒤
-                상태. 여기 없으면 이 페이지는 «25% 비중으로 사라»고만 하고 이미 무엇을
-                들고 있는지는 말하지 않는다 — 살 여력을 판단할 수가 없다.
-
-                홈과 달리 좌우 두 패널로 가르지 않는다. 좌측 열이 좁고, 요약이 말할
-                것(보유 건수·손절 근접·평균 손익률)은 머리줄 한 줄에 다 들어간다.
-                홈은 «전체가 어떤가»를 패널로 펼쳐 보여주는 자리라 거기선 패널이 맞다. */}
-            <section className="mt-8">
-              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <h2 className="text-sm font-bold text-text">
-                  진행 중{" "}
-                  <span className="text-[11px] font-medium text-text-mute">
-                    {openPicks.length > 0
-                      ? `이미 산 픽 ${openPicks.length}건 · 손절 가까운 순`
-                      : "이미 산 픽"}
-                  </span>
-                </h2>
-                <div className="flex flex-wrap items-baseline gap-x-3 text-[11px]">
-                  {avgRet != null && (
-                    <span className={`tnum font-semibold ${avgRet >= 0 ? "text-good" : "text-bad"}`}>
-                      평균 손익률 {fmtPct(avgRet)}
-                    </span>
-                  )}
-                  {nearStop > 0 && (
-                    <span className="tnum font-semibold text-bad">
-                      손절 근접 {nearStop}건
-                    </span>
-                  )}
-                  <Link href="/picks" className="text-accent hover:underline">
-                    전체 기록 →
-                  </Link>
-                </div>
-              </div>
-              <OpenPicksTable
-                picks={openPicks}
-                exitDays={openExitDays}
-                pendingCount={pendingCount}
-                planDay={planDay}
-              />
-            </section>
           </div>
 
           {/* 우측 레일 */}
@@ -780,6 +730,42 @@ export default async function FocusContent() {
             </section>
           </div>
         </div>
+
+        {/* ── 진행 중 — 산 뒤 상태 ──
+            「오늘의 픽」과 짝이다: 오늘의 픽 = 사기 전 계획, 진행 중 = 산 뒤 상태.
+            이게 없으면 이 페이지는 «권장 비중 25%로 사라»고만 하고 지금 무엇을 얼마나
+            들고 있는지는 말하지 않는다 — 살 여력을 판단할 근거가 화면에 없다.
+
+            **홈과 같은 형태**로 둔다(2026-08-23 Victor). 처음엔 좌측 열 안에 표만
+            넣고 요약을 머리줄 한 줄로 접었는데, 그러면 같은 것이 두 화면에서 다른
+            모양이 된다 — 매일 홈을 보던 사람이 여기서 «어제 보던 그 자리»를 잃는다.
+            좌우로 가르려면 폭이 필요하므로 2컬럼 그리드 **밖**, 전폭에 놓는다.
+            좌 = 보유 전체가 어떤가, 우 = 종목별로 어떤가. */}
+        <section className="mt-10">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-bold text-text">
+              진행 중{" "}
+              <span className="text-[11px] font-medium text-text-mute">
+                {openPicks.length > 0
+                  ? `이미 산 픽 ${openPicks.length}건 · 손절 가까운 순`
+                  : "이미 산 픽"}
+              </span>
+            </h2>
+            <Link href="/picks" className="text-[11px] text-accent hover:underline">
+              전체 기록 →
+            </Link>
+          </div>
+          {/* 홈과 같은 비율 — 표가 8열이라 우측을 넉넉히 준다(최소폭 760px). */}
+          <div className="grid items-start gap-x-8 gap-y-6 lg:grid-cols-[minmax(280px,1fr)_2.6fr]">
+            <OpenPicksSummary picks={openPicks} />
+            <OpenPicksTable
+              picks={openPicks}
+              exitDays={openExitDays}
+              pendingCount={pendingCount}
+              planDay={planDay}
+            />
+          </div>
+        </section>
 
         {/* 빠른 링크 */}
         <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs">
