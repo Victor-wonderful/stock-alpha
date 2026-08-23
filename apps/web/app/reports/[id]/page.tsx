@@ -155,12 +155,21 @@ export default async function ReportDetailPage({
     >
       {/* 브레드크럼 + 메타 */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <Link
-          href="/reports"
-          className="flex items-center gap-1 text-xs font-semibold text-text-dim hover:text-accent"
-        >
-          ← 종목 분석으로
-        </Link>
+        {/* 돌아가는 길이 틀렸다(2026-08-23 Victor) — 「← 종목 분석으로」가 분석 «목록»
+            으로 갔다. 이 화면에 오는 길은 둘이다: 분석 목록의 행, 그리고 종목 상세의
+            「AI 애널리스트 리포트」 패널. 어느 쪽으로 왔든 리포트는 **그 종목의** 문서라
+            기본 되돌아가기는 종목 화면이어야 한다. 목록으로 가는 길은 따로 남긴다. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Link
+            href={`/stocks/${p.instrument.symbol}`}
+            className="flex items-center gap-1 text-xs font-semibold text-text-dim hover:text-accent"
+          >
+            ← {p.instrument.name} 종목 상세
+          </Link>
+          <Link href="/reports" className="text-[11px] text-text-mute hover:text-accent">
+            분석 목록
+          </Link>
+        </div>
         <span className="text-[10px] text-text-mute">
           수치는 전부 DB 근거(source_refs) — LLM은 서술만 · {fmtDateTime(report.created_at)} 발행
         </span>
@@ -526,12 +535,18 @@ export default async function ReportDetailPage({
               <p>발행 {fmtDateTime(report.created_at)} · 일일 자동 배치</p>
               <p>{report.model_version ?? "—"}</p>
             </div>
-            <Link
-              href="/reports"
-              className="mt-2 inline-block text-[11px] font-semibold text-accent hover:underline"
-            >
-              ← 리포트 목록
-            </Link>
+            {/* 바닥에서도 두 길을 다 준다 — 머리와 같은 순서로. */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Link
+                href={`/stocks/${p.instrument.symbol}`}
+                className="text-[11px] font-semibold text-accent hover:underline"
+              >
+                ← {p.instrument.name} 종목 상세
+              </Link>
+              <Link href="/reports" className="text-[11px] text-text-mute hover:text-accent">
+                분석 목록
+              </Link>
+            </div>
           </div>
         </div>
       </div>
