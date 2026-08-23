@@ -26,7 +26,7 @@ export function SignalCard({ s }: { s: SignalView }) {
       </div>
 
       <div className="mt-2">
-        <AxisRow style={s.style} setup={s.setup} session={s.session} />
+        <AxisRow horizon={s.horizon} setup={s.setup} session={s.session} />
       </div>
 
       {/* 신뢰도 막대 */}

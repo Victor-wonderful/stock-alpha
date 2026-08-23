@@ -648,8 +648,12 @@ export async function getValuation(
       .eq("instrument_id", instrumentId)
       .order("date", { ascending: false })
       .limit(1)
-      .single();
-    if (error || !data) throw error ?? new Error("none");
+      // maybeSingle — 0행이 «오류»가 아니다. single() 은 0행에 에러를 던져서
+      // 「밸류에이션이 아직 없는 종목」과 「조회 실패」를 구분할 수 없었고, 둘 다
+      // 예시 PER·PBR 로 채워졌다. 없는 건 없다고 말한다.
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return { data: null, isSample: false };
     return { data: data as ValuationView, isSample: false };
   } catch {
     return { data: sampleValuationFor(symbol), isSample: true };
@@ -670,8 +674,10 @@ export async function getFactor(
       .eq("instrument_id", instrumentId)
       .order("date", { ascending: false })
       .limit(1)
-      .single();
-    if (error || !data) throw error ?? new Error("none");
+      // maybeSingle — 0행과 조회 실패를 구분한다(getValuation 과 같은 이유).
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return { data: null, isSample: false };
     return { data: data as FactorView, isSample: false };
   } catch {
     return { data: sampleFactorFor(symbol), isSample: true };
@@ -784,11 +790,20 @@ export async function getSignalsForSymbol(
       .select("*, instruments(symbol,name,exchange,currency)")
       .eq("instrument_id", inst.id)
       .order("strength", { ascending: false });
-    if (error || !data || data.length === 0) throw error ?? new Error("empty");
+    if (error) throw error;
+    // ⚠️ «비어 있음»과 «연결 실패»를 구분한다(getSignals 와 같은 규약).
+    //
+    // 예전에는 0건이면 예시 시그널에 **심볼만 갈아끼워** 돌려줬다. 그래서 시그널이
+    // 하나도 없는 종목의 상세 화면에 그 종목 이름을 단 진입가·손절가·목표가가 떴다
+    // (2026-08-23 확인: HD현대에너지솔루션·티에스이·SK 전부 해당). 「예시 데이터」
+    // 배지를 달아도 사용자는 숫자를 실제 계획으로 읽는다 — 매매 레벨은 특히 그렇다.
+    // DB 가 멀쩡히 답한 0건은 «없다»고 말한다.
+    if (!data) throw new Error("no data");
+    if (data.length === 0) return { data: [], isSample: false };
     const riskPct = await getUserRiskPct();
     return { data: data.map((r) => mapSignal(r, riskPct)), isSample: false };
   } catch {
-    // 해당 종목 시그널이 없으면 예시에서 심볼만 맞춰 보여줌
+    // 여기는 «조회 실패»만 온다 — 그때만 예시로 화면을 세운다.
     return {
       data: SAMPLE_SIGNALS.map((s) => ({ ...s, symbol })),
       isSample: true,
@@ -2265,7 +2280,10 @@ export async function getFlows(
       .eq("instrument_id", instrumentId)
       .order("date", { ascending: false })
       .limit(10);
-    if (error || !data || data.length === 0) throw error ?? new Error("empty");
+    if (error) throw error;
+    if (!data) throw new Error("no data");
+    // 0건 = «이 종목은 수급 데이터가 없다». 가짜로 채우지 않는다.
+    if (data.length === 0) return { data: [], isSample: false };
     return { data: data as FlowRowView[], isSample: false };
   } catch {
     return { data: sampleFlowsFor(symbol), isSample: true };
@@ -2462,6 +2480,8 @@ export interface AlphaZoneCard {
   exchange: string;
   currency: string;
   setup: TradeSetup;
+  /** 축은 기간이다 — 화면은 스타일 이름(스윙·포지션)을 쓰지 않는다(2026-08-23). */
+  horizon: string | null;
   style: TradeStyle;
   strength: number;
   entry: number;
@@ -2494,7 +2514,7 @@ export async function getAlphaZoneStocks(
     const { data: sigs, error } = await supabase
       .from("signals")
       .select(
-        "instrument_id,setup,style,strength,entry_price,stop_loss,tp1,tp2,risk_reward,instruments!inner(symbol,name,exchange,currency)",
+        "instrument_id,setup,style,horizon,strength,entry_price,stop_loss,tp1,tp2,risk_reward,instruments!inner(symbol,name,exchange,currency)",
       )
       .eq("signal_type", "buy")
       .order("strength", { ascending: false })
@@ -2555,6 +2575,7 @@ export async function getAlphaZoneStocks(
         currency: (inst.currency as string) ?? "KRW",
         setup: r.setup as TradeSetup,
         style: r.style as TradeStyle,
+        horizon: (r.horizon as string | null) ?? null,
         strength: Number(r.strength),
         entry,
         stop,
@@ -2645,6 +2666,7 @@ function sampleAlphaZoneCards(limit: number): AlphaZoneCard[] {
         currency: s.currency,
         setup: s.setup,
         style: s.style,
+        horizon: s.horizon ?? null,
         strength: s.strength,
         entry,
         stop,

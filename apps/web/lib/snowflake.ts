@@ -41,6 +41,20 @@ const PHRASE: Record<SnowflakeAxis["key"], string> = {
   stability: "안정성",
 };
 
+/**
+ * 주격 조사 — 받침이 있으면 「이」, 없으면 「가」.
+ *
+ * 예전에는 「이」를 그대로 붙여 「**추세이** 가장 강하고」가 나왔다(2026-08-23 확인).
+ * 문장을 코드가 만드는 이상 조사도 코드가 골라야 한다. 괄호로 끝나는 축 이름
+ * (「수급(외인·기관)」)이 있으므로 마지막 **한글** 글자를 찾아 판정한다.
+ */
+function subj(word: string): string {
+  const ch = [...word].reverse().find((c) => /[가-힣]/.test(c));
+  if (!ch) return `${word}가`;
+  const hasJong = (ch.charCodeAt(0) - 0xac00) % 28 !== 0;
+  return `${word}${hasJong ? "이" : "가"}`;
+}
+
 export function computeSnowflake(args: {
   val: ValuationView | null;
   fac: FactorView | null;
@@ -88,9 +102,11 @@ export function computeSnowflake(args: {
   const hi = sorted[0],
     lo = sorted[sorted.length - 1];
   const flowAxis = axes.find((a) => a.key === "flow")!;
-  let summary = `${PHRASE[hi.key]}이 가장 강하고(${hi.score}), ${PHRASE[lo.key]}이 가장 약합니다(${lo.score}).`;
+  let summary = `${subj(PHRASE[hi.key])} 가장 강하고(${hi.score}), ${subj(PHRASE[lo.key])} 가장 약합니다(${lo.score}).`;
   if (flowAxis.score < 45 && hi.key === "value")
-    summary = `저평가 매력은 높지만(${axes[0].score}) 외국인·기관 수급이 빠지는 중(${flowAxis.score}) — 지금은 관망, 수급 반전 확인 후 진입 검토.`;
+    // hi.key === "value" 인 분기이므로 hi.score 가 곧 저평가 매력 점수다.
+    // 예전에는 axes[0].score 를 썼는데, 축 배열 순서가 바뀌면 조용히 다른 값을 적는다.
+    summary = `저평가 매력은 높지만(${hi.score}) 외국인·기관 수급이 빠지는 중(${flowAxis.score}) — 지금은 관망, 수급 반전 확인 후 진입 검토.`;
   else if (flowAxis.score < 45)
     summary += " 수급이 받쳐주지 않아 진입은 신중히.";
   else if (overall >= 65) summary += " 전반적으로 양호 — 진입 검토 대상.";

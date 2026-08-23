@@ -17,13 +17,15 @@ export function SignalTable({ rows }: { rows: SignalView[] }) {
             <Th className="text-right">현재가</Th>
             <Th className="text-right">등락</Th>
             <Th className="text-center">추세</Th>
-            <Th className="text-left">전략 · 스타일/셋업/세션</Th>
+            <Th className="text-left">전략 · 셋업/세션</Th>
             <Th className="text-center">방향</Th>
             <Th className="text-left">신뢰도</Th>
             <Th className="text-right">진입</Th>
+            {/* 「목표」·「R:R」을 버렸다(2026-08-23) — 채택 규칙(trail)은 목표에서
+                팔지 않고 손절만 진입가로 올린다. 홈·오늘의 픽·스크리너와 같은 말로. */}
             <Th className="text-right">손절</Th>
-            <Th className="text-right">목표</Th>
-            <Th className="text-right">R:R</Th>
+            <Th className="text-right">본전 도달가</Th>
+            <Th className="text-right">1주당 리스크</Th>
             <Th className="pr-4 text-right">비중</Th>
           </tr>
         </thead>
@@ -51,7 +53,7 @@ export function SignalTable({ rows }: { rows: SignalView[] }) {
                   </div>
                 </td>
                 <td className="px-3 py-2.5">
-                  <AxisRow style={s.style} setup={s.setup} session={s.session} />
+                  <AxisRow horizon={s.horizon} setup={s.setup} session={s.session} />
                 </td>
                 <td className="px-3 py-2.5 text-center">
                   <Badge variant={buy ? "bull" : "bear"} size="md">
@@ -64,7 +66,11 @@ export function SignalTable({ rows }: { rows: SignalView[] }) {
                 <Td className="mono text-right">{fmtPrice(s.entry_price, s.currency)}</Td>
                 <Td className="mono text-right text-bear">{fmtPrice(s.stop_loss, s.currency)}</Td>
                 <Td className="mono text-right text-bull">{fmtPrice(s.tp1, s.currency)}</Td>
-                <Td className="mono text-right">{fmtNum(s.risk_reward, 2)}</Td>
+                <Td className="mono text-right">
+                  {s.entry_price != null && s.stop_loss != null
+                    ? `${Math.round(s.entry_price - s.stop_loss).toLocaleString("ko-KR")}원`
+                    : "—"}
+                </Td>
                 <Td className="mono pr-4 text-right">
                   {s.position_size_pct != null ? `${s.position_size_pct}%` : "—"}
                 </Td>

@@ -62,15 +62,6 @@ export default async function StockDetailPage({
     close: c.close,
   }));
   const upside = val.data?.upside_pct ?? null;
-  // R:R — 대표 시그널의 (목표−진입)/(진입−손절). 셋 다 있을 때만.
-  const target = lead?.tp1 ?? null;
-  const rr =
-    lead?.entry_price != null &&
-    lead?.stop_loss != null &&
-    target != null &&
-    lead.entry_price > lead.stop_loss
-      ? (target - lead.entry_price) / (lead.entry_price - lead.stop_loss)
-      : null;
 
   // 리스크 지표 신선도 — risk_metrics 는 daily 배치에 편입돼 있지 않아 갱신이 멈출 수
   // 있다(2026-06-09 이후 7주간 정지). 기준일 없이 최신값 자리에 앉으면 묵은 수치를
@@ -201,11 +192,9 @@ export default async function StockDetailPage({
               lead ? (
                 <div className="flex items-center gap-2">
                   <SetupChip setup={lead.setup} />
-                  {rr != null && (
-                    <span className="text-2xs text-text-mute">
-                      R:R <span className="tnum font-semibold text-text-dim">{rr.toFixed(1)}</span>
-                    </span>
-                  )}
+                  {/* R:R 을 뺐다(2026-08-23) — «목표에서 판다»를 전제한 값이라
+                      채택 규칙(trail)에서는 실현되지 않는다. 홈·오늘의 픽·스크리너와
+                      같은 말로. 실제로 거는 돈은 아래 「알파존 레벨」이 말한다. */}
                 </div>
               ) : null
             }
@@ -220,16 +209,28 @@ export default async function StockDetailPage({
               }}
               candles={candles.length > 0 ? candles : undefined}
             />
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
-              <ZoneKey color="rgba(46,189,133,0.85)" label="목표 존 (진입→목표)" />
-              <ZoneKey color="rgba(61,123,255,0.85)" label="알파 존 (진입→손절)" />
-              <ZoneKey color="#1F5FD0" label="손절선" line />
-            </div>
-            <p className="mt-2 text-2xs text-text-mute">
-              {candles.length > 0
-                ? `* KIS 일봉 ${candles.length}개. 색 존은 대표 시그널의 목표/진입/손절 가격대.`
-                : "* 실 OHLCV 연결 전 합성 캔들로 구조를 표시합니다. 색 존은 대표 시그널의 목표/진입/손절 가격대."}
-            </p>
+            {/* 범례·설명은 시그널이 있을 때만. 시그널이 없으면 그릴 존이 없는데
+                「목표 존 · 알파 존 · 손절선」을 적어두면 색만 안 보이는 고장난 차트로
+                읽힌다(2026-08-23). 이름도 새 규칙에 맞춘다 — 그 목표에서 팔지 않는다. */}
+            {lead ? (
+              <>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
+                  <ZoneKey color="rgba(46,189,133,0.85)" label="진입 → 본전 도달가" />
+                  <ZoneKey color="rgba(61,123,255,0.85)" label="진입 → 손절가" />
+                  <ZoneKey color="#1F5FD0" label="손절선" line />
+                </div>
+                <p className="mt-2 text-2xs text-text-mute">
+                  {candles.length > 0
+                    ? `* KIS 일봉 ${candles.length}개. 색 존은 대표 시그널의 진입·손절·본전 도달 가격대.`
+                    : "* 실 OHLCV 연결 전 합성 캔들로 구조를 표시합니다."}
+                </p>
+              </>
+            ) : (
+              <p className="mt-3 text-2xs text-text-mute">
+                이 종목은 지금 발동한 셋업이 없어 진입·손절 가격대가 없습니다 — 캔들만
+                표시합니다.
+              </p>
+            )}
           </Panel>
 
           {/* 알파존 레벨 — 진입/손절/목표 + 존 위치 */}
@@ -241,7 +242,6 @@ export default async function StockDetailPage({
                 stop={lead.stop_loss}
                 tp1={lead.tp1}
                 tp2={lead.tp2}
-                rr={rr}
                 currency={inst.data.currency}
               />
             </Panel>
@@ -409,7 +409,6 @@ function AlphaLevels({
   stop,
   tp1,
   tp2,
-  rr,
   currency,
 }: {
   price: number;
@@ -417,7 +416,6 @@ function AlphaLevels({
   stop: number;
   tp1: number | null;
   tp2: number | null;
-  rr: number | null;
   currency: string;
 }) {
   const toEntry = (price - entry) / entry;
@@ -451,23 +449,27 @@ function AlphaLevels({
         />
       </div>
 
-      {/* 레벨 값 */}
+      {/* 레벨 값 — 홈·오늘의 픽·스크리너와 같은 이름·같은 순서(2026-08-23).
+          「목표가」·「2차 목표」·「R:R」을 버렸다: 채택 규칙(trail)은 목표에서 팔지
+          않고 손절만 진입가로 올린다. 그 자리에 실제로 확정된 값 「1주당 리스크」를 둔다. */}
       <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <Stat label="진입가" value={fmtPrice(entry, currency)} />
+        <Stat label="손절가" value={fmtPrice(stop, currency)} tone="bear" sub={fmtPct(slPct)} />
         <Stat
-          label={tp2 != null ? "목표 (1차)" : "목표가"}
+          label="본전 도달가"
           value={fmtPrice(tp1, currency)}
           tone="bull"
-          sub={
-            tp2 != null
-              ? `2차 ${fmtPrice(tp2, currency)}`
-              : tpPct != null
-                ? fmtPct(tpPct)
-                : undefined
-          }
+          sub={tpPct != null ? `${fmtPct(tpPct)} · 손절이 본전으로` : "손절이 본전으로"}
         />
-        <Stat label="손절가" value={fmtPrice(stop, currency)} tone="bear" sub={fmtPct(slPct)} />
-        <Stat label="R:R" value={rr != null ? rr.toFixed(1) : "—"} tone="accent" />
+        <Stat
+          label="1주당 리스크"
+          value={
+            entry != null && stop != null
+              ? `${Math.round(entry - stop).toLocaleString("ko-KR")}원`
+              : "—"
+          }
+          sub="진입 − 손절"
+        />
       </div>
     </div>
   );

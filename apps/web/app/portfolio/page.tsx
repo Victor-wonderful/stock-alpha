@@ -3,7 +3,7 @@ import { SymbolCode } from "@/components/SymbolCode";
 import { AppShell } from "@/components/AppShell";
 import { Panel, SampleBadge, StrengthBar } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { StyleChip } from "@/components/AxisChips";
+import { HorizonChip } from "@/components/AxisChips";
 import { getRecommendations } from "@/lib/data";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import type { RecommendationView } from "@/lib/types";
@@ -91,7 +91,8 @@ export default async function PortfolioPage() {
                             <SymbolCode symbol={r.symbol} className="ml-2 text-2xs text-text-mute" />
                             <p className="mt-0.5 max-w-md truncate text-2xs text-text-mute">{r.thesis}</p>
                           </td>
-                          <td className="px-3 py-2.5"><StyleChip style={r.style} /></td>
+                          {/* 스타일(스윙·포지션) 대신 기간 칩 — 축은 기간 하나다(2026-08-23). */}
+                          <td className="px-3 py-2.5"><HorizonChip horizon={r.horizon} /></td>
                           <td className="px-3 py-2.5">
                             <div className="flex items-center gap-2">
                               <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-3">

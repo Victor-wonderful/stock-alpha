@@ -2,7 +2,7 @@ import Link from "next/link";
 import { SymbolCode } from "@/components/SymbolCode";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
-import { StyleChip } from "@/components/AxisChips";
+import { HorizonChip } from "@/components/AxisChips";
 import { setupCharacter, TONE_CLASS } from "@/lib/setupCharacter";
 import { AlphaZoneMini } from "@/components/AlphaZoneMini";
 import { getAlphaZoneStocks, getMarketState, type AlphaZoneCard } from "@/lib/data";
@@ -39,8 +39,8 @@ export default async function AlphaZonePage() {
 
       {/* 범례 */}
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
-        <ZoneKey color="rgba(46,189,133,0.85)" label="목표 존 (진입→목표)" />
-        <ZoneKey color="rgba(61,123,255,0.85)" label="알파 존 (진입→손절)" />
+        <ZoneKey color="rgba(46,189,133,0.85)" label="진입 → 본전 도달가" />
+        <ZoneKey color="rgba(61,123,255,0.85)" label="진입 → 손절가" />
         <ZoneKey color="#1F5FD0" label="손절선" line />
         <span className="ml-auto text-text-mute">
           정렬: 강도순 · 진입가 근접 우선
@@ -62,7 +62,7 @@ export default async function AlphaZonePage() {
       )}
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-text-mute">
-        매수 추천이 아닌 셋업 트리거 기록 — 진입/목표/손절은 백테스트 캘리브레이션 기준 · 판단 책임은 투자자 본인
+        매수 추천이 아닌 셋업 트리거 기록 — 진입·손절·본전 도달가는 백테스트 캘리브레이션 기준 · 판단 책임은 투자자 본인
       </p>
     </AppShell>
   );
@@ -98,7 +98,7 @@ function ZoneCard({ c }: { c: AlphaZoneCard }) {
                 </span>
               );
             })()}
-            <StyleChip style={c.style} />
+            <HorizonChip horizon={c.horizon} />
             <span
               title="백테스트 게이트 통과 셋업만"
               className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-good-soft text-good"
@@ -147,12 +147,23 @@ function ZoneCard({ c }: { c: AlphaZoneCard }) {
         </div>
       </div>
 
-      {/* 스탯 */}
+      {/* 스탯 — 홈·오늘의 픽·스크리너·종목 상세와 같은 이름·같은 순서(2026-08-23).
+          「목표」·「R:R」을 버렸다: 채택 규칙(trail)은 목표에서 팔지 않고 손절만
+          진입가로 올린다. 잃는 쪽(손절)을 먼저 읽게 두고, 마지막 칸에는 실제로 거는
+          돈(1주당 리스크)을 놓는다. */}
       <div className="mt-3 grid grid-cols-4 gap-1.5 border-t border-border pt-3 text-center">
         <Stat label="진입" value={fmtPrice(c.entry, c.currency)} />
-        <Stat label="목표" value={fmtPrice(c.tp1, c.currency)} tone="good" sub={tpPct != null ? fmtPct(tpPct) : undefined} />
         <Stat label="손절" value={fmtPrice(c.stop, c.currency)} tone="bad" sub={fmtPct(slPct)} />
-        <Stat label="R:R" value={c.rr != null ? c.rr.toFixed(1) : "—"} tone="accent" />
+        <Stat
+          label="본전 도달"
+          value={fmtPrice(c.tp1, c.currency)}
+          tone="good"
+          sub={tpPct != null ? fmtPct(tpPct) : undefined}
+        />
+        <Stat
+          label="1주당 리스크"
+          value={`${Math.round(c.entry - c.stop).toLocaleString("ko-KR")}원`}
+        />
       </div>
     </Link>
   );
