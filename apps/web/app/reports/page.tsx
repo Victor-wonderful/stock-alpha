@@ -6,12 +6,14 @@ import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import {
+  countUnfitButPublishable,
   countUnfitReports,
   getPickHistory,
   getReports,
   getLatestPricesBySymbols,
 } from "@/lib/data";
 import { nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
+import { PUBLISH_HORIZONS } from "@/lib/holding";
 import { PriceNow } from "@/components/PriceNow";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -78,8 +80,11 @@ export default async function ReportsPage({
   // ⚠️ 기본 보기에서는 부적합을 조회하지 않으므로 받아온 배열로는 0 이 나온다.
   // «몇 개를 숨겼는지»는 숨기는 쪽이 말해야 한다 — 따로 센다.
   const unfitCount = includeUnfit
-    ? reports.filter((r) => r.rating === "거래 부적합").length
+    ? reports.filter((r) => r.as_of === latestDay && r.rating === "거래 부적합").length
     : await countUnfitReports(latestDay);
+  // 숨긴 것 중 «지금 기준으로는 발행 대상»인 수. 판정이 리포트를 만든 날 기준이라
+  // 게이트가 바뀐 뒤로 어긋난다 — 목록이 살 수 있는 종목을 가리고 있을 수 있다.
+  const unfitPublishable = await countUnfitButPublishable(latestDay, PUBLISH_HORIZONS);
 
   // 필터 적용
   let filtered = reports;
@@ -221,6 +226,27 @@ export default async function ReportsPage({
           거래 부적합 {unfitCount}건 {includeUnfit ? "숨기기" : "보이기"}
         </Link>
       </div>
+
+      {/* 숨긴 것 중에 «지금 살 수 있는» 종목이 섞여 있으면 반드시 말한다.
+          판정(rating)은 리포트를 만든 날의 거래가능 게이트를 점수 위에 덧씌운 값이라,
+          게이트가 (셋업 × 기간) 축으로 바뀐 뒤로 어긋난다. 2026-08-23 실측 — 8/21 자
+          부적합 27건 중 9건이 지금 게이트에서 발행 대상 조합을 갖고 있었고, 그중 하나가
+          그날 실제로 발행된 픽(오리온)이다. 화면이 무언가를 숨긴다면 무엇을 숨겼는지는
+          말해야 한다. */}
+      {!includeUnfit && unfitPublishable > 0 && (
+        <div className="mb-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-[12px] border border-warn/30 bg-warn-soft px-4 py-3 text-[12px] leading-relaxed text-text-dim">
+          <span className="font-bold text-warn">
+            숨긴 {unfitCount}건 중 {unfitPublishable}건은 지금 기준으로 발행 대상입니다
+          </span>
+          <span>
+            — 「거래 부적합」은 리포트를 만든 날의 게이트로 찍힌 값이라 그 뒤 게이트가
+            바뀌면 어긋납니다. 실제로 「오늘의 픽」에 오른 종목이 여기 들어 있습니다.
+          </span>
+          <Link href="/reports?all=1" className="font-semibold text-accent hover:underline">
+            숨긴 것까지 보기 →
+          </Link>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <EmptyState message="조건에 맞는 리포트가 없습니다." />

@@ -254,6 +254,72 @@ export async function countUnfitReports(asOf: string | null): Promise<number> {
   }
 }
 
+/**
+ * 「거래 부적합」으로 숨긴 종목 중 **지금 기준으로는 발행 대상**인 것이 몇인가.
+ *
+ * rating 은 리포트를 만든 날의 게이트로 찍힌 값이라 게이트가 (셋업 × 기간) 축으로
+ * 바뀐 뒤로 어긋난다. 2026-08-23 실측 — 8/21 자 부적합 27건 중 **9건**이 지금
+ * 게이트에서 발행 대상(단기·중기) 조합을 갖고 있었고, 그중 하나가 그날 실제로
+ * 발행된 픽(오리온)이다. 목록이 기본으로 숨기는 것 안에 «지금 살 수 있는» 종목이
+ * 섞여 있다는 뜻이다.
+ *
+ * 화면이 무언가를 숨긴다면 «무엇을 숨겼는지»는 말해야 한다. 그 수를 여기서 센다.
+ */
+export async function countUnfitButPublishable(
+  asOf: string | null,
+  publishHorizons: readonly string[],
+): Promise<number> {
+  if (!asOf) return 0;
+  try {
+    const supabase = createPublicClient();
+    const [{ data: unfit }, { data: gate }] = await Promise.all([
+      supabase
+        .from("reports")
+        .select("instruments!inner(symbol)")
+        .eq("as_of", asOf)
+        .eq("rating", "거래 부적합")
+        .limit(200),
+      supabase
+        .from("backtests")
+        .select("setup,horizon")
+        .eq("passed", true)
+        .not("horizon", "is", null)
+        .limit(300),
+    ]);
+    const syms = [
+      ...new Set(
+        ((unfit ?? []) as { instruments?: { symbol?: string } }[])
+          .map((r) => r.instruments?.symbol)
+          .filter((v): v is string => !!v),
+      ),
+    ];
+    const pub = new Set(
+      ((gate ?? []) as { setup: string; horizon: string }[])
+        .filter((b) => publishHorizons.includes(b.horizon))
+        .map((b) => `${b.setup}|${b.horizon}`),
+    );
+    if (syms.length === 0 || pub.size === 0) return 0;
+    const { data: sigs } = await supabase
+      .from("signals")
+      .select("setup,horizon,instruments!inner(symbol)")
+      .in("instruments.symbol", syms)
+      .limit(2000);
+    const hit = new Set<string>();
+    for (const r of (sigs ?? []) as {
+      setup: string;
+      horizon: string | null;
+      instruments?: { symbol?: string };
+    }[]) {
+      const sym = r.instruments?.symbol;
+      if (!sym || !r.horizon) continue;
+      if (pub.has(`${r.setup}|${r.horizon}`)) hit.add(sym);
+    }
+    return hit.size;
+  } catch {
+    return 0;
+  }
+}
+
 // 공시 유형별 성적표 — "이 소식 뒤에 실제로 어떻게 됐나".
 // 엔진(engine/market/event_study.py)이 매일 계산해 event_evidence 에 적재한다.
 // 화면의 "이 뉴스는 어떻다"는 문장은 전부 이 표를 근거로 한다.

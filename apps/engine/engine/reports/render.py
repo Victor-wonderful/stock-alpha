@@ -1,5 +1,7 @@
 """리포트 렌더링 — 컨텍스트(+서술) → body_md / summary. 순수 함수."""
 from __future__ import annotations
+from engine.signals.axes import SETUP_LABELS
+from engine.signals.horizons import HORIZON_LABELS
 
 DISCLAIMER = (
     "본 자료는 유사투자자문업자가 불특정 다수에게 제공하는 투자 참고 정보이며, "
@@ -108,7 +110,12 @@ def _thesis(name: str, v: dict, fac: dict, flows: dict | None, top: dict | None)
         # 팔지 않는다 — 목표에 닿으면 손절만 본전으로 올린다. 그래서 (목표−진입)/(진입−손절)
         # 은 «실현되지 않는 수익»을 분자로 쓴 값이고, 화면에 적으면 사용자는 그 배수만큼
         # 번다고 읽는다. 실제로 확정된 숫자는 거는 돈(진입−손절)뿐이다.
-        seg = f"셋업 {top['setup']}({top.get('style', '—')})"
+        # 영문 키(markov)와 옛 스타일 축(position)을 그대로 찍고 있었다 —
+        # 화면은 「셋업 markov(position)」을 보여줬다. 사람 말과 기간 축으로 바꾼다.
+        # 라벨 사전은 engine/signals/axes·horizons 하나만 쓴다.
+        setup_ko = SETUP_LABELS.get(top["setup"], top["setup"])
+        hz_ko = HORIZON_LABELS.get(top.get("horizon") or "", None)
+        seg = f"셋업 {setup_ko}" + (f"({hz_ko})" if hz_ko else "")
         entry, stop = top.get("entry_price"), top.get("stop_loss")
         if isinstance(entry, (int, float)) and isinstance(stop, (int, float)) and entry > stop:
             seg += f" 1주당 리스크 {round(entry - stop):,}원"
