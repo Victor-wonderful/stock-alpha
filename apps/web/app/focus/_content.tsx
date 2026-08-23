@@ -14,7 +14,6 @@ import {
   getPickHistory,
   getRecommendations,
   getReports,
-  getSnowflakesForSymbols,
   getUserRiskPct,
 } from "@/lib/data";
 import { regimeCopy } from "@/components/RegimeHeader";
@@ -70,7 +69,6 @@ export default async function FocusContent() {
   const stalePicks = picksToday.filter(isInvalid);
   const picks = picksToday.filter((p) => !isInvalid(p));
   // 카드용 미니 스노우플레이크 5축 — 픽 종목만 벌크 1회 조회(실패 시 빈 Map).
-  const snowMap = await getSnowflakesForSymbols(picks.map((p) => p.symbol));
   // 진입 레벨 알림 — 픽별 현재가(최신 종가) 병렬 조회 → 진입 타이밍/대기/무효 판정.
   const priceList = await Promise.all(
     picks.map((p) =>
@@ -131,6 +129,18 @@ export default async function FocusContent() {
       .filter((b) => b.passed && b.style)
       .map((b) => `${b.setup}|${b.style}`),
   );
+
+  // 픽 카드 ④「이 조합의 검증 성적」에 붙일 백테스트 행 — **기간(horizon) 축**으로만
+  // 찾는다. 스타일로 찾으면 안 된다: 같은 쌍바닥이라도 옛 스타일 축(swing)은 기대값
+  // +0.11R·최근구간 −0.035R 로 게이트를 **통과하지 못했고**, 지금 발행 근거인 기간
+  // 축(mid)은 +0.35R 로 통과했다. 스타일 행을 붙이면 통과한 적 없는 조합의 숫자를
+  // 「검증 성적」이라며 보여주게 된다.
+  const btByCombo = new Map<string, (typeof backtests.data)[number]>();
+  for (const b of backtests.data) {
+    if (!b.horizon) continue; // 기간 축 도입 전 행은 지금 규칙의 근거가 아니다
+    const key = `${b.setup}|${b.horizon}`;
+    if (!btByCombo.has(key)) btByCombo.set(key, b); // 조회가 최신순이라 첫 행이 최신
+  }
   const combosByReport = await getPlanCombosForReports(candidates.map((r) => r.id));
   // 종목별 '검증 통과한 셋업' — 왜 후보인지 화면에 근거로 노출한다.
   const passedSetupsByReport = new Map<number, string[]>();
@@ -506,14 +516,13 @@ export default async function FocusContent() {
                         {group.length}건
                       </span>
                     </div>
-                    {group.map((p, i) => (
+                    {group.map((p) => (
                       <PickCard
                         key={p.symbol}
                         pick={p}
-                        rank={i + 1}
                         report={reportBySymbol.get(p.symbol)}
                         riskPct={riskPct}
-                        mini={snowMap.get(p.symbol)?.axes}
+                        backtest={btByCombo.get(`${p.setup}|${p.horizon}`) ?? null}
                         lastPrice={priceMap.get(p.symbol)?.close ?? null}
                         changePct={priceMap.get(p.symbol)?.changePct ?? null}
                         priceDate={priceMap.get(p.symbol)?.date ?? null}
@@ -528,14 +537,13 @@ export default async function FocusContent() {
             {picks.filter((p) => !p.horizon).length > 0 &&
               picks
                 .filter((p) => !p.horizon)
-                .map((p, i) => (
+                .map((p) => (
                   <PickCard
                     key={p.symbol}
                     pick={p}
-                    rank={i + 1}
                     report={reportBySymbol.get(p.symbol)}
                     riskPct={riskPct}
-                    mini={snowMap.get(p.symbol)?.axes}
+                    backtest={null}
                     lastPrice={priceMap.get(p.symbol)?.close ?? null}
                     changePct={priceMap.get(p.symbol)?.changePct ?? null}
                     priceDate={priceMap.get(p.symbol)?.date ?? null}
