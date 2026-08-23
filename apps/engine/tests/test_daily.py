@@ -333,14 +333,21 @@ def test_picks_style_chosen_by_expectancy():
 # ── 커버리지 트랙 변동분 스킵 ────────────────────────────────────────
 
 def test_skip_unchanged():
+    from engine.reports.runner import SOURCE_VERSION
     today = date(2026, 6, 10)
-    prev = {"rating": "중립", "as_of": "2026-06-09"}
+    prev = {"rating": "중립", "as_of": "2026-06-09", "source_version": SOURCE_VERSION}
     assert should_skip_unchanged(prev, "중립", today, 3)          # 동일+최근 → 스킵
     assert not should_skip_unchanged(prev, "매수", today, 3)      # 판정 변경 → 발행
-    old = {"rating": "중립", "as_of": "2026-06-01"}
+    old = {"rating": "중립", "as_of": "2026-06-01", "source_version": SOURCE_VERSION}
     assert not should_skip_unchanged(old, "중립", today, 3)       # 오래됨 → 발행
     assert not should_skip_unchanged(None, "중립", today, 3)      # 기존 없음 → 발행
     assert not should_skip_unchanged(prev, "중립", today, 0)      # 비활성(액션 트랙)
+    # 판정 규칙이 바뀌면 판정이 같아도 다시 만든다(2026-08-23) — 옛 규칙으로 계산된
+    # payload 가 그대로 살아남아 한 날짜에 두 세대가 섞이던 문제.
+    stale = {"rating": "중립", "as_of": "2026-06-09", "source_version": "reports-v1"}
+    assert not should_skip_unchanged(stale, "중립", today, 3)
+    # source_version 이 아예 없는 옛 행도 다시 만든다.
+    assert not should_skip_unchanged({"rating": "중립", "as_of": "2026-06-09"}, "중립", today, 3)
 
 
 # ── 픽 수명주기 ─────────────────────────────────────────────────────

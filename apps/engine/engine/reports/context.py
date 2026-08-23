@@ -77,7 +77,25 @@ def build_tradability(
     signal_setups: list[str],
     passed_setups: set[str],
 ) -> dict:
-    """②거래해도 괜찮나 — 체크리스트 게이트."""
+    """②거래해도 괜찮나 — 체크리스트 게이트.
+
+    ⚠️ `passed` 는 **종목 성질**(유니버스·유동성·변동성)만 본다. backtest_gate 는
+    목록에 남기되 판정을 막지 않는다(2026-08-23 Victor 결정, «안 A»).
+
+    왜 뺐나 — 이 검사는 «셋업 단위»다(어떤 축으로든 통과한 셋업이 하나라도 있나).
+    그런데 발행을 정하는 게이트는 (셋업 × 기간)이고, 시그널 자체가 이미 그 게이트를
+    통과한 조합만 발행된다(engine/cli 배치 → signals.runner). 리포트가 낡고 성긴
+    기준으로 한 번 더 판정하면 «지금 살 수 있는 종목»을 「거래 부적합」으로 가린다.
+
+    실측(2026-08-23): 8/21 자 「거래 부적합」 27건 중 **9건**이 지금 게이트에서 발행
+    대상 조합을 갖고 있었고, 그중 하나(오리온)는 그날 실제로 발행된 픽이다. 그 리포트의
+    체크를 열어 보면 active·liquidity·volatility 는 전부 ✓ 이고 backtest_gate 하나만
+    ✗ 였다 — 리포트를 만든 시각(8/21 10:19)이 기간 축 백테스트 적재(8/22 08:10~08:59)
+    보다 앞섰기 때문이다.
+
+    daily.tradable_now 가 이미 같은 규칙으로 «지금» 다시 판정하고 있었다. 저장 시점의
+    판정만 옛 규칙이라 둘이 어긋났다 — 이제 한 곳에서 같은 규칙을 쓴다.
+    """
     checks = [
         {
             "key": "active",
@@ -102,9 +120,17 @@ def build_tradability(
             "label": "백테스트 품질 게이트 — 셋업 중 1개 이상 통과",
             "passed": any(s in passed_setups for s in signal_setups),
             "value": sorted(s for s in signal_setups if s in passed_setups) or None,
+            # 참고 항목 — 판정을 막지 않는다(위 docstring). 소비처가 «막는 검사»와
+            # «알려주는 검사»를 구분할 수 있도록 플래그로 명시한다.
+            "blocking": False,
         },
     ]
-    return {"passed": all(c["passed"] for c in checks), "checks": checks}
+    for c in checks:
+        c.setdefault("blocking", True)
+    return {
+        "passed": all(c["passed"] for c in checks if c["blocking"]),
+        "checks": checks,
+    }
 
 
 def build_verdict(

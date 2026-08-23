@@ -149,7 +149,14 @@ def fallback_narrative(ctx: dict) -> dict:
         )
         if bts else "퀀트 팩터·백테스트 수치는 본문 표를 참조하십시오."
     )
-    risks = [c["label"] + " 미통과" for c in ctx["tradability"]["checks"] if not c["passed"]]
+    # 「위험」에는 **막는 검사**의 미통과만 적는다. 참고 항목(백테스트 게이트)을
+    # 위험으로 적으면 «검증된 셋업이 없다»가 «거래하면 위험하다»로 읽힌다 —
+    # 그건 발행 단계가 판단할 일이고, 시그널은 이미 그 게이트를 통과한 것만 나온다.
+    risks = [
+        c["label"] + " 미통과"
+        for c in ctx["tradability"]["checks"]
+        if not c["passed"] and c.get("blocking", c.get("key") != "backtest_gate")
+    ]
     return {
         "thesis": thesis,
         "trader_view": trader,
@@ -177,7 +184,9 @@ def render_body_md(ctx: dict, narrative: dict) -> str:
     ]
     for c in ctx["tradability"]["checks"]:
         mark = "✅" if c["passed"] else "❌"
-        lines.append(f"- {mark} {c['label']}")
+        # 참고 항목은 판정을 막지 않는다는 것을 본문에서도 밝힌다.
+        note = "" if c.get("blocking", c.get("key") != "backtest_gate") else " (참고 — 판정에 반영 안 함)"
+        lines.append(f"- {mark} {c['label']}{note}")
     lines += ["", "## ③ 실행 플랜 (스타일별 진입·손절·목표)", ""]
     plan = ctx.get("plan") or []
     if plan:

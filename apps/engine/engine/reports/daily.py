@@ -405,7 +405,13 @@ def tradable_now(payload: dict | None) -> bool:
     checks = ((payload or {}).get("tradability") or {}).get("checks") or []
     if not checks:
         return bool(((payload or {}).get("tradability") or {}).get("passed", False))
-    return all(c.get("passed") for c in checks if c.get("key") != "backtest_gate")
+    # blocking 플래그가 있으면 그걸 따르고(2026-08-23 이후 리포트), 없는 옛 리포트는
+    # 키 이름으로 판정한다 — 두 세대가 섞여도 같은 결론이 나오게.
+    return all(
+        c.get("passed")
+        for c in checks
+        if c.get("blocking", c.get("key") != "backtest_gate")
+    )
 
 
 def _rr_ok(row: dict, min_rr: float = PICKS_MIN_RR) -> bool:

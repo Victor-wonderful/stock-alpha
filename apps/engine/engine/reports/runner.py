@@ -16,7 +16,10 @@ from engine.reports.render import fallback_narrative, render_body_md, render_sum
 
 log = get_logger(__name__)
 
-SOURCE_VERSION = "reports-v1"
+# 판정 규칙이 바뀌면 올린다 — 아래 should_skip_unchanged 가 이 값이 다르면 재발행을
+# 강제한다. v2(2026-08-23): 거래가능 게이트에서 backtest_gate 를 «참고 항목»으로 내려
+# 판정을 막지 않게 했다(engine/reports/context.build_tradability).
+SOURCE_VERSION = "reports-v2"
 
 
 def _top_symbols(limit: int) -> list[str]:
@@ -49,7 +52,7 @@ def _top_symbols(limit: int) -> list[str]:
 def _latest_report(instrument_id: int) -> dict | None:
     res = (
         get_client().table("reports")
-        .select("rating,as_of")
+        .select("rating,as_of,source_version")
         .eq("instrument_id", instrument_id).eq("report_type", "indepth")
         .eq("status", "published")
         .order("as_of", desc=True).limit(1).execute()
@@ -60,8 +63,17 @@ def _latest_report(instrument_id: int) -> dict | None:
 def should_skip_unchanged(
     prev: dict | None, new_rating: str, today: date, max_age_days: int
 ) -> bool:
-    """발행 규정 v1 커버리지 트랙 — 판정이 같고 최근 발행이면 재발행 생략(비용 절약)."""
+    """커버리지 트랙 — 판정이 같고 최근 발행이면 재발행 생략(비용 절약).
+
+    ⚠️ **판정 규칙이 바뀌면 생략하지 않는다**(2026-08-23). 예전에는 rating 만 비교해서,
+    규칙을 바꿔도 «판정이 우연히 같은» 종목은 옛 규칙으로 계산된 payload 를 그대로
+    달고 살아남았다. 그래서 한 날짜의 리포트에 두 세대가 섞였다 — 실측: 8/21 자 181건
+    중 101건(56%)이 기간 축 백테스트 적재 «전»에 계산된 것이었다.
+    source_version 이 다르면 다시 만든다.
+    """
     if prev is None or max_age_days <= 0:
+        return False
+    if prev.get("source_version") != SOURCE_VERSION:
         return False
     if prev.get("rating") != new_rating:
         return False

@@ -82,6 +82,47 @@ def test_tradability_pass_and_fail():
     assert failed == {"liquidity", "volatility", "backtest_gate"}
 
 
+def test_backtest_gate_does_not_block_rating():
+    """백테스트 게이트는 «참고 항목» — 판정을 막지 않는다(2026-08-23, 안 A).
+
+    이 검사는 셋업 단위인데 발행 게이트는 (셋업 × 기간)이고, 시그널 자체가 이미 그
+    게이트를 통과한 조합만 나온다. 리포트가 낡고 성긴 기준으로 한 번 더 판정하면
+    «지금 살 수 있는 종목»이 「거래 부적합」으로 가려진다 — 실측으로 8/21 자 27건 중
+    9건이 그 경우였고 그중 하나(오리온)는 그날 발행된 픽이었다.
+    """
+    t = build_tradability(active=True, turnover=TURNOVER_FLOOR_KRW,
+                          atr=ATR_PCT_CEILING, signal_setups=["double_bottom"],
+                          passed_setups=set())          # 통과 셋업 없음
+    assert t["passed"], "종목 성질이 멀쩡하면 통과여야 한다"
+    gate = next(c for c in t["checks"] if c["key"] == "backtest_gate")
+    assert gate["passed"] is False and gate["blocking"] is False
+    # 막는 검사가 하나라도 깨지면 여전히 미통과다.
+    blocked = build_tradability(active=True, turnover=TURNOVER_FLOOR_KRW,
+                                atr=0.5, signal_setups=["double_bottom"],
+                                passed_setups={"double_bottom"})
+    assert not blocked["passed"]
+
+
+def test_tradable_now_matches_stored_verdict():
+    """저장 시점 판정과 «지금» 재판정이 같은 규칙을 쓴다.
+
+    예전에는 build_tradability 가 backtest_gate 를 막는 검사로 쓰고, daily.tradable_now
+    는 빼고 봐서 둘이 어긋났다. 옛 리포트(blocking 플래그 없음)도 같은 결론이 나와야 한다.
+    """
+    from engine.reports.daily import tradable_now
+    t = build_tradability(active=True, turnover=TURNOVER_FLOOR_KRW,
+                          atr=ATR_PCT_CEILING, signal_setups=["double_bottom"],
+                          passed_setups=set())
+    assert tradable_now({"tradability": t}) == t["passed"] is True
+    legacy = {"tradability": {"passed": False, "checks": [
+        {"key": "active", "label": "", "passed": True},
+        {"key": "liquidity", "label": "", "passed": True},
+        {"key": "volatility", "label": "", "passed": True},
+        {"key": "backtest_gate", "label": "", "passed": False},
+    ]}}
+    assert tradable_now(legacy) is True
+
+
 def test_backtest_passed_thresholds():
     # 저장된 판정(passed) 우선
     assert backtest_passed({"passed": True, "expectancy_r": -1.0})
