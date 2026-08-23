@@ -454,28 +454,47 @@ export async function countSignalsForCombos(
   }
 }
 
-export async function getSignalCounts(
-  setups: string[],
-): Promise<{ total: number; bySetup: Map<string, number> }> {
+/**
+ * 시그널에 **실제로 있는** 셋업과 그 건수 — 많은 순.
+ *
+ * 화면의 셋업 목록이 코드에 박혀 있었다(7개). 그래서 2026-08-23 실측 기준 시그널
+ * 264건 중 **115건**(sortino 58 · bayes 55 · double_bottom 2)이 어떤 칩으로도 안
+ * 잡히고 섹션에도 안 나왔다 — 「전체 264」인데 섹션 합이 149 였다. 그중
+ * double_bottom 은 그날 발행된 픽(오리온)이 실제로 쓴 셋업이다.
+ *
+ * 엔진이 셋업을 늘리면 화면이 자동으로 따라와야 한다 — 목록을 DB 에서 만든다.
+ * setup 컬럼만 받아 세므로(행당 십수 바이트) 조회 비용은 head-count 7번보다 작다.
+ * ⚠️ PostgREST 는 한 번에 1000행까지 준다 — 총계를 먼저 세고 그만큼 페이지를 돈다.
+ */
+export async function getSetupCounts(): Promise<{
+  total: number;
+  bySetup: Map<string, number>;
+}> {
   const bySetup = new Map<string, number>();
   try {
     const supabase = createPublicClient();
-    const countOf = async (setup?: string) => {
-      let q = supabase.from("signals").select("id", { count: "exact", head: true });
-      if (setup) q = q.eq("setup", setup);
-      const { count } = await q;
-      return count ?? 0;
-    };
-    const [total, ...counts] = await Promise.all([
-      countOf(),
-      ...setups.map((st) => countOf(st)),
-    ]);
-    setups.forEach((st, i) => bySetup.set(st, counts[i]));
+    const PAGE = 1000;
+    const MAX_PAGES = 12; // 12,000건까지 — 그 이상은 세지 않고 있는 만큼만 쓴다
+    let total = 0;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const { data, count } = await supabase
+        .from("signals")
+        .select("setup", { count: page === 0 ? "exact" : undefined })
+        .range(page * PAGE, page * PAGE + PAGE - 1);
+      if (page === 0) total = count ?? 0;
+      if (!data || data.length === 0) break;
+      for (const r of data) {
+        const k = String((r as { setup?: string }).setup ?? "");
+        if (k) bySetup.set(k, (bySetup.get(k) ?? 0) + 1);
+      }
+      if (data.length < PAGE) break;
+    }
     return { total, bySetup };
   } catch {
     return { total: 0, bySetup };
   }
 }
+
 
 export async function getSignals(
   filters: SignalFilters = {},

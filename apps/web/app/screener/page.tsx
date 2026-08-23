@@ -1,9 +1,18 @@
 import Link from "next/link";
+import { TRADE_SETUP_LABELS } from "@stock-alpha/db";
 import { SymbolCode } from "@/components/SymbolCode";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
-import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts, getSignalsBySetups, getBacktests, countSignalsForCombos } from "@/lib/data";
+import {
+  getSignals,
+  getAlphaZoneStocks,
+  getLatestPricesBySymbols,
+  getSetupCounts,
+  getSignalsBySetups,
+  getBacktests,
+  countSignalsForCombos,
+} from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum, tradingDayLabel } from "@/lib/format";
 import {
   holdingLabel,
@@ -20,20 +29,10 @@ import type { SignalView } from "@/lib/types";
 // 60초 fetch 캐시가 담당한다(lib/supabase/public.ts).
 
 // ── 셋업 메타 ──
-const SETUP_LABELS: Record<string, string> = {
-  leader_trend: "주도주 추세",
-  oversold_bounce: "과매도 반등",
-  breakout: "돌파 매수",
-  close_betting: "종가 베팅",
-  factor_composite: "팩터 종합",
-  kalman: "칼만 추세",
-  flow_accumulation: "수급 동반 매집",
-  pivot: "피봇 돌파",
-  median: "메디안 추세",
-  ensemble: "앙상블 합의",
-  sortino: "소르티노 모멘텀",
-  bayes: "베이즈 결합",
-};
+// 셋업 이름표는 packages/db 의 TRADE_SETUP_LABELS **하나만** 쓴다(2026-08-23).
+// 여기에 지역 목록이 따로 있어 같은 셋업을 두 이름으로 불렀다 — db 는 「돌파」인데
+// 화면은 「돌파 매수」, db 는 「과대낙폭 반등」인데 화면은 「과매도 반등」이었다.
+// 게다가 그 지역 목록에 없는 셋업은 영문 키가 그대로 노출됐다.
 
 function initials(name: string): string {
   return name.length >= 2 ? name.slice(0, 2) : name;
@@ -67,7 +66,7 @@ function SparkBars({ data }: { data: number[] }) {
 }
 
 function SetupPill({ setup }: { setup: string }) {
-  const label = SETUP_LABELS[setup] ?? setup;
+  const label = TRADE_SETUP_LABELS[setup as keyof typeof TRADE_SETUP_LABELS] ?? setup;
   return (
     <span className="inline-flex items-center rounded-[6px] bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 ring-1 ring-inset ring-violet-500/25 whitespace-nowrap">
       {label}
@@ -107,20 +106,15 @@ function computeHighlights(signals: SignalView[]) {
   return { today, topSetup, topAlpha };
 }
 
-// 셋업 칩 목록. 카운트 조회가 컴포넌트 상단에서 필요해 모듈 상수로 둔다.
-// ⚠️ 하드코딩이라 실제 시그널과 어긋난다 — 2026-08-23 실측: 시그널 264건 중 115건
-// (sortino 58 · bayes 55 · double_bottom 2)이 이 목록에 없어 어떤 칩으로도 못 고른다.
-// 그중 double_bottom 은 오늘의 픽(오리온)이 실제로 쓴 셋업이다. DB 에서 만들도록
-// 바꿔야 한다 — 다음 작업.
-const ALL_SETUPS: Array<{ key: string; label: string }> = [
-  { key: "leader_trend", label: "주도주 추세" },
-  { key: "flow_accumulation", label: "수급 매집" },
-  { key: "pullback", label: "눌림목" },
-  { key: "breakout", label: "돌파" },
-  { key: "high_52w", label: "52주 신고가" },
-  { key: "vol_squeeze", label: "변동성 수축" },
-  { key: "pead", label: "실적 서프라이즈" },
-];
+// 셋업 목록은 **DB 에서 만든다**(2026-08-23). 예전에는 여기 7개가 박혀 있었는데,
+// 그 목록에 없는 셋업은 칩으로도 섹션으로도 나오지 않았다 — 실측: 시그널 264건 중
+// 115건(sortino 58 · bayes 55 · double_bottom 2)이 통째로 안 보였고, 화면은
+// 「전체 264」인데 섹션 합은 149 였다. 그중 double_bottom 은 그날 발행된 픽(오리온)이
+// 실제로 쓴 셋업이다 — 오늘의 픽에 오른 셋업을 스크리너에서 고를 수가 없었다.
+//
+// 이름은 packages/db 의 TRADE_SETUP_LABELS 하나만 쓴다. 예전 목록은 여기에 라벨을
+// 또 적어 두 곳이 어긋났다(같은 셋업을 화면은 「수급 매집」, db 는 「수급 동반 매집」
+// 이라 불렀다).
 
 export default async function ScreenerPage({
   searchParams,
@@ -211,10 +205,15 @@ export default async function ScreenerPage({
   // 그리는 행만 벌크 1회로 가져온다(종목당 조회는 행 수만큼 왕복이 된다).
   const priceMap = await getLatestPricesBySymbols(visible.map((s) => s.symbol));
 
-  // 칩 건수·전체 건수는 표본이 아니라 DB count 로 — 셋업 7개를 병렬 head-count.
-  const { total: grandTotal, bySetup: setupCounts } = await getSignalCounts(
-    ALL_SETUPS.map((x) => x.key),
-  );
+  // 칩 건수·전체 건수는 표본이 아니라 DB 집계로. 있는 셋업만, 많은 순으로 온다.
+  const { total: grandTotal, bySetup: setupCounts } = await getSetupCounts();
+  const ALL_SETUPS = [...setupCounts.entries()]
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key]) => ({
+      key,
+      label: TRADE_SETUP_LABELS[key as keyof typeof TRADE_SETUP_LABELS] ?? key,
+    }));
   // 필터가 하나도 없으면 '셋업별 섹션' 뷰. 1000행 표를 훑게 하는 대신
   // 오늘 어떤 셋업이 떴는지를 덩어리로 보여주고, 칩을 누르면 그 셋업 표로 파고든다.
   const sectionView = !activeSetup && !activeHorizon && !activeMarket && !search && !near;
@@ -277,7 +276,10 @@ export default async function ScreenerPage({
             },
           {
             label: "최다 셋업",
-            value: topSetupEntry ? SETUP_LABELS[topSetupEntry[0]] ?? topSetupEntry[0] : "—",
+            value: topSetupEntry
+              ? TRADE_SETUP_LABELS[topSetupEntry[0] as keyof typeof TRADE_SETUP_LABELS] ??
+                topSetupEntry[0]
+              : "—",
             sub: topSetupEntry ? `${topSetupEntry[1]}건 · 전체 기준` : "",
           },
           { label: "최고 합성알파", value: fmtNum(hl.topAlpha, 2), sub: "강도 최상위" },
@@ -440,20 +442,6 @@ export default async function ScreenerPage({
           {ALL_SETUPS.map(({ key, label }) => {
             const rows = bySetupRows.get(key) ?? [];
             const cnt = setupCounts.get(key) ?? 0;
-            // 0건 섹션은 카드 한 줄로 접는다. 지우지는 않는다 — 「이 셋업은 오늘
-            // 없었다」도 답이다. 다만 자리를 작게 잡는다.
-            if (cnt === 0) {
-              return (
-                <section
-                  key={key}
-                  className="flex flex-wrap items-baseline gap-x-2 rounded-[12px] border border-border bg-surface/50 px-4 py-2.5 text-[11.5px]"
-                >
-                  <span className="font-semibold text-text-dim">{label}</span>
-                  <span className="tnum text-text-mute">0건</span>
-                  <span className="text-text-mute">— 오늘 이 셋업의 시그널은 없습니다</span>
-                </section>
-              );
-            }
             return (
               <section
                 key={key}
