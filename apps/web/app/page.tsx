@@ -3,8 +3,8 @@ import Link from "next/link";
 import { DEFAULT_RISK_PER_TRADE_PCT } from "@/lib/position";
 import { GNB } from "@/components/GNB";
 import { HomeHero } from "@/components/HomeHero";
-import { HomeOpenPicks } from "@/components/HomeOpenPicks";
-import { HomeOpenSummary } from "@/components/HomeOpenSummary";
+import { OpenPicksTable } from "@/components/OpenPicksTable";
+import { OpenPicksSummary } from "@/components/OpenPicksSummary";
 import { HomePicksTable } from "@/components/HomePicksTable";
 import { RecentReports, WeeklyBriefs } from "@/components/HomeSections";
 import { ExpertNotes } from "@/components/ExpertNotes";
@@ -414,8 +414,8 @@ export default async function HomePage() {
           {/* 표가 8열이라 밴드 1(1fr_2fr)보다 우측을 조금 더 준다 — 760px 이 최소폭이고
               그 아래로는 가로 스크롤이 생긴다. */}
           <div className="grid items-start gap-x-8 gap-y-6 lg:grid-cols-[minmax(280px,1fr)_2.6fr]">
-            <HomeOpenSummary picks={openPicks} />
-            <HomeOpenPicks
+            <OpenPicksSummary picks={openPicks} />
+            <OpenPicksTable
               picks={openPicks}
               exitDays={openExitDays}
               pendingCount={pendingCount}

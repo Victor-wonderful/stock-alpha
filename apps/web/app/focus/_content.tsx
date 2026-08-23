@@ -11,9 +11,11 @@ import {
   getMarketState,
   getPlanCombosForReports,
   getMorningBrief,
+  getOpenPicks,
   getPickHistory,
   getRecommendations,
   getReports,
+  getTradingCalendar,
   getUserRiskPct,
 } from "@/lib/data";
 import { regimeCopy } from "@/components/RegimeHeader";
@@ -21,11 +23,12 @@ import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PickCard } from "./_pick-card";
-import { HORIZONS, isHorizonPaused } from "@/lib/holding";
+import { HORIZONS, isHorizonPaused, horizonSpec } from "@/lib/holding";
+import { OpenPicksTable } from "@/components/OpenPicksTable";
 
 // 레짐 게이지 (3구간 바 + 마커)
 export default async function FocusContent() {
-  const [recs, allReports, history, brief, riskPct, marketState, backtests] =
+  const [recs, allReports, history, brief, riskPct, marketState, backtests, openPicks, cal] =
     await Promise.all([
       getRecommendations(),
       getReports(200, { includeUnfit: true }), // 최신일 분포 집계 — 일 발행 상한(100)+α 커버
@@ -34,6 +37,8 @@ export default async function FocusContent() {
       getUserRiskPct(),
       getMarketState(),
       getBacktests(), // 반등 대기 리스트의 '검증 통과 플랜 보유' 판정용
+      getOpenPicks(30), // 「진행 중」 — 손절에 가까운 순으로 온다
+      getTradingCalendar(), // 청산 예정일 계산 — 휴장일을 한 번만 읽는다
     ]);
 
   // 픽 stale 가드 — 픽 선정 후 리포트가 재생성돼 픽 종목이 '거래 부적합'으로 바뀌거나,
@@ -158,8 +163,29 @@ export default async function FocusContent() {
     waitlist.map((r) => r.symbol).filter((s): s is string => !!s),
   );
 
-  // 픽 기록 상태
-  const activePicks = history.data.filter((h) => h.status === "진행중");
+  // ── 진행 중(이미 산 픽) ──
+  // 이 자리에 예전에는 `history` 에서 status==="진행중" 만 거른 변수가 있었는데
+  // **어디에도 그려지지 않았다** — 계산만 하고 버렸다. 그래서 「오늘의 픽」 전용
+  // 페이지가 «사기 전 계획»만 말하고 «산 뒤 상태»는 홈에만 있었다.
+  // 표는 홈과 같은 컴포넌트를 쓴다. 한 종목이 두 화면에서 다른 열·다른 이름을 쓰면
+  // 사용자는 둘 중 하나가 틀렸다고 읽는다(오늘 픽 카드에서 겪은 것과 같은 문제).
+  const openExitDays = new Map<string, string | null>(
+    openPicks.map((p) => {
+      const bars = horizonSpec(p.horizon)?.bars;
+      const iso = bars ? cal.nth(p.asOf, bars) : null;
+      return [p.symbol, iso ? tradingDayLabel(iso) : null];
+    }),
+  );
+  const pendingCount = picksToday.filter((p) => p.status === "pending").length;
+  // 손절까지 3% 이내로 붙은 픽 — toStopPct 는 롱에서 음수이고 0 에 가까울수록 코앞이다.
+  const nearStop = openPicks.filter(
+    (p) => p.toStopPct != null && p.toStopPct >= -0.03,
+  ).length;
+  const withRet = openPicks.filter((p) => p.returnPct != null);
+  const avgRet =
+    withRet.length > 0
+      ? withRet.reduce((a, p) => a + (p.returnPct ?? 0), 0) / withRet.length
+      : null;
 
   // 트랙레코드 집계 — 엔진이 확정(0017)한 종료 픽만. 정직한 기대값 노출(신뢰).
   // 저승률·고R:R 추세전략은 손절이 잦아도 기대값이 양(+)이면 장기 수익이 난다는 걸
@@ -556,6 +582,49 @@ export default async function FocusContent() {
                 {(picks.length * riskPct).toFixed(1)}%
               </p>
             )}
+
+            {/* ── 진행 중 — 산 뒤 상태 ──
+                「오늘의 픽」 바로 아래에 둔다. 둘은 같은 것을 다른 시점에서 보는
+                화면이다(홈에서 정한 짝): 오늘의 픽 = 사기 전 계획, 진행 중 = 산 뒤
+                상태. 여기 없으면 이 페이지는 «25% 비중으로 사라»고만 하고 이미 무엇을
+                들고 있는지는 말하지 않는다 — 살 여력을 판단할 수가 없다.
+
+                홈과 달리 좌우 두 패널로 가르지 않는다. 좌측 열이 좁고, 요약이 말할
+                것(보유 건수·손절 근접·평균 손익률)은 머리줄 한 줄에 다 들어간다.
+                홈은 «전체가 어떤가»를 패널로 펼쳐 보여주는 자리라 거기선 패널이 맞다. */}
+            <section className="mt-8">
+              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <h2 className="text-sm font-bold text-text">
+                  진행 중{" "}
+                  <span className="text-[11px] font-medium text-text-mute">
+                    {openPicks.length > 0
+                      ? `이미 산 픽 ${openPicks.length}건 · 손절 가까운 순`
+                      : "이미 산 픽"}
+                  </span>
+                </h2>
+                <div className="flex flex-wrap items-baseline gap-x-3 text-[11px]">
+                  {avgRet != null && (
+                    <span className={`tnum font-semibold ${avgRet >= 0 ? "text-good" : "text-bad"}`}>
+                      평균 손익률 {fmtPct(avgRet)}
+                    </span>
+                  )}
+                  {nearStop > 0 && (
+                    <span className="tnum font-semibold text-bad">
+                      손절 근접 {nearStop}건
+                    </span>
+                  )}
+                  <Link href="/picks" className="text-accent hover:underline">
+                    전체 기록 →
+                  </Link>
+                </div>
+              </div>
+              <OpenPicksTable
+                picks={openPicks}
+                exitDays={openExitDays}
+                pendingCount={pendingCount}
+                planDay={planDay}
+              />
+            </section>
           </div>
 
           {/* 우측 레일 */}

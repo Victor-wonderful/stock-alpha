@@ -14,7 +14,7 @@ import { fmtPct } from "@/lib/format";
  * 둘이 되어 어느 쪽이 «오늘»인지 흐려진다. 여기는 흰 패널 + 좌측 레일로 격을 낮춘다 —
  * 오늘의 판정이 주인공이고 이건 그 다음이다.
  */
-export function HomeOpenSummary({ picks }: { picks: OpenPick[] }) {
+export function OpenPicksSummary({ picks }: { picks: OpenPick[] }) {
   const withRet = picks.filter((p) => p.returnPct != null);
   const avgRet =
     withRet.length > 0

@@ -6,7 +6,7 @@ import { fmtPct } from "@/lib/format";
 import { horizonSpec } from "@/lib/holding";
 
 /**
- * 홈 「진행 중」 — 이미 산 픽이 지금 어떻게 되고 있나.
+ * 「진행 중」 표 — 이미 산 픽이 지금 어떻게 되고 있나. 홈과 /focus 가 같이 쓴다.
  *
  * 홈은 getOpenPicks(30) 으로 보유 픽을 통째로 받아놓고 `.length` 만 쓰고 버리고
  * 있었다(2026-08-22 Victor). 아침 브리핑 때와 같은 패턴이다. 조회는 늘지 않는다.
@@ -41,7 +41,7 @@ const HEADS = [
   "보유",
 ];
 
-export function HomeOpenPicks({
+export function OpenPicksTable({
   picks,
   exitDays,
   pendingCount = 0,
