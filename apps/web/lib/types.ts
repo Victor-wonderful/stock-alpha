@@ -188,6 +188,8 @@ export interface ReportGateCheck {
 }
 export interface ReportPlanRow {
   style: TradeStyle;
+  /** 축은 기간이다(short/mid/long). 기간 축 도입 전 플랜만 null. */
+  horizon?: string | null;
   setup: TradeSetup;
   session: TradeSession | null;
   strength: number;

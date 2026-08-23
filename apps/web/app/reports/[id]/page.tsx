@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { getLatestPrice, getPickHistory, getReportById, getUserRiskPct } from "@/lib/data";
 import { fmtDateTime, fmtNum, fmtPct, fmtPrice } from "@/lib/format";
 import { computePositionSizePct } from "@/lib/position";
+import { horizonLabel, horizonSpec, PUBLISH_HORIZONS } from "@/lib/holding";
+import { TRADE_SETUP_LABELS } from "@stock-alpha/db";
 import type { ReportPlanRow } from "@/lib/types";
 import { ReportDetailClient } from "./_client";
 
@@ -47,6 +49,11 @@ function planStatus(
     return { label: "진입권", variant: "bull" };
   }
   return { label: "진입 대기", variant: "warn" };
+}
+
+/** 더는 실행할 수 없는 플랜인가 — 만료·무효. 화면에서 뒤로 내리고 흐리게 둔다. */
+function isDeadPlan(label: string): boolean {
+  return label === "만료" || label.startsWith("무효");
 }
 
 const FACTOR_LABELS: Record<string, string> = {
@@ -180,9 +187,23 @@ export default async function ReportDetailPage({
               <p className="text-sm text-text-mute">현재 발행된 매수 셋업이 없습니다.</p>
             ) : (
               <>
-                {p.plan.map((row, i) => {
+                {/* 이 목록은 «순서»가 아니라 «대안»이다(2026-08-23 Victor — 헷갈린다).
+                    같은 종목에서 서로 다른 셋업이 각자의 진입·손절을 낸 것이라, 진입가가
+                    같아도 손절가가 다르다. 위에서 아래로 실행하는 단계로 읽히면 안 된다.
+                    살아 있는 플랜을 위로 올리고 만료는 아래로 내린다 — 예전에는 발행
+                    순서대로 나와서 만료 3개가 살아 있는 1개보다 위에 서 있었다. */}
+                <p className="mb-3 text-[11px] leading-relaxed text-text-mute">
+                  같은 종목에서 셋업마다 따로 계산한 <span className="font-semibold text-text-dim">대안</span>입니다
+                  — 위에서 아래로 실행하는 단계가 아닙니다. 진입가가 같아도 셋업이 다르면
+                  손절가가 다릅니다.
+                </p>
+                {[...p.plan]
+                  .map((row) => ({ row, status: planStatus(row, lastNow) }))
+                  // 만료·무효는 뒤로. 그 안에서는 발행 순서를 유지한다.
+                  .sort((a, b) => Number(isDeadPlan(a.status.label)) - Number(isDeadPlan(b.status.label)))
+                  .map(({ row, status }, i) => {
+                  const dead = isDeadPlan(status.label);
                   const sz = computePositionSizePct(row.entry_price, row.stop_loss, riskPct);
-                  const status = planStatus(row, lastNow);
                   const tpPct =
                     row.tp1 != null ? ((row.tp1 - row.entry_price) / row.entry_price) * 100 : null;
                   const slPct =
@@ -192,15 +213,33 @@ export default async function ReportDetailPage({
                   return (
                     <div
                       key={i}
-                      className="mb-3 last:mb-0 rounded-[12px] border border-border bg-surface-2 p-4"
+                      className={`mb-3 last:mb-0 rounded-[12px] border p-4 ${
+                        dead
+                          ? "border-border-soft bg-surface opacity-60"
+                          : "border-border bg-surface-2"
+                      }`}
                     >
-                      {/* 스타일 + 셋업 + 상태 */}
+                      {/* 기간 + 셋업 + 상태 — 영문 키(position·markov)가 그대로 노출되고
+                          있었다(2026-08-23 Victor). 축은 기간 하나이고, 이름표는
+                          packages/db 의 TRADE_SETUP_LABELS 하나만 쓴다. */}
                       <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <span className="rounded-[6px] bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-inset ring-sky-500/25">
-                          {row.style}
-                        </span>
+                        {horizonLabel(row.horizon) && (
+                          <span className="rounded-[6px] bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">
+                            {horizonLabel(row.horizon)}
+                            {horizonSpec(row.horizon) ? ` · ${horizonSpec(row.horizon)!.bars}거래일` : ""}
+                          </span>
+                        )}
+                        {/* 쉬는 기간의 플랜은 계산은 돼도 「오늘의 픽」으로 나가지 않는다.
+                            안 적으면 「장기 · 진입권」을 보고 사도 되는 줄로 읽는다 —
+                            분석에서 본 플랜이 왜 픽에 없는지 여기서 답해야 한다. */}
+                        {row.horizon && !PUBLISH_HORIZONS.includes(row.horizon as never) && (
+                          <span className="rounded-[6px] bg-surface-3 px-2 py-0.5 text-[10px] font-semibold text-text-mute">
+                            픽으로 발행 안 함
+                          </span>
+                        )}
                         <span className="rounded-[6px] bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 ring-1 ring-inset ring-violet-500/25">
-                          {row.setup}
+                          {TRADE_SETUP_LABELS[row.setup as keyof typeof TRADE_SETUP_LABELS] ??
+                            row.setup}
                         </span>
                         <Badge variant={status.variant} size="sm">{status.label}</Badge>
                       </div>
@@ -241,7 +280,7 @@ export default async function ReportDetailPage({
                           {
                             label: "권장 비중",
                             value: sz != null ? `${sz.toFixed(1)}%` : "—",
-                            sub: "5분할 기준",
+                            sub: `계좌 리스크 ${riskPct}%`,
                             tone: "text-accent",
                           },
                         ].map(({ label, value, sub, tone }) => (

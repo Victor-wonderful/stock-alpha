@@ -15,6 +15,7 @@ import {
 import { nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PUBLISH_HORIZONS } from "@/lib/holding";
 import { PriceNow } from "@/components/PriceNow";
+import { RowSubLink } from "@/components/RowSubLink";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
 // (fetchCache: force-no-store). 데이터는 하루 두 번 배치로만 바뀌는데도 매 클릭마다
@@ -262,8 +263,13 @@ export default async function ReportsPage({
 
             const renderRow = (r: (typeof rows)[number]) => {
               const isPick = pickKeys.has(`${r.as_of}:${r.symbol}`);
+              // 종목명을 누르면 «종목 상세»로 간다 — 스크리너·오늘의 픽·진행 중과 같은
+              // 자리다(2026-08-23 Victor: "분석에서 클릭하는 거랑 스크리너에서 클릭하는 게
+              // 왜 다른 화면이 되나"). 예전에는 이 행 전체가 /reports/{id} 로 가서, 같은
+              // 종목을 어디서 눌렀느냐에 따라 5축·알파존·수급이 있는 화면과 리포트 본문이
+              // 갈렸다. 리포트는 종목 상세의 «한 부분»이므로 별도 링크로 뺀다.
               return (
-                <Link key={r.id} href={`/reports/${r.id}`} className="block">
+                <Link key={r.id} href={`/stocks/${r.symbol}`} className="block">
                   <div className="flex items-center gap-3 rounded-[12px] border border-border bg-surface-2 px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-3">
                     {/* 판정 배지 */}
                     <RatingBadge rating={r.rating} />
@@ -310,6 +316,15 @@ export default async function ReportsPage({
                           {r.score}
                         </span>
                       )}
+                      {/* 리포트 본문으로 바로 가는 길은 남긴다 — 종목 상세 안에도
+                          「전체 리포트 →」가 있지만, 판정을 읽으러 온 사람은 한 번에
+                          가고 싶다. 행 링크 안의 링크라 클릭을 여기서 멈춘다. */}
+                      <RowSubLink
+                        href={`/reports/${r.id}`}
+                        className="hidden text-[11px] font-semibold text-accent sm:block"
+                      >
+                        리포트 →
+                      </RowSubLink>
                       <ChevronRight className="h-4 w-4 text-text-mute" />
                     </div>
                   </div>
