@@ -98,11 +98,26 @@ export default async function FocusContent() {
   const planDay = asOf ? nextTradingDayLabel(asOf) : null;
   const basisDay = asOf ? tradingDayLabel(asOf) : null;
   const todayReports = allReports.data.filter((r) => r.as_of === latestDay);
-  const gradeBoard = {
-    매수: todayReports.filter((r) => r.rating === "매수").length,
-    중립: todayReports.filter((r) => r.rating === "중립").length,
-    관망: todayReports.filter((r) => r.rating === "관망").length,
-    부적합: todayReports.filter((r) => r.rating === "거래 부적합").length,
+  // 점수 분포 — 예전에는 reports.rating 을 그대로 세어 「매수 43 · 중립 99 · 관망 10 ·
+  // 부적합 27」을 띄웠다. 그 값은 **새 발행 규칙과 반대로** 움직인다(2026-08-23 확인):
+  //   · 오늘 발행된 유일한 픽 오리온의 rating 이 「거래 부적합」이다 → 발행된 픽이
+  //     「부적합 27건」 안에 들어가 있었다.
+  //   · 「매수 43건」에는 발행된 픽이 한 건도 없다.
+  // rating 은 점수 문턱(매수≥65)에 **리포트를 만든 날의 거래가능 게이트**를 덧씌운
+  // 값이라, 게이트가 (셋업×기간) 축으로 바뀐 뒤로 어긋난다. 발행을 정하는 건 점수가
+  // 아니라 백테스트 게이트·국면·예산이다.
+  //
+  // 그래서 게이트가 섞이지 않은 **점수만** 센다. 점수는 «후보»를 좁히는 단계이지
+  // 발행 판정이 아니라는 것을 패널 문구로 못박는다.
+  const scored = todayReports.filter((r) => r.score != null);
+  const inRange = (lo: number, hi: number) =>
+    scored.filter((r) => (r.score as number) >= lo && (r.score as number) < hi).length;
+  const scoreBoard = {
+    high: inRange(65, Infinity),
+    mid: inRange(60, 65),
+    low: inRange(45, 60),
+    weak: inRange(0, 45),
+    scored: scored.length,
     total: todayReports.length,
   };
   // 심볼별 최신 리포트만 — allReports 는 as_of 내림차순이므로 첫 등장(최신)을 보존한다.
@@ -264,7 +279,7 @@ export default async function FocusContent() {
 
              레짐 게이지도 뺐다 — 게이지는 「중립」이라 하고 국면 줄은 「횡보」라 해서
              한 화면이 같은 것을 두 이름으로 불렀다. 이름은 국면 줄 하나로 통일한다. */}
-        {(rc || gradeBoard.total > 0) && (
+        {(rc || scoreBoard.total > 0) && (
           <div className="mb-5 rounded-[14px] bg-navy px-5 py-4">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_1px_minmax(0,280px)]">
               {/* 좌 — 국면. 픽을 읽기 전에 깔고 가는 전제다. */}
@@ -321,7 +336,7 @@ export default async function FocusContent() {
                 <div className="mt-1.5 flex items-end gap-3">
                   <div>
                     <p className="tnum text-xl font-extrabold text-on-navy">
-                      {gradeBoard.total}
+                      {scoreBoard.total}
                     </p>
                     <p className="text-[10px] text-on-navy-3">종목 분석</p>
                   </div>
@@ -615,21 +630,35 @@ export default async function FocusContent() {
 
           {/* 우측 레일 */}
           <div className="flex flex-col gap-5">
-            {/* 오늘의 판정 현황 */}
+            {/* 오늘 점수 분포 — 「오늘의 판정 현황」이 있던 자리.
+                옛 패널은 reports.rating 을 세어 「매수 43 · 중립 99 · 관망 10 ·
+                부적합 27」을 띄웠는데, 그 값이 새 발행 규칙과 **반대로** 움직였다:
+                오늘 발행된 유일한 픽(오리온)의 rating 이 「거래 부적합」이라 발행된
+                픽이 부적합 칸에 들어가 있었고, 「매수 43건」에는 발행된 픽이 하나도
+                없었다. rating 은 점수 문턱에 «리포트를 만든 날의 거래가능 게이트»를
+                덧씌운 값이라 게이트가 (셋업×기간) 축으로 바뀐 뒤로 어긋난다.
+
+                게이트가 섞이지 않은 점수만 센다. 그리고 «점수는 발행을 정하지 않는다»를
+                패널 안에 적는다 — 안 적으면 65점+ 49종목을 보고 «49개 살 만하구나»로
+                읽는다. */}
             <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
-              <h2 className="mb-3 text-sm font-bold text-text">오늘의 판정 현황</h2>
+              <div className="mb-1 flex items-baseline justify-between gap-2">
+                <h2 className="text-sm font-bold text-text">오늘 점수 분포</h2>
+                <Link href="/reports" className="text-[11px] text-accent hover:underline">
+                  전체 보기 →
+                </Link>
+              </div>
+              <p className="mb-3 text-[11px] leading-relaxed text-text-mute">
+                {latestDay ?? "—"} 분석 {scoreBoard.scored}종목 · 팩터 40 + 밸류 30 +
+                시그널 30 = 100점
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 {(
                   [
-                    { label: "매수", n: gradeBoard.매수, cls: "text-good", bg: "bg-good-soft" },
-                    { label: "중립", n: gradeBoard.중립, cls: "text-warn", bg: "bg-warn-soft" },
-                    { label: "관망", n: gradeBoard.관망, cls: "text-text-dim", bg: "bg-surface-2" },
-                    {
-                      label: "부적합",
-                      n: gradeBoard.부적합,
-                      cls: "text-text-mute",
-                      bg: "bg-surface-2",
-                    },
+                    { label: "65점 이상", n: scoreBoard.high, cls: "text-good", bg: "bg-good-soft" },
+                    { label: "60~64점", n: scoreBoard.mid, cls: "text-warn", bg: "bg-warn-soft" },
+                    { label: "45~59점", n: scoreBoard.low, cls: "text-text-dim", bg: "bg-surface-2" },
+                    { label: "45점 미만", n: scoreBoard.weak, cls: "text-text-mute", bg: "bg-surface-2" },
                   ] as const
                 ).map(({ label, n, cls, bg }) => (
                   <div
@@ -641,18 +670,18 @@ export default async function FocusContent() {
                   </div>
                 ))}
               </div>
-              {/* 분석 건수(총계)는 위 전제 밴드가 이미 말했다 — 여기는 그 내역이다.
-                  같은 숫자를 두 번 적으면 어느 쪽이 무엇인지 되묻게 된다. */}
-              <p className="mt-2.5 text-[11px] text-text-mute">
-                {latestDay ?? "—"} 판정 · 「거래 부적합」 {gradeBoard.부적합}건은 목록에서
-                기본 숨김
+              <p className="mt-2.5 border-t border-border-soft pt-2.5 text-[10.5px] leading-relaxed text-text-mute">
+                <span className="font-semibold text-text-dim">점수가 발행을 정하지 않습니다.</span>{" "}
+                점수는 후보를 좁히는 단계이고, 실제 발행은 그 종목의 (셋업 × 기간)이
+                백테스트 게이트를 통과했는지 · 지금 국면이 그 성격을 허용하는지 ·
+                포트폴리오 예산이 남았는지로 정합니다. 오늘은{" "}
+                <span className="tnum font-semibold text-text-dim">
+                  {scoreBoard.high + scoreBoard.mid}종목
+                </span>
+                이 60점을 넘었지만 발행은{" "}
+                <span className="tnum font-semibold text-text-dim">{picks.length}건</span>
+                입니다.
               </p>
-              <Link
-                href="/reports"
-                className="mt-1 block text-[11px] text-accent hover:underline"
-              >
-                전체 보기 →
-              </Link>
             </section>
 
             {/* 종목 소식 — 「픽 기록」이 있던 자리(2026-08-23 Victor 교체 요청).
