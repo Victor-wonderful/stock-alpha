@@ -172,6 +172,63 @@ export async function getLatestDisclosures(perDirection = 40): Promise<
   }
 }
 
+/**
+ * 지정한 종목들의 최근 공시 — 「오늘의 픽」 옆에 붙일 소식용.
+ *
+ * getLatestDisclosures 와 다르다. 그건 «최신 접수일 하루»를 방향별로 훑는 시장 화면용이고,
+ * 이건 «이 종목들»의 최근 며칠을 종목별로 묶는다. 추천 종목이 그날 공시가 없으면 시장
+ * 화면 쿼리로는 영영 안 잡힌다.
+ *
+ * 제목(report_nm)은 그대로 쓴다 — DART 공시는 공공기록이라 언론사 저작물과 다르다.
+ * 뉴스 쪽(getNewsEvents)이 제목을 안 쓰는 것과 구분해야 한다.
+ */
+export async function getDisclosuresForSymbols(
+  symbols: string[],
+  opts: { days?: number; perSymbol?: number } = {},
+): Promise<Map<string, DisclosureView[]>> {
+  const out = new Map<string, DisclosureView[]>();
+  const uniq = [...new Set(symbols.filter(Boolean))];
+  if (uniq.length === 0) return out;
+  const days = opts.days ?? 30;
+  const perSymbol = opts.perSymbol ?? 3;
+  try {
+    const supabase = createPublicClient();
+    // ⚠️ rcept_dt 는 «2026-08-21» 형태다(YYYYMMDD 가 아니다). 대시를 지우고 비교하면
+    //    문자열 대소가 어긋나 조용히 아무것도 안 걸린다 — 화면은 «소식 없음»으로 보인다.
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const { data } = await supabase
+      .from("disclosures")
+      .select("id,report_nm,event_type,direction,rcept_dt,instruments!inner(symbol,name)")
+      .in("instruments.symbol", uniq)
+      .gte("rcept_dt", since)
+      .order("rcept_dt", { ascending: false })
+      .limit(uniq.length * perSymbol * 4);
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      const inst = (r.instruments ?? {}) as { symbol?: string; name?: string };
+      const sym = inst.symbol;
+      if (!sym) continue;
+      const list = out.get(sym) ?? [];
+      if (list.length >= perSymbol) continue;
+      list.push({
+        id: Number(r.id),
+        symbol: sym,
+        name: inst.name ?? null,
+        // DART report_nm 은 공백이 잔뜩 낀 채로 온다 — 뒤에만이 아니라 **중간에도** 있다
+        // (「주권매매거래정지해제              (상장폐지에 따른…)」). trim() 만 하면
+        // 한 줄에 넣었을 때 제목이 끊긴 것처럼 보인다.
+        reportName: String(r.report_nm ?? "").replace(/\s+/g, " ").trim(),
+        eventType: (r.event_type as string) ?? null,
+        direction: (r.direction as DisclosureView["direction"]) ?? null,
+        receiptDate: String(r.rcept_dt),
+      });
+      out.set(sym, list);
+    }
+  } catch {
+    // 조용히 빈 맵 — 소식은 부가 정보라 실패해도 페이지가 서야 한다.
+  }
+  return out;
+}
+
 // 공시 유형별 성적표 — "이 소식 뒤에 실제로 어떻게 됐나".
 // 엔진(engine/market/event_study.py)이 매일 계산해 event_evidence 에 적재한다.
 // 화면의 "이 뉴스는 어떻다"는 문장은 전부 이 표를 근거로 한다.

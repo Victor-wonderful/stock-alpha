@@ -11,8 +11,10 @@ import {
   getMarketState,
   getPlanCombosForReports,
   getMorningBrief,
+  getDisclosuresForSymbols,
+  getEventEvidence,
+  getNewsEvents,
   getOpenPicks,
-  getPickHistory,
   getRecommendations,
   getReports,
   getTradingCalendar,
@@ -24,16 +26,16 @@ import { Badge } from "@/components/ui/badge";
 import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PickCard } from "./_pick-card";
 import { HORIZONS, isHorizonPaused, horizonSpec } from "@/lib/holding";
+import { PickNewsRail } from "@/components/PickNewsRail";
 import { OpenPicksSummary } from "@/components/OpenPicksSummary";
 import { OpenPicksTable } from "@/components/OpenPicksTable";
 
 // 레짐 게이지 (3구간 바 + 마커)
 export default async function FocusContent() {
-  const [recs, allReports, history, brief, riskPct, marketState, backtests, openPicks, cal] =
+  const [recs, allReports, brief, riskPct, marketState, backtests, openPicks, cal] =
     await Promise.all([
       getRecommendations(),
       getReports(200, { includeUnfit: true }), // 최신일 분포 집계 — 일 발행 상한(100)+α 커버
-      getPickHistory(),
       getMorningBrief(),
       getUserRiskPct(),
       getMarketState(),
@@ -165,7 +167,7 @@ export default async function FocusContent() {
   );
 
   // ── 진행 중(이미 산 픽) ──
-  // 이 자리에 예전에는 `history` 에서 status==="진행중" 만 거른 변수가 있었는데
+  // 이 자리에 예전에는 픽 이력에서 status==="진행중" 만 거른 변수가 있었는데
   // **어디에도 그려지지 않았다** — 계산만 하고 버렸다. 그래서 「오늘의 픽」 전용
   // 페이지가 «사기 전 계획»만 말하고 «산 뒤 상태»는 홈에만 있었다.
   // 표는 홈과 같은 컴포넌트를 쓴다. 한 종목이 두 화면에서 다른 열·다른 이름을 쓰면
@@ -179,28 +181,32 @@ export default async function FocusContent() {
   );
   const pendingCount = picksToday.filter((p) => p.status === "pending").length;
 
-  // 트랙레코드 집계 — 엔진이 확정(0017)한 종료 픽만. 정직한 기대값 노출(신뢰).
-  // 저승률·고R:R 추세전략은 손절이 잦아도 기대값이 양(+)이면 장기 수익이 난다는 걸
-  // 숫자로 보여 "손절이 많다"는 인상을 기대값으로 재맥락화한다.
-  const closedPicks = history.data.filter((h) => h.closed);
-  const tr = {
-    closed: closedPicks.length,
-    wins: closedPicks.filter((h) => (h.return_pct ?? 0) > 0).length,
-  };
-  // 종료 사유 내역 — 예전에는 목표·1차익절·손절·만료 넷만 셌다. 그 넷에 안 잡히는
-  // 「본전 청산」·「규칙 교체 정리」가 생기면서 내역 합계가 종료 건수보다 작아졌고
-  // (35건 종료인데 내역은 23건), 화면은 나머지 12건을 조용히 감췄다. 상태 목록을
-  // 고정하지 않고 실제 값에서 세어 0건이 아닌 것만 적는다 — 새 상태가 생겨도 샌다.
-  // 「목표 도달」은 채택 규칙(trail)에서는 더 나오지 않는다(그 자리에서 안 판다).
-  const breakdown = [...new Set(closedPicks.map((h) => h.status))]
-    .map((st) => ({ label: st, n: closedPicks.filter((h) => h.status === st).length }))
-    .filter((b) => b.n > 0)
-    .sort((a, b) => b.n - a.n);
-  const winRate = tr.closed > 0 ? tr.wins / tr.closed : null;
-  const expectancy =
-    tr.closed > 0
-      ? closedPicks.reduce((s, h) => s + (h.return_pct ?? 0), 0) / tr.closed
-      : null;
+  // ── 종목 소식(우측 레일) ──
+  // 오늘의 픽이 먼저, 그다음 보유 픽. 같은 종목이 양쪽에 있으면 픽 쪽만 남긴다.
+  const NEWS_DAYS = 30;
+  const newsRows: { symbol: string; name: string; kind: "pick" | "open" }[] = [];
+  const seenNewsSym = new Set<string>();
+  for (const p of picks) {
+    if (!p.symbol || seenNewsSym.has(p.symbol)) continue;
+    seenNewsSym.add(p.symbol);
+    newsRows.push({ symbol: p.symbol, name: p.name, kind: "pick" });
+  }
+  for (const p of openPicks) {
+    if (!p.symbol || seenNewsSym.has(p.symbol)) continue;
+    seenNewsSym.add(p.symbol);
+    newsRows.push({ symbol: p.symbol, name: p.name, kind: "open" });
+  }
+  const newsSyms = newsRows.map((r) => r.symbol);
+  const [pickDisclosures, pickNews, eventEvidence] = await Promise.all([
+    getDisclosuresForSymbols(newsSyms, { days: NEWS_DAYS, perSymbol: 2 }),
+    // 보도는 «같은 날 2개 이상 매체»만 사건으로 센다 — 한 곳이 쓴 건 사건이 아니다.
+    getNewsEvents(newsSyms, { minOutlets: 2, days: NEWS_DAYS }),
+    getEventEvidence(),
+  ]);
+
+  // 트랙레코드 집계(승률·기대값·종료 사유)는 여기서 뺐다 — 그 패널이 「종목 소식」으로
+  // 교체됐다. 성과 숫자는 /picks 한 곳에서만 낸다. 두 화면이 서로 다른 승률을 말하던
+  // 문제(미체결·규칙 교체 정리를 어디까지 세느냐)도 거기서 함께 정리한다.
   // 브리프에서 남겨 쓰는 건 «위험회피 구간인가» 하나뿐이다. 헤드라인·워치포인트·
   // 매크로·레짐 게이지는 이 페이지에서 뺐다(홈과 「시장」이 같은 것을 이미 말한다).
   const regime = brief.data?.regime ?? null;
@@ -649,115 +655,19 @@ export default async function FocusContent() {
               </Link>
             </section>
 
-            {/* 픽 기록 미니 */}
-            <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-bold text-text">픽 기록</h2>
-                <div className="flex items-center gap-2">
-                  <Link href="/picks" className="text-[11px] font-semibold text-accent hover:underline">
-                    전체 기록 →
-                  </Link>
-                </div>
-              </div>
-
-              {/* 트랙레코드 집계 — 종료 픽 기준 기대값·승률(정직한 성과) */}
-              {tr.closed > 0 && (
-                <div className="mb-3 rounded-[12px] bg-surface-2 p-3">
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div>
-                      <p className="text-[10px] text-text-mute">종료</p>
-                      <p className="tnum mt-0.5 text-base font-extrabold text-text">
-                        {tr.closed}건
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-text-mute">승률</p>
-                      <p className="tnum mt-0.5 text-base font-extrabold text-text">
-                        {winRate != null ? `${(winRate * 100).toFixed(0)}%` : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-text-mute">평균 손익</p>
-                      <p
-                        className={`tnum mt-0.5 text-base font-extrabold ${
-                          (expectancy ?? 0) > 0
-                            ? "text-good"
-                            : (expectancy ?? 0) < 0
-                              ? "text-bad"
-                              : "text-text"
-                        }`}
-                      >
-                        {expectancy != null
-                          ? `${expectancy >= 0 ? "+" : ""}${(expectancy * 100).toFixed(1)}%`
-                          : "—"}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-[10px] leading-relaxed text-text-mute">
-                    {breakdown.map((b) => `${b.label} ${b.n}`).join(" · ")} · 추세 전략은 손절이 잦아도{" "}
-                    <span className="font-semibold text-text-dim">
-                      평균 손익(기대값)이 양(+)
-                    </span>
-                    이면 장기 수익 — 승률보다 기대값으로 판단합니다
-                  </p>
-                </div>
-              )}
-
-              {history.data.length === 0 ? (
-                <p className="text-sm text-text-mute">
-                  아직 기록이 없습니다. 첫 픽부터 결과를 전부 공개합니다.
-                </p>
-              ) : (
-                <div className="divide-y divide-border">
-                  {history.data.slice(0, 7).map((h, i) => (
-                    <div key={i} className="flex items-center justify-between py-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="mono shrink-0 text-[10px] text-text-mute">
-                          {h.as_of.slice(5)}
-                        </span>
-                        <Link
-                          href={`/stocks/${h.symbol}`}
-                          className="truncate text-xs font-semibold text-text hover:text-accent"
-                        >
-                          {h.name}
-                        </Link>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {h.status !== "진행중" && (
-                          <Badge
-                            variant={
-                              h.status === "목표 도달" || h.status === "1차 익절"
-                                ? "bull"
-                                : h.status === "손절"
-                                  ? "bear"
-                                  : "neutral"
-                            }
-                          >
-                            {h.status}
-                          </Badge>
-                        )}
-                        <span
-                          className={`tnum rounded px-1.5 py-0.5 text-xs font-bold ${
-                            (h.return_pct ?? 0) > 0
-                              ? "bg-good-soft text-good"
-                              : (h.return_pct ?? 0) < 0
-                                ? "bg-bad-soft text-bad"
-                                : "text-text-dim"
-                          }`}
-                        >
-                          {h.return_pct != null
-                            ? `${h.return_pct >= 0 ? "+" : ""}${(h.return_pct * 100).toFixed(1)}%`
-                            : "—"}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <p className="mt-2 text-[11px] text-text-mute">
-                진입가 대비 종가 기준 · 전체 {history.data.length}건
-              </p>
-            </section>
+            {/* 종목 소식 — 「픽 기록」이 있던 자리(2026-08-23 Victor 교체 요청).
+                옛 패널은 숫자가 틀렸고(「종료」에 미체결·규칙 교체 정리가 섞였고,
+                목록 맨 위에는 아직 사지도 않은 「진입 대기」가 기록으로 올라왔다)
+                「진행 중」 섹션이 생기면서 자리도 겹쳤다. 성과 집계는 /picks 한 곳에서
+                정리한다. 픽을 보는 사람이 옆에서 확인하고 싶은 것은 지난 성적표가
+                아니라 «이 종목에 무슨 일이 있었나»다. */}
+            <PickNewsRail
+              rows={newsRows}
+              news={pickNews}
+              disclosures={pickDisclosures}
+              evidence={eventEvidence}
+              days={NEWS_DAYS}
+            />
           </div>
         </div>
 
