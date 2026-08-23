@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MarketTicker } from "@/components/MarketTicker";
 
 import { DEFAULT_RISK_PER_TRADE_PCT } from "@/lib/position";
 import { GNB } from "@/components/GNB";
@@ -59,34 +60,6 @@ import { horizonSpec } from "@/lib/holding";
 // 지수는 사용자가 물어본 게 아니라 배경 맥락이다. 카드도 배경도 없이 세로 헤어라인
 // 하나로만 나눈다. 흐르는 밴드라 셀은 고정폭이어야 한다(flex-1 이면 두 벌의 폭이
 // 달라져 이음매가 튄다).
-function TickerCell({
-  label,
-  value,
-  unit,
-  changePct,
-}: {
-  label: string;
-  value: number;
-  unit: string;
-  changePct: number | null;
-}) {
-  const up = (changePct ?? 0) >= 0;
-  return (
-    <div className="flex w-[190px] shrink-0 items-baseline gap-2 whitespace-nowrap border-r border-border-soft px-4 py-2.5">
-      <span className="text-[11px] text-text-mute">{label}</span>
-      <span className="tnum text-[14px] font-medium text-text">
-        {value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
-        {unit && <span className="ml-0.5 text-[11px] text-text-mute">{unit}</span>}
-      </span>
-      {changePct != null && (
-        <span className={`tnum text-[11px] ${up ? "text-good" : "text-bad"}`}>
-          {fmtPct(changePct)}
-        </span>
-      )}
-    </div>
-  );
-}
-
 const STATE_LABEL: Record<string, string> = {
   uptrend: "상승추세",
   downtrend: "하락추세",
@@ -237,27 +210,18 @@ export default async function HomePage() {
     <div className="flex min-h-screen flex-col bg-bg">
       <GNB />
 
-      {/* 지수 티커 — 읽으려면 멈춰야 하니 hover 시 정지한다. */}
-      {quotes.data.length > 0 && (
-        <div className="ticker-band no-scrollbar group relative overflow-hidden border-b border-border-soft">
-          <div className="flex w-max animate-ticker group-hover:[animation-play-state:paused]">
-            {[0, 1].map((copy) => (
-              // 두 벌째는 이음매를 메우는 복제본 — 스크린리더가 지수를 두 번 읽지 않게 감춘다.
-              <div key={copy} className="flex" aria-hidden={copy === 1}>
-                {quotes.data.map((q) => (
-                  <TickerCell
-                    key={q.id}
-                    label={q.label}
-                    value={q.value}
-                    unit={q.unit}
-                    changePct={q.changePct}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* 지수 티커 — components/MarketTicker 로 옮겼다(2026-08-23). 시장 페이지의
+          매크로도 같은 모양을 쓰므로 두 곳이 갈라지지 않게 한 컴포넌트로 둔다. */}
+      <MarketTicker
+        items={quotes.data.map((q) => ({
+          id: `${q.id}`,
+          label: q.label,
+          value: q.value,
+          unit: q.unit,
+          change: q.changePct,
+          isPct: true,
+        }))}
+      />
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-10 pt-7 sm:px-7">
         <HomeHero />

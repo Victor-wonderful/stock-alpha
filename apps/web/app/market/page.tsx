@@ -1,9 +1,11 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { MarketBrief } from "@/components/MarketBrief";
+import { MarketTicker } from "@/components/MarketTicker";
+import { SectorTable } from "@/components/SectorTable";
 import { Badge } from "@/components/ui/badge";
 import { SampleBadge } from "@/components/ui";
-import { Sparkline } from "@/components/ui/Sparkline";
 import {
   getEventEvidence,
   getLatestDisclosures,
@@ -210,20 +212,10 @@ export default async function MarketPage() {
     );
     return { groups, total: all.length };
   })();
-  // 섹터 표는 상위 5 · 하위 5만. 가운데는 «몇 개를 접었는지»만 한 줄로 남긴다.
-  const SECTOR_EDGE = 5;
-  const sectorRows = (() => {
-    if (sectors.length <= SECTOR_EDGE * 2 + 1) {
-      return sectors.map((s, i) => ({ s, i, gapAfter: 0 }));
-    }
-    const head = sectors.slice(0, SECTOR_EDGE).map((s, i) => ({ s, i, gapAfter: 0 }));
-    const tailStart = sectors.length - SECTOR_EDGE;
-    const tail = sectors
-      .slice(tailStart)
-      .map((s, k) => ({ s, i: tailStart + k, gapAfter: 0 }));
-    head[head.length - 1].gapAfter = tailStart - SECTOR_EDGE;
-    return [...head, ...tail];
-  })();
+  // 섹터별 오늘 시그널 건수 — 표가 찾아 쓰기 좋게 맵으로 넘긴다.
+  const signalCountBySector = Object.fromEntries(
+    signalSectors.map((sc) => [sc.sector, sc.count]),
+  );
 
   // 오늘의 시황 — 2026-08-22 에 홈에서 옮겨 왔다(IA 1단계).
   // 내용은 «전망»이 아니라 «오늘 무슨 일이 있었나 + 과거 같은 상황의 빈도»다.
@@ -261,129 +253,14 @@ export default async function MarketPage() {
         title="오늘 무슨 일이 있었나"
         note="전 종목을 세어본 값입니다 — 전망이 아닙니다"
       />
-      <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      {/* 시황과 「상승 종목 비중」을 한 카드로 합쳤다(2026-08-23 Victor) — 둘이
+          **같은 데이터**다. 비중은 시황이 들고 있는 오른/내린 종목 수로 계산한
+          값이라, 따로 두면 같은 사실을 두 칸에서 두 번 말하게 된다. */}
+      <div className="mb-4">
         {brief.data?.market ? (
           <section className="rounded-[12px] border border-border bg-surface p-5">
             <MarketBrief market={brief.data.market} planDay={briefPlanDay} />
-          </section>
-        ) : (
-          <section className="rounded-[12px] border border-border bg-surface p-5 text-sm text-text-mute">
-            오늘 시황을 불러오지 못했습니다.
-          </section>
-        )}
-        <section className="rounded-[12px] border border-border bg-surface p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-[13px] font-bold">매크로 지표</h3>
-            <span className="text-[10px] text-text-mute">해외 변수는 모닝 배치 갱신</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            {macro.map((m) => {
-              const up = m.change >= 0;
-              return (
-                <div
-                  key={m.series_id}
-                  className="rounded-[12px] border border-border bg-surface-2 p-3"
-                >
-                  <p className="truncate text-[10px] text-text-mute">{m.label}</p>
-                  <p className="tnum mt-1 text-[15px] font-bold text-text">
-                    {fmtNum(m.value, m.unit === "원" || m.unit === "p" ? 1 : 2)}
-                    <span className="ml-0.5 text-[9px] font-normal text-text-mute">{m.unit}</span>
-                  </p>
-                  <div className="mt-1 flex items-center justify-between">
-                    <span
-                      className={`tnum text-[10px] font-semibold ${up ? "text-good" : "text-bad"}`}
-                    >
-                      {up ? "+" : ""}
-                      {fmtNum(m.change, 2)}
-                    </span>
-                    <Sparkline data={m.spark} width={48} height={16} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </div>
-
-      {/* ── 밴드 3(위치는 2번째) · 공시 — «유형»으로 묶는다 ──
-           예전에는 99건을 종목별로 나열했다(화면 214줄). 그런데 그날 공시는 14개
-           유형뿐이고, 실측 판정(event_evidence)은 **유형 단위로 계산된 값**이다.
-           종목마다 붙이니 「분류와 실측이 다름 · 과거 434번 중 10번에 4번 성공 …」이
-           단일판매·공급계약 25건에 대해 25번 그대로 반복됐다.
-
-           유형을 주인공으로 세우면 (1) 실측 문장이 유형당 한 번이고 (2)「분류는
-           호재인데 실측은 조심」이 훨씬 잘 읽힌다 — 오늘 그 유형이 몇 건 들어왔는지가
-           같은 줄에 있기 때문이다. 종목은 그 안에 이름만 나열한다. */}
-      <SectionHead
-        title="오늘 들어온 공시"
-        note={`${disclosures.asOf ?? "접수일 미상"} · ${disclosureGroups.total}건 · ${disclosureGroups.groups.length}개 유형 — 배지는 분류가 아니라 실제로 세어본 결과입니다`}
-      />
-      <div className="mb-6 rounded-[12px] border border-border bg-surface p-5">
-        {disclosureGroups.groups.length === 0 ? (
-          <p className="py-3 text-sm text-text-mute">표시할 공시가 없습니다.</p>
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {disclosureGroups.groups.map((g) => (
-              <div
-                key={g.key}
-                className={`rounded-[12px] border px-4 py-3 ${
-                  g.flips ? "border-warn/30 bg-warn-soft" : "border-border-soft bg-surface-2"
-                }`}
-              >
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span
-                    className={`shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-semibold ${
-                      g.ev ? VERDICT_CLASS[g.ev.verdict] : "bg-surface-3 text-text-mute"
-                    }`}
-                  >
-                    {g.ev ? VERDICT_LABEL[g.ev.verdict] : "판정 없음"}
-                  </span>
-                  <span className="text-[13px] font-bold text-text">{g.label}</span>
-                  <span className="tnum text-[12px] font-semibold text-text-dim">{g.rows.length}건</span>
-                  {g.flips && (
-                    <span className="text-[10.5px] font-semibold text-warn">
-                      분류({g.dirLabel})와 실측이 다름
-                    </span>
-                  )}
-                </div>
-                {g.ev && g.ev.verdict !== "insufficient" && (
-                  <p className="mt-1 text-[11px] leading-relaxed text-text-dim">
-                    {evidenceSentence(g.ev)}
-                  </p>
-                )}
-                <p className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[11px] text-text-mute">
-                  {g.rows.slice(0, 6).map((d, k) => (
-                    <span key={d.id}>
-                      {d.symbol ? (
-                        <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
-                          {d.name ?? d.symbol}
-                        </Link>
-                      ) : (
-                        d.name ?? "—"
-                      )}
-                      {k < Math.min(g.rows.length, 6) - 1 && <span className="text-text-mute"> ·</span>}
-                    </span>
-                  ))}
-                  {g.rows.length > 6 && (
-                    <span className="font-semibold text-text-dim">+{g.rows.length - 6}</span>
-                  )}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── 밴드 2 · 돈이 어디로 가나 ── */}
-      <SectionHead title="돈이 어디로 가나" note="수급과 섹터 — 오늘 어디에 몰렸나" />
-      <div className="mb-6 grid gap-4">
-        {/* ── 상승 종목 비중 ──
-             예전 이 자리는 「수급 · 브레드스 (5일)」였는데 **전부 예시**였다:
-             외국인·기관·개인 막대는 폭이 하드코딩(25% / 15%)이고 값 자리에는
-             「데이터 미제공」, 게이지도 w-3/5 고정에 「실데이터 미연결 — 예시」였다.
-             그런데 진짜 값은 바로 옆 시황이 들고 있었다(오른 종목 403 · 내린 1,949).
-             가짜를 그리느니 있는 값을 그린다 — 없는 것(투자자별 순매수)은 없다고 적는다. */}
-        <div className="rounded-[12px] border border-border bg-surface p-5">
+            <div className="mt-4 border-t border-border-soft pt-4">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
             <h3 className="text-[13px] font-bold">상승 종목 비중</h3>
             <span className="text-[11px] text-text-mute">
@@ -434,8 +311,49 @@ export default async function MarketPage() {
           ) : (
             <p className="py-3 text-sm text-text-mute">오늘 집계를 불러오지 못했습니다.</p>
           )}
-        </div>
 
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-[12px] border border-border bg-surface p-5 text-sm text-text-mute">
+            오늘 시황을 불러오지 못했습니다.
+          </section>
+        )}
+      </div>
+
+      {/* 매크로는 카드 그리드가 아니라 «움직이는 띠»다(2026-08-23 Victor — 홈 상단과
+          같은 모양으로). 지표 6개는 훑는 값이지 비교하는 값이 아니라, 카드로 세우면
+          화면 한 덩어리를 먹으면서 각 칸이 하는 말은 한 줄뿐이다.
+          지수와 매크로를 한 띠에 태운다 — 둘 다 «오늘의 배경»이라 자리가 같다. */}
+      <div className="mb-6">
+        <MarketTicker
+          items={[
+            ...quotes.map((q) => ({
+              id: `q-${q.id}`,
+              label: q.label,
+              value: q.value,
+              unit: q.unit,
+              change: q.changePct,
+              isPct: true,
+            })),
+            ...macro.map((m) => ({
+              id: `m-${m.series_id}`,
+              label: m.label,
+              value: m.value,
+              unit: m.unit,
+              change: m.change,
+              isPct: false,
+            })),
+          ]}
+        />
+        <p className="mt-1.5 text-[10px] text-text-mute">
+          지수 · 매크로 — 해외 변수는 모닝 배치 갱신 · 마우스를 올리면 멈춥니다
+        </p>
+      </div>
+
+      {/* ── 밴드 2 · 돈이 어디로 가나 ── */}
+      <SectionHead title="돈이 어디로 가나" note="수급과 섹터 — 오늘 어디에 몰렸나" />
+      <div className="mb-6 grid gap-4">
         {/* ── 섹터 로테이션 ──
              예전에는 한 카드 안에 (1) 27개 점을 찍은 사분면 SVG (2) 시그널 분포 막대
              7개 (3) 27행 표가 다 들어 있었다. 사분면은 이름이 겹쳐 못 읽었고, 분포
@@ -450,73 +368,94 @@ export default async function MarketPage() {
           </div>
           <QuadrantCards sectors={sectors} />
 
-          {/* 섹터 테이블 */}
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[560px] text-xs">
-              <thead>
-                <tr className="border-b border-border">
-                  {/* 「상대강도」 열을 뺐다 — 모멘텀z 의 절대값을 최댓값으로 나눈
-                      파생값이라 바로 왼쪽 열과 같은 것을 두 번 그리고 있었다.
-                      순위도 뺐다 — 표가 이미 모멘텀 순이고 상위·하위만 남았다. */}
-                  {["섹터", "모멘텀 (20일 추세)", "수급 5일", "오늘 시그널"].map((h) => (
-                    <th key={h} className="pb-1.5 pr-3 text-left text-[10px] font-medium text-text-mute first:w-6">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {/* 27개를 전부 세로로 세우면 이 카드 하나가 화면 274줄을 먹는다.
-                    모멘텀 상위·하위 5개만 펼치고 가운데는 접는다 — 로테이션을 보는
-                    사람이 궁금한 건 «어디가 앞서고 어디가 처지나»이지 중간이 아니다.
-                    접었다는 사실과 건수는 접힌 자리에 그대로 적는다(숨기지 않는다). */}
-                {sectorRows.map(({ s, gapAfter }) => {
-                  const sigCount = signalSectors.find((sc) => sc.sector === s.sector)?.count ?? 0;
-                  // 막대 폭은 모멘텀의 «최대 대비 비율». 숫자 옆에 두면 크기가 눈으로 잡힌다.
-                  const bar = Math.round((Math.abs(s.momentum) / maxMom) * 100);
-                  return (
-                    <>
-                    <tr key={s.sector} className="border-b border-border/50 last:border-0">
-                      <td className="py-2 pr-3 font-medium text-text">{s.sector}</td>
-                      <td className="py-2 pr-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`tnum w-11 shrink-0 text-right font-semibold ${s.momentum >= 0 ? "text-good" : "text-bad"}`}
-                          >
-                            {s.momentum > 0 ? "+" : ""}
-                            {fmtNum(s.momentum, 2)}
-                          </span>
-                          <div className="relative h-1.5 w-20 overflow-hidden rounded-full bg-surface-3">
-                            <div
-                              className={`h-1.5 rounded-full ${s.momentum >= 0 ? "bg-good" : "bg-bad"}`}
-                              style={{ width: `${bar}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                      <td className={`tnum py-2 pr-3 ${s.flow >= 0 ? "text-good" : "text-bad"}`}>
-                        {s.flow >= 0 ? "+" : ""}{s.flow.toLocaleString()}억
-                      </td>
-                      <td className="tnum py-2 pr-3 text-text-dim">
-                        {sigCount > 0 ? `${sigCount}건` : "—"}
-                      </td>
-                    </tr>
-                    {gapAfter > 0 && (
-                      <tr key={`${s.sector}-gap`} className="border-b border-border/50">
-                        <td colSpan={4} className="py-2 text-center text-[10.5px] text-text-mute">
-                          중간 {gapAfter}개 섹터는 접었습니다 — 모멘텀 상위·하위 5개만
-                          펼칩니다
-                        </td>
-                      </tr>
-                    )}
-                    </>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <SectorTable sectors={sectors} signalCountBySector={signalCountBySector} />
         </div>
       </div>
+
+      {/* ── 밴드 3 · 공시 — «유형»으로 묶는다 ──
+           예전에는 99건을 종목별로 나열했다(화면 214줄). 그런데 그날 공시는 14개
+           유형뿐이고, 실측 판정(event_evidence)은 **유형 단위로 계산된 값**이다.
+           종목마다 붙이니 「분류와 실측이 다름 · 과거 434번 중 10번에 4번 성공 …」이
+           단일판매·공급계약 25건에 대해 25번 그대로 반복됐다.
+
+           유형을 주인공으로 세우면 (1) 실측 문장이 유형당 한 번이고 (2)「분류는
+           호재인데 실측은 조심」이 훨씬 잘 읽힌다 — 오늘 그 유형이 몇 건 들어왔는지가
+           같은 줄에 있기 때문이다. 종목은 그 안에 이름만 나열한다. */}
+      <SectionHead
+        title="오늘 들어온 공시"
+        note={`${disclosures.asOf ?? "접수일 미상"} · ${disclosureGroups.total}건 · ${disclosureGroups.groups.length}개 유형 — 색과 배지는 분류가 아니라 실제로 세어본 결과입니다`}
+      />
+      <div className="mb-6 rounded-[12px] border border-border bg-surface p-5">
+        {disclosureGroups.groups.length === 0 ? (
+          <p className="py-3 text-sm text-text-mute">표시할 공시가 없습니다.</p>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {disclosureGroups.groups.map((g) => (
+              <div
+                key={g.key}
+                // 카드 색은 «실측 판정»으로 칠한다(2026-08-23 Victor). 예전에는
+                // 「분류와 실측이 다름」일 때만 앰버였고 나머지는 전부 회색이라, 좋은
+                // 유형과 나쁜 유형이 같은 색으로 나란히 있었다.
+                //
+                // ⚠️ 색의 근거는 분류(direction)가 아니라 실측(verdict)이다. 분류는
+                // 보고서 이름을 보고 붙인 «추측»이고 — 공급계약은 호재로 분류돼 있지만
+                // 실측은 한 달 뒤 -3.2% 다 — 색까지 추측을 따르면 화면이 틀린 쪽을
+                // 강조하게 된다. 「판단 보류」는 회색 그대로다: 모르는 것에 색을 주면
+                // 아는 것처럼 읽힌다(lib/events 의 규약과 같다).
+                className={`rounded-[12px] border px-4 py-3 ${
+                  g.ev?.verdict === "good"
+                    ? "border-good/30 bg-good-soft"
+                    : g.ev?.verdict === "caution"
+                      ? "border-bad/30 bg-bad-soft"
+                      : "border-border-soft bg-surface-2"
+                }`}
+              >
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span
+                    className={`shrink-0 rounded-[4px] px-1.5 py-px text-[10px] font-semibold ${
+                      g.ev ? VERDICT_CLASS[g.ev.verdict] : "bg-surface-3 text-text-mute"
+                    }`}
+                  >
+                    {g.ev ? VERDICT_LABEL[g.ev.verdict] : "판정 없음"}
+                  </span>
+                  <span className="text-[13px] font-bold text-text">{g.label}</span>
+                  <span className="tnum text-[12px] font-semibold text-text-dim">{g.rows.length}건</span>
+                  {/* 색이 실측을 말하게 됐으니, 「분류와 실측이 다름」은 그 위에
+                      얹는 표시로 남긴다 — 이 화면에서 가장 알려줄 값이 큰 한 줄이다. */}
+                  {g.flips && (
+                    <span className="rounded-[4px] bg-warn-soft px-1.5 py-px text-[10px] font-bold text-warn">
+                      분류({g.dirLabel})와 반대
+                    </span>
+                  )}
+                </div>
+                {g.ev && g.ev.verdict !== "insufficient" && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-text-dim">
+                    {evidenceSentence(g.ev)}
+                  </p>
+                )}
+                <p className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[11px] text-text-mute">
+                  {g.rows.slice(0, 6).map((d, k) => (
+                    <span key={d.id}>
+                      {d.symbol ? (
+                        <Link href={`/stocks/${d.symbol}`} className="hover:text-accent">
+                          {d.name ?? d.symbol}
+                        </Link>
+                      ) : (
+                        d.name ?? "—"
+                      )}
+                      {k < Math.min(g.rows.length, 6) - 1 && <span className="text-text-mute"> ·</span>}
+                    </span>
+                  ))}
+                  {g.rows.length > 6 && (
+                    <span className="font-semibold text-text-dim">+{g.rows.length - 6}</span>
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
 
     </AppShell>
   );
