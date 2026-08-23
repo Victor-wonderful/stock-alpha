@@ -104,10 +104,14 @@ def _thesis(name: str, v: dict, fac: dict, flows: dict | None, top: dict | None)
 
     # 셋업 — 어떤 트리거로 잡혔는가.
     if top and top.get("setup"):
+        # 손익비(R:R)를 뺐다(2026-08-23). 채택 규칙(target_action="trail")은 목표에서
+        # 팔지 않는다 — 목표에 닿으면 손절만 본전으로 올린다. 그래서 (목표−진입)/(진입−손절)
+        # 은 «실현되지 않는 수익»을 분자로 쓴 값이고, 화면에 적으면 사용자는 그 배수만큼
+        # 번다고 읽는다. 실제로 확정된 숫자는 거는 돈(진입−손절)뿐이다.
         seg = f"셋업 {top['setup']}({top.get('style', '—')})"
-        rr = top.get("risk_reward")
-        if isinstance(rr, (int, float)):
-            seg += f" 손익비 {rr:.1f}R"
+        entry, stop = top.get("entry_price"), top.get("stop_loss")
+        if isinstance(entry, (int, float)) and isinstance(stop, (int, float)) and entry > stop:
+            seg += f" 1주당 리스크 {round(entry - stop):,}원"
         parts.append(seg)
 
     return " · ".join(parts) + "."
