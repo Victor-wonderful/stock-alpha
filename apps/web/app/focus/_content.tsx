@@ -468,6 +468,28 @@ export default async function FocusContent() {
               // 답해야 한다. 접으면 사용자는 그 기간이 존재하지 않는 줄로 읽는다.
               HORIZONS.map((hz) => {
                 const group = picks.filter((p) => p.horizon === hz.key);
+                // 빈 기간은 한 줄로 접는다. 지우지는 않는다 — 기간은 1급 차원이라
+                // «단기는 왜 없지»에 답해야 한다. 하지만 머리글 + 점선 상자로 자리를
+                // 잡으면 «곧 채워질 칸»처럼 읽혀서, 픽 1건과 없는 기간 2개가 화면에서
+                // 같은 무게를 갖는다(홈에서 유령 행을 걷어낸 것과 같은 이유).
+                // 「오늘 안 나왔다」와 「아예 쉬는 중」은 계속 다른 말로 적는다.
+                if (group.length === 0) {
+                  return (
+                    <p
+                      key={hz.key}
+                      className="flex flex-wrap items-baseline gap-x-1.5 text-[11.5px] text-text-mute"
+                    >
+                      <span className="font-semibold text-text-dim">{hz.label}</span>
+                      <span className="tnum">0건</span>
+                      <span>—</span>
+                      <span>
+                        {isHorizonPaused(hz.key)
+                          ? "발행을 쉬고 있습니다(지난 1년 재현에서 성적이 가장 낮아 단기·중기만 내보냅니다)"
+                          : "기준을 통과한 종목이 없습니다"}
+                      </span>
+                    </p>
+                  );
+                }
                 return (
                   <section key={hz.key} className="space-y-3">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -484,15 +506,6 @@ export default async function FocusContent() {
                         {group.length}건
                       </span>
                     </div>
-                    {group.length === 0 && (
-                      <p className="rounded-[12px] border border-dashed border-border px-4 py-3 text-[12px] text-text-mute">
-                        {/* «오늘 안 나왔다»와 «아예 쉬는 중»은 다른 말이다.
-                            섞으면 사용자는 내일은 나오려나 하고 기다린다. */}
-                        {isHorizonPaused(hz.key)
-                          ? "발행을 쉬고 있습니다 — 지난 1년 재현에서 성적이 가장 낮아 단기·중기만 내보냅니다."
-                          : "이 기간에서 기준을 통과한 종목이 없습니다."}
-                      </p>
-                    )}
                     {group.map((p, i) => (
                       <PickCard
                         key={p.symbol}
