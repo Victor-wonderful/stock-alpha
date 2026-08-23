@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { getLatestPrice, getPickHistory, getReportById, getUserRiskPct } from "@/lib/data";
 import { fmtDateTime, fmtNum, fmtPct, fmtPrice } from "@/lib/format";
 import { computePositionSizePct } from "@/lib/position";
+import { SymbolCode } from "@/components/SymbolCode";
 import { horizonLabel, horizonSpec, PUBLISH_HORIZONS } from "@/lib/holding";
 import { TRADE_SETUP_LABELS } from "@stock-alpha/db";
 import type { ReportPlanRow } from "@/lib/types";
@@ -19,13 +20,6 @@ import { ReportDetailClient } from "./_client";
 
 const DISCLAIMER =
   "본 자료는 유사투자자문업자가 불특정 다수에게 제공하는 투자 참고 정보이며, 특정 개인에 대한 맞춤형 투자자문이 아닙니다. 투자 판단과 그 결과에 대한 책임은 투자자 본인에게 있습니다. 과거 성과(백테스트 포함)는 미래 수익을 보장하지 않습니다.";
-
-function ratingTone(rating: string) {
-  if (rating === "매수") return "bull" as const;
-  if (rating === "거래 부적합") return "bear" as const;
-  if (rating === "중립") return "warn" as const;
-  return "neutral" as const;
-}
 
 function eokwon(v: number | null): string {
   return v == null ? "—" : `${(v / 1e8).toFixed(1)}억원`;
@@ -172,41 +166,57 @@ export default async function ReportDetailPage({
         </span>
       </div>
 
-      {/* 히어로 카드 (accent 테두리) */}
-      <div className="mb-5 rounded-[12px] border border-accent/40 bg-surface p-5">
+      {/* 히어로 카드 — 네이비(2026-08-23 Victor). 종목 상세의 「AI 애널리스트 리포트」
+          패널과 같은 색이다: 그 패널을 눌러 여기로 오므로 색이 이어져야 «같은 것의
+          안쪽»으로 읽힌다. 이 카드에 실린 값(판정·점수·가중치·근거 문장)이 전부
+          엔진 산출이라 색 규칙 «네이비 = 기계가 낸 데이터»에도 맞는다.
+          네이비 위에서는 라이트 바탕용 색이 묻히므로 안쪽을 전부 on-navy 계열로. */}
+      <div className="mb-5 rounded-[12px] bg-navy p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-2">
-              <h1 className="text-xl font-extrabold text-text">{p.instrument.name}</h1>
-              <span className="mono text-xs text-text-mute">{p.instrument.symbol}</span>
-              <Badge variant={ratingTone(p.verdict.rating)} size="md">
+              <h1 className="text-xl font-extrabold text-on-navy">{p.instrument.name}</h1>
+              <SymbolCode symbol={p.instrument.symbol} className="text-xs text-on-navy-3" />
+              {/* 판정 배지 — 밝은 바탕 + 네이비 글자로 뒤집는다(라이트용은 대비 2점대). */}
+              <span
+                className={`rounded-[6px] px-2 py-0.5 text-[11px] font-bold ${
+                  p.verdict.rating === "매수"
+                    ? "bg-up-on-navy text-navy"
+                    : p.verdict.rating === "거래 부적합"
+                      ? "bg-down-on-navy text-navy"
+                      : "bg-on-navy/15 text-on-navy"
+                }`}
+              >
                 {p.verdict.rating}
-              </Badge>
+              </span>
               {isPick && (
-                <span className="rounded-[6px] bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">
+                <span className="rounded-[6px] bg-accent-on-navy px-2 py-0.5 text-[10px] font-bold text-navy">
                   ⭐ 오늘의 픽
                 </span>
               )}
             </div>
-            <p className="text-sm leading-relaxed text-text-dim max-w-2xl">
+            <p className="text-sm leading-relaxed text-on-navy-2 max-w-2xl">
               {n.thesis}
             </p>
             {n.risks.length > 0 && (
-              <div className="mt-3 flex items-start gap-2 rounded-[12px] bg-warn-soft px-3 py-2.5">
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" strokeWidth={2} />
-                <p className="text-xs leading-relaxed text-text-dim">
-                  <span className="font-bold text-warn">최우선 리스크</span> — {n.risks[0]}
+              <div className="mt-3 flex items-start gap-2 rounded-[12px] bg-warn-on-navy/15 px-3 py-2.5">
+                <TriangleAlert
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn-on-navy"
+                  strokeWidth={2}
+                />
+                <p className="text-xs leading-relaxed text-on-navy-2">
+                  <span className="font-bold text-warn-on-navy">최우선 리스크</span> — {n.risks[0]}
                 </p>
               </div>
             )}
           </div>
           {/* 대형 점수 */}
           <div className="shrink-0 text-right">
-            <p className="tnum text-5xl font-extrabold text-accent leading-none">
+            <p className="tnum text-5xl font-extrabold text-accent-on-navy leading-none">
               {p.verdict.score}
             </p>
-            <p className="text-[11px] text-text-mute mt-1">/100점</p>
-            <p className="text-[10px] text-text-mute mt-0.5">
+            <p className="text-[11px] text-on-navy-3 mt-1">/100점</p>
+            <p className="text-[10px] text-on-navy-3 mt-0.5">
               팩터 {p.verdict.weights.factor} · 밸류 {p.verdict.weights.valuation} · 시그널 {p.verdict.weights.signal} 가중
             </p>
           </div>

@@ -6,7 +6,6 @@ import { AlphaZoneChart } from "@/components/AlphaZoneChart";
 import { SetupChip } from "@/components/AxisChips";
 import { EmptyState, Panel, SampleBadge, Stat } from "@/components/ui";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import {
   getFactor,
   getFlows,
@@ -143,37 +142,45 @@ export default async function StockDetailPage({
       {/* AI 애널리스트 리포트 */}
       <div className="mb-4">
         {report.data ? (
-          <Link href={`/reports/${report.data.id}`} className="block">
-            <Panel className="transition-colors hover:border-border-strong">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xs font-semibold uppercase tracking-wide text-text-mute">
-                      AI 애널리스트 리포트
-                    </span>
-                    <Badge
-                      variant={
-                        report.data.rating === "매수"
-                          ? "bull"
-                          : report.data.rating === "거래 부적합"
-                            ? "bear"
-                            : "neutral"
-                      }
-                      size="md"
-                    >
-                      {report.data.rating ?? "—"}
-                    </Badge>
-                    <span className="text-2xs text-text-mute">{report.data.as_of}</span>
-                  </div>
-                  {report.data.summary && (
-                    <p className="mt-1.5 line-clamp-2 text-xs text-text-dim">
-                      {report.data.summary}
-                    </p>
-                  )}
+          // 네이비다(2026-08-23 Victor). 흰 패널로 두면 옆의 밸류에이션·수급 표와
+          // 같은 무게로 읽혀 «엔진이 낸 판정»이라는 것이 드러나지 않았다. 이 제품의
+          // 색 규칙 «네이비 = 기계가 낸 데이터»에 정확히 해당한다(메뉴 머리 밴드와 같은 축).
+          // 네이비 위에서는 라이트 바탕용 색이 묻히므로 안쪽 글자를 전부 on-navy 계열로.
+          <Link
+            href={`/reports/${report.data.id}`}
+            className="block rounded-2xl bg-navy px-4 py-3.5 transition-colors hover:bg-navy-2"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-2xs font-semibold uppercase tracking-wide text-on-navy-3">
+                    AI 애널리스트 리포트
+                  </span>
+                  {/* 판정 배지 — 네이비 위에서는 밝은 바탕 + 어두운 글자로 뒤집는다.
+                      라이트용 bull/bear 는 대비가 2점대로 떨어진다. */}
+                  <span
+                    className={`rounded-[6px] px-2 py-0.5 text-[11px] font-bold ${
+                      report.data.rating === "매수"
+                        ? "bg-up-on-navy text-navy"
+                        : report.data.rating === "거래 부적합"
+                          ? "bg-down-on-navy text-navy"
+                          : "bg-on-navy/15 text-on-navy"
+                    }`}
+                  >
+                    {report.data.rating ?? "—"}
+                  </span>
+                  <span className="text-2xs text-on-navy-3">{report.data.as_of}</span>
                 </div>
-                <span className="shrink-0 text-xs text-accent">전체 리포트 →</span>
+                {report.data.summary && (
+                  <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-on-navy-2">
+                    {report.data.summary}
+                  </p>
+                )}
               </div>
-            </Panel>
+              <span className="shrink-0 text-xs font-semibold text-accent-on-navy">
+                전체 리포트 →
+              </span>
+            </div>
           </Link>
         ) : (
           <p className="rounded-md border border-dashed border-border px-3 py-2 text-2xs text-text-mute">
