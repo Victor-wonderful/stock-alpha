@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 import type { SignalView } from "@/lib/types";
 import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
 import { AxisRow } from "./AxisChips";
@@ -40,7 +41,7 @@ export function SignalTable({ rows }: { rows: SignalView[] }) {
                   <Link href={`/stocks/${s.symbol}`} className="font-medium group-hover:text-accent">
                     {s.name}
                   </Link>
-                  <div className="mono text-2xs text-text-mute">{s.symbol}</div>
+                  <div className="text-2xs"><SymbolCode symbol={s.symbol} className="text-text-mute" /></div>
                 </td>
                 <Td className="mono text-right">{fmtPrice(s.entry_price, s.currency)}</Td>
                 <Td className={`mono text-right ${chgTone}`}>{fmtPct(chg)}</Td>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
@@ -466,9 +467,7 @@ export default async function ScreenerPage({
                             <span className="truncate text-[13px] font-semibold text-text">
                               {r.name}
                             </span>
-                            <span className="mono shrink-0 text-[10px] text-text-mute">
-                              {r.symbol}
-                            </span>
+                            <SymbolCode symbol={r.symbol} className="shrink-0 text-[10px] text-text-mute" />
                           </span>
                           {/* 기간 — "언제까지 들고 있나"를 목록에서 바로 본다.
                               이 기간이 지나면 엔진이 종가로 자동 청산한다.
@@ -603,7 +602,7 @@ export default async function ScreenerPage({
                             >
                               {s.name}
                             </Link>
-                            <span className="mono text-[10px] text-text-mute">{s.symbol}</span>
+                            <SymbolCode symbol={s.symbol} className="text-[10px] text-text-mute" />
                           </div>
                         </div>
                       </td>

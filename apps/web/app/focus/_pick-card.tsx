@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 import { fmtPrice, fmtPct } from "@/lib/format";
 import { computePositionSizePct } from "@/lib/position";
 import { PriceNow } from "@/components/PriceNow";
@@ -190,7 +191,7 @@ export function PickCard({
             >
               {pick.name}
             </Link>
-            <span className="mono text-[10px] text-text-mute">{pick.symbol}</span>
+            <SymbolCode symbol={pick.symbol} className="text-[10px] text-text-mute" />
             {horizonLabel(pick.horizon) && (
               <span className="rounded-[6px] bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">
                 {horizonLabel(pick.horizon)}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 
 import { TRADE_SETUP_LABELS } from "@stock-alpha/db";
 import type { LatestPrice, NewsEvent } from "@/lib/data";
@@ -125,9 +126,7 @@ export function HomePicksTable({
                         >
                           {p.name}
                         </Link>
-                        <span className="tnum text-[10.5px] text-text-mute">
-                          {p.symbol}
-                        </span>
+                        <SymbolCode symbol={p.symbol} className="text-[10.5px] text-text-mute" />
                       </div>
                       <p className="mt-0.5 text-[10.5px] text-text-mute">
                         {spec ? `${spec.label} · ${spec.bars}거래일` : "기간 미지정"}

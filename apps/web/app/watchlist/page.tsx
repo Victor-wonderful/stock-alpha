@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 
 import { AppShell } from "@/components/AppShell";
 import { AssetTabs } from "@/components/AssetTabs";
@@ -72,7 +73,7 @@ export default function WatchlistPage() {
                       <Link href={`/stocks/${r.symbol}`} className="font-medium text-text hover:text-accent">
                         {r.name}
                       </Link>
-                      <span className="mono ml-2 text-2xs text-text-mute">{r.symbol}</span>
+                      <SymbolCode symbol={r.symbol} className="ml-2 text-2xs text-text-mute" />
                     </td>
                     <td className="tnum px-3 py-2.5 text-right text-text">{r.price}원</td>
                     <td className={`tnum px-3 py-2.5 text-right font-semibold ${r.up ? "text-good" : "text-bad"}`}>{r.chg}</td>

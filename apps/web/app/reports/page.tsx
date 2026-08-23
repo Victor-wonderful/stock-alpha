@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 import { ChevronRight, Search } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
@@ -227,9 +228,7 @@ export default async function ReportsPage({
                       <span className="shrink-0 text-[13px] font-bold text-text">
                         {r.name ?? r.title}
                       </span>
-                      <span className="mono shrink-0 text-[10px] text-text-mute">
-                        {r.symbol}
-                      </span>
+                      <SymbolCode symbol={r.symbol} className="shrink-0 text-[10px] text-text-mute" />
                       {isPick && (
                         <span className="shrink-0 rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
                           ⭐ {isLatest ? "오늘의 픽" : "픽"}

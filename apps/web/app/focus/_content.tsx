@@ -2,6 +2,7 @@
 // 토글 인터랙션은 _pick-card.tsx (클라이언트)에 위임
 
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 import { GNB } from "@/components/GNB";
 import { TRADE_SETUP_LABELS as SETUP_LABELS } from "@stock-alpha/db";
 import {
@@ -459,9 +460,7 @@ export default async function FocusContent() {
                                       >
                                         {r.name}
                                       </Link>
-                                      <span className="mono text-[10px] text-text-mute">
-                                        {r.symbol}
-                                      </span>
+                                      <SymbolCode symbol={r.symbol} className="text-[10px] text-text-mute" />
                                       {r.rating && (
                                         <Badge
                                           variant={r.rating === "매수" ? "bull" : "warn"}

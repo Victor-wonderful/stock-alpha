@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { StyleChip } from "@/components/AxisChips";
@@ -86,7 +87,7 @@ function ZoneCard({ c }: { c: AlphaZoneCard }) {
             <span className="truncate text-[15px] font-bold text-text group-hover:text-accent">
               {c.name}
             </span>
-            <span className="mono shrink-0 text-[10px] text-text-mute">{c.symbol}</span>
+            <SymbolCode symbol={c.symbol} className="shrink-0 text-[10px] text-text-mute" />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {(() => {

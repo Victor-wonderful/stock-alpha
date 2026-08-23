@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { SymbolCode } from "@/components/SymbolCode";
 import { SignalTable } from "@/components/SignalTable";
 import { FactorBars } from "@/components/FactorBars";
 import { AlphaZoneChart } from "@/components/AlphaZoneChart";
@@ -92,9 +93,14 @@ export default async function StockDetailPage({
   return (
     <AppShell
       title={inst.data.name}
-      subtitle={`${inst.data.symbol} · ${inst.data.exchange}${
-        inst.data.sector ? ` · ${inst.data.sector}` : ""
-      }`}
+      subtitle={
+        <>
+          {/* 종목 상세는 코드를 옮겨 적을 일이 가장 많은 화면이다 — 누르면 복사된다. */}
+          <SymbolCode symbol={inst.data.symbol} className="text-text-dim" /> ·{" "}
+          {inst.data.exchange}
+          {inst.data.sector ? ` · ${inst.data.sector}` : ""}
+        </>
+      }
       badge={anySample ? <SampleBadge /> : undefined}
     >
       {/* 가격 헤더 */}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 import { AppShell } from "@/components/AppShell";
 import { Panel, SampleBadge, StrengthBar } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +88,7 @@ export default async function PortfolioPage() {
                             <Link href={`/stocks/${r.symbol}`} className="font-medium group-hover:text-accent">
                               {r.name}
                             </Link>
-                            <span className="mono ml-2 text-2xs text-text-mute">{r.symbol}</span>
+                            <SymbolCode symbol={r.symbol} className="ml-2 text-2xs text-text-mute" />
                             <p className="mt-0.5 max-w-md truncate text-2xs text-text-mute">{r.thesis}</p>
                           </td>
                           <td className="px-3 py-2.5"><StyleChip style={r.style} /></td>

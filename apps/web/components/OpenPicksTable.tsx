@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 
 import { TRADE_SETUP_LABELS } from "@stock-alpha/db";
 import type { OpenPick } from "@/lib/data";
@@ -121,9 +122,7 @@ export function OpenPicksTable({
                         >
                           {p.name}
                         </Link>
-                        <span className="tnum text-[10.5px] text-text-mute">
-                          {p.symbol}
-                        </span>
+                        <SymbolCode symbol={p.symbol} className="text-[10.5px] text-text-mute" />
                         {/* 본전스톱으로 전환된 픽 — 이 시점부터 손절선이 진입가다. */}
                         {p.tp1Hit && (
                           <span className="rounded-[4px] bg-pass-soft px-1.5 py-px text-[10px] font-semibold text-pass">

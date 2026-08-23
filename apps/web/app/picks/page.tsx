@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 
 import { AppShell } from "@/components/AppShell";
 import { BackfillTrackRecord } from "@/components/BackfillTrackRecord";
@@ -336,7 +337,7 @@ export default async function PicksPage({
                         <Link href={`/stocks/${r.symbol}`} className="font-medium text-text hover:text-accent">
                           {r.name}
                         </Link>
-                        <span className="mono ml-2 text-2xs text-text-mute">{r.symbol}</span>
+                        <SymbolCode symbol={r.symbol} className="ml-2 text-2xs text-text-mute" />
                         {r.reselects != null && r.reselects > 1 && (
                           <span
                             className="ml-2 rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent"

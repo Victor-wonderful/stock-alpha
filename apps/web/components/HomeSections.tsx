@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 import { Badge } from "@/components/ui/badge";
 import type { BlogPost, WeeklyReport } from "@/lib/data";
 import type { MacroSeriesView, ReportListItem } from "@/lib/types";
@@ -297,9 +298,7 @@ function ReportRows({ items }: { items: ReportListItem[] }) {
               <p className="truncate text-[14.5px] font-bold leading-[1.5] text-text group-hover:text-accent">
                 {r.name ?? r.title}
                 {r.symbol && (
-                  <span className="tnum ml-2 text-[11.5px] font-normal text-text-mute">
-                    {r.symbol}
-                  </span>
+                  <SymbolCode symbol={r.symbol} className="ml-2 text-[11.5px] font-normal text-text-mute" />
                 )}
               </p>
               {r.summary && (

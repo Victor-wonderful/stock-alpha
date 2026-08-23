@@ -8,7 +8,8 @@ export function AppShell({
   children,
 }: {
   title: string;
-  subtitle?: string;
+  /** 문자열뿐 아니라 노드도 받는다 — 종목 코드처럼 «누를 수 있는» 조각이 섞인다. */
+  subtitle?: React.ReactNode;
   badge?: React.ReactNode;
   hideHeader?: boolean;
   children: React.ReactNode;

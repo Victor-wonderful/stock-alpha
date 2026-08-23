@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SymbolCode } from "@/components/SymbolCode";
 
 import { AppShell } from "@/components/AppShell";
 import { AssetTabs } from "@/components/AssetTabs";
@@ -341,9 +342,7 @@ export default async function DiagnosisPage({
                           >
                             {h.name}
                           </Link>
-                          <span className="mono ml-2 text-2xs text-text-mute">
-                            {h.symbol}
-                          </span>
+                          <SymbolCode symbol={h.symbol} className="ml-2 text-2xs text-text-mute" />
                         </td>
                         <td className="tnum px-3 py-2.5 text-right">
                           {(h.weight * 100).toFixed(1)}%
