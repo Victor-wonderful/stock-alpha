@@ -20,7 +20,7 @@ import {
   contradictsDirection,
   evidenceSentence,
 } from "@/lib/events";
-import { fmtNum } from "@/lib/format";
+import { fmtNum, tradingDayLabel } from "@/lib/format";
 import type { Regime, SectorRotationView } from "@/lib/types";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -152,7 +152,13 @@ export default async function MarketPage() {
   return (
     <AppShell
       title="시장"
-      subtitle="매크로 · 레짐 · 섹터 로테이션"
+      asOf={briefAsOf ? `${tradingDayLabel(briefAsOf)} 기준` : null}
+      subtitle="지금 시장이 어떤 구간인가 — 매크로 · 레짐 · 섹터 · 공시. 전망이 아니라 잰 값입니다."
+      stats={[
+        { label: "레짐", value: rm.label },
+        { label: "레짐 점수", value: `${gauge}`, tone: "accent" as const },
+        { label: "섹터", value: `${sectors.length}` },
+      ]}
       badge={isSample ? <SampleBadge /> : undefined}
     >
       {brief.data?.market && (

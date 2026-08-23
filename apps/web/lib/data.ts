@@ -231,6 +231,29 @@ export async function getDisclosuresForSymbols(
   return out;
 }
 
+/**
+ * 특정 발행일의 「거래 부적합」 리포트 건수.
+ *
+ * /reports 는 부적합을 기본으로 **조회하지 않는다**(getReports 의 includeUnfit).
+ * 그래서 화면에서 셀 수가 없다 — 「기본 숨김 0건」이라고 적히는데 실제로는 27건이
+ * 가려져 있었다(2026-08-23). 숨기는 화면은 «몇 개를 숨겼는지»는 말해야 한다.
+ * head-count 라 행을 받아오지 않는다.
+ */
+export async function countUnfitReports(asOf: string | null): Promise<number> {
+  if (!asOf) return 0;
+  try {
+    const supabase = createPublicClient();
+    const { count } = await supabase
+      .from("reports")
+      .select("id", { count: "exact", head: true })
+      .eq("as_of", asOf)
+      .eq("rating", "거래 부적합");
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 // 공시 유형별 성적표 — "이 소식 뒤에 실제로 어떻게 됐나".
 // 엔진(engine/market/event_study.py)이 매일 계산해 event_evidence 에 적재한다.
 // 화면의 "이 뉴스는 어떻다"는 문장은 전부 이 표를 근거로 한다.

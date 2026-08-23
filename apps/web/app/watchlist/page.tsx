@@ -18,7 +18,12 @@ export default function WatchlistPage() {
   return (
     <AppShell
       title="내 자산"
-      subtitle="관심 종목의 판정·시그널·픽 변화를 한곳에서 — 변화가 있던 종목이 위로 올라옵니다"
+      subtitle="관심 종목의 판정·시그널·픽 변화를 한곳에서 — 변화가 있던 종목이 위로 올라옵니다."
+      stats={[
+        { label: "관심 종목", value: `${PREVIEW.length}` },
+        { label: "오늘 변화", value: `${PREVIEW.filter((r) => r.badge).length}`, tone: "accent" as const },
+        { label: "알림 켠 종목", value: `${PREVIEW.filter((r) => r.bell).length}` },
+      ]}
       badge={
         <span className="rounded-[999px] bg-warn-soft px-3 py-1 text-[11px] font-semibold text-warn">
           로그인 기능 준비 중 — 아래는 예시 화면

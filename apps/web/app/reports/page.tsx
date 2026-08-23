@@ -5,8 +5,13 @@ import { ChevronRight, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import { getPickHistory, getReports, getLatestPricesBySymbols } from "@/lib/data";
-import { nextTradingDayLabel } from "@/lib/format";
+import {
+  countUnfitReports,
+  getPickHistory,
+  getReports,
+  getLatestPricesBySymbols,
+} from "@/lib/data";
+import { nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PriceNow } from "@/components/PriceNow";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -70,7 +75,11 @@ export default async function ReportsPage({
     중립: today.filter((r) => r.rating === "중립").length,
     관망: today.filter((r) => r.rating === "관망").length,
   };
-  const unfitCount = reports.filter((r) => r.rating === "거래 부적합").length;
+  // ⚠️ 기본 보기에서는 부적합을 조회하지 않으므로 받아온 배열로는 0 이 나온다.
+  // «몇 개를 숨겼는지»는 숨기는 쪽이 말해야 한다 — 따로 센다.
+  const unfitCount = includeUnfit
+    ? reports.filter((r) => r.rating === "거래 부적합").length
+    : await countUnfitReports(latestDay);
 
   // 필터 적용
   let filtered = reports;
@@ -113,7 +122,17 @@ export default async function ReportsPage({
       // 메뉴 이름과 맞춘다 — 「분석」(2026-08-22). «종목»은 대상이지 화면이 하는 일이
       // 아니다. 여기서 하는 일은 종목을 고르는 게 아니라 «판단을 읽는» 것이다.
       title="분석"
-      subtitle="종목 검색 · 분석 허브 — 검색하거나 목록에서 클릭하면 종목 상세(5축·알파존·AI 리포트)로 이동"
+      asOf={latestDay ? `${tradingDayLabel(latestDay)} 기준` : null}
+      subtitle="종목별 판단을 읽는 곳입니다. 검색하거나 목록에서 누르면 종목 상세(5축·알파존·리포트)로 갑니다."
+      stats={[
+        // 「오늘의 픽」의 「분석 179」와 같은 수를 말해야 한다 — 같은 날 같은 대상인데
+        // 두 메뉴가 다른 수를 적으면 어느 쪽이 틀렸는지 되묻게 된다. 목록에 보이는
+        // 건수(152)가 아니라 그날 분석한 전부(152 + 숨긴 27)를 적는다.
+        { label: "분석 종목", value: `${counts.전체 + (includeUnfit ? 0 : unfitCount)}` },
+        { label: "매수 판정", value: `${counts.매수}` },
+        // 이 화면이 숨기고 있는 것을 머리에서 먼저 밝힌다 — 목록에 안 보이는 수다.
+        { label: "기본 숨김", value: `${unfitCount}`, tone: "accent" as const },
+      ]}
     >
       {/* 종목 검색 바 (검색·분석 허브 진입점, IA 2026-06-24) */}
       <form method="get" action="/reports" className="mb-4">

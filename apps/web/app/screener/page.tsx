@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
 import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts, getSignalsBySetups, getBacktests, countSignalsForCombos } from "@/lib/data";
-import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
+import { fmtPrice, fmtPct, fmtNum, tradingDayLabel } from "@/lib/format";
 import {
   holdingLabel,
   holdingApprox,
@@ -203,6 +203,10 @@ export default async function ScreenerPage({
       .map((b) => ({ setup: b.setup as string, horizon: b.horizon as string, style: null })),
   );
 
+  // 기준일 — 화면이 어느 시점의 값인지 머리에서 말한다. signals 는 as_of 컬럼이 없어
+  // 가장 최근 created_at 을 쓴다(배치가 하루 한 번이라 곧 발생일이다).
+  const sigDay = rows[0]?.created_at?.slice(0, 10) ?? null;
+
   // 현재가 — 진입가만 보여주면 "지금 사도 되는 자리인가"를 판단할 수 없다.
   // 그리는 행만 벌크 1회로 가져온다(종목당 조회는 행 수만큼 왕복이 된다).
   const priceMap = await getLatestPricesBySymbols(visible.map((s) => s.symbol));
@@ -244,14 +248,14 @@ export default async function ScreenerPage({
   return (
     <AppShell
       title="스크리너"
-      subtitle={`시그널 ${grandTotal}건 — 셋업이 트리거된 기록입니다. 매수 추천이 아닙니다 · 매일 16:30 갱신`}
-      badge={
-        <span className="flex flex-wrap items-center gap-x-1.5 rounded-[999px] bg-surface-2 px-3 py-1 text-[11px] font-bold text-text-dim">
-          <span className="text-good">게이트 통과 {Math.min(verifiedCount, grandTotal)}건</span>
-          <span className="text-text-mute">·</span>
-          <span className="text-accent">픽 발행 대상 {publishableCount}건</span>
-        </span>
-      }
+      asOf={sigDay ? `${tradingDayLabel(sigDay)} 기준` : null}
+      subtitle="셋업이 트리거된 기록입니다. 매수 추천이 아닙니다 · 매일 16:30 갱신"
+      stats={[
+        { label: "시그널", value: `${grandTotal}` },
+        { label: "게이트 통과", value: `${Math.min(verifiedCount, grandTotal)}` },
+        // 이 화면에서 가장 중요한 한 칸 — 264건 중 실제로 픽이 될 수 있는 수.
+        { label: "픽 발행 대상", value: `${publishableCount}`, tone: "accent" as const },
+      ]}
     >
       {/* 스크리너 = 독립 시그널 탐색 메뉴. 추천 탭·국면 헤더 없음 — 순수 탐색 도구. */}
       {isSample && (

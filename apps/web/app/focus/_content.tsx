@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { SymbolCode } from "@/components/SymbolCode";
-import { GNB } from "@/components/GNB";
+import { AppShell } from "@/components/AppShell";
 import { TRADE_SETUP_LABELS as SETUP_LABELS } from "@stock-alpha/db";
 import {
   getBacktests,
@@ -236,35 +236,31 @@ export default async function FocusContent() {
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
-      <GNB />
-      <main className="mx-auto w-full max-w-[1440px] flex-1 px-7 py-7 pb-10">
-        {/* ── 페이지 헤더 ── */}
-        <div id="today-picks" className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold text-text">오늘의 픽</h1>
-              {basisDay && (
-                <span className="rounded-[999px] bg-surface-3 px-2.5 py-1 text-[10px] font-semibold text-text-dim">
-                  {basisDay} 종가 분석
-                </span>
-              )}
-              {planDay && (
-                <span className="rounded-[999px] bg-accent px-3 py-1 text-[11px] font-bold text-text-on-accent">
-                  → {planDay} 장 시작 전 플랜
-                </span>
-              )}
-              {recs.isSample && <SampleBadge />}
-            </div>
-            <p className="mt-1 text-xs text-text-mute">
-              시스템 기준을 통과한 관심 후보 — 사람이 고르지 않습니다 · 직전 거래일
-              종가로 분석해 다음 거래일 장전 플랜으로 제시합니다
-            </p>
-          </div>
-          {/* 국면 배지는 여기 두지 않는다 — 바로 아래 전제 밴드가 같은 것을 더
-              자세히(그래서 무엇을 발행하는가까지) 말한다. 둘 다 두면 «강세»와
-              «횡보»가 나란히 떠서 어느 쪽이 지금인지 되묻게 된다. */}
-        </div>
+    // 다른 메뉴와 같은 머리 골격을 쓴다(2026-08-23 Victor) — 예전에는 이 페이지만
+    // GNB + main 을 직접 짜서 제목·배지·설명의 자리와 크기가 다른 메뉴와 어긋났다.
+    // 「국면」은 머리에 두지 않는다 — 바로 아래 전제 밴드가 같은 것을 더 자세히
+    // (그래서 무엇을 발행하는가까지) 말한다. 둘 다 두면 어느 쪽이 지금인지 되묻는다.
+    <AppShell
+      title="오늘의 픽"
+      asOf={basisDay ? `${basisDay} 종가 분석` : null}
+      subtitle="시스템 기준을 통과한 관심 후보입니다. 사람이 고르지 않습니다 — 직전 거래일 종가로 분석해 다음 거래일 장전 플랜으로 냅니다."
+      stats={[
+        { label: "분석", value: `${scoreBoard.total}` },
+        { label: "발행", value: `${picks.length}`, tone: "accent" as const },
+        { label: "진행 중", value: `${openPicks.length}` },
+      ]}
+      badge={
+        <>
+          {planDay && (
+            <span className="rounded-[999px] bg-accent px-3 py-1 text-[11px] font-bold text-text-on-accent">
+              → {planDay} 장 시작 전 플랜
+            </span>
+          )}
+          {recs.isSample && <SampleBadge />}
+        </>
+      }
+    >
+      <div id="today-picks">
 
         {/* ── 오늘의 전제 — 국면 + 깔때기를 한 밴드로 ──
              전에는 여기가 네 덩어리였다: 국면 헤더 → 시장 브리프(네이비) → 하락장
@@ -753,7 +749,7 @@ export default async function FocusContent() {
           유사투자자문업자의 불특정 다수 대상 투자 참고 정보 · 맞춤 자문 아님 ·
           투자 판단의 책임은 투자자 본인에게 있습니다 · 과거 성과는 미래 수익을 보장하지 않습니다
         </p>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

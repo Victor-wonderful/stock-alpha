@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SymbolCode } from "@/components/SymbolCode";
 
 import { AppShell } from "@/components/AppShell";
+import { tradingDayLabel } from "@/lib/format";
 import { BackfillTrackRecord } from "@/components/BackfillTrackRecord";
 import {
   getPickHistory,
@@ -85,7 +86,18 @@ export default async function PicksPage({
   return (
     <AppShell
       title="성과"
-      subtitle="발행한 모든 픽의 트랙레코드 — 다음 거래일 시가 진입 · 종가 기준 자동 확정 (목표 / 손절 / 만료 30일)"
+      asOf={all[0]?.as_of ? `${tradingDayLabel(all[0].as_of)} 기준` : null}
+      subtitle="발행한 모든 픽의 기록입니다. 맞은 것과 틀린 것을 함께 적습니다 — 다음 거래일 시가 진입 · 종가 기준 자동 확정."
+      stats={[
+        { label: "누적 발행", value: `${all.length}` },
+        { label: "진행 중", value: `${inProgress.length}` },
+        // 이 화면의 결론 한 칸 — 종료된 픽의 평균 손익. 승률보다 이쪽이 판단 기준이다.
+        {
+          label: "종료 평균 손익",
+          value: avgClosed != null ? `${avgClosed >= 0 ? "+" : ""}${(avgClosed * 100).toFixed(1)}%` : "—",
+          tone: (avgClosed ?? 0) >= 0 ? ("good" as const) : ("bad" as const),
+        },
+      ]}
     >
       <div className="space-y-4">
         {/* 요약 스탯 */}

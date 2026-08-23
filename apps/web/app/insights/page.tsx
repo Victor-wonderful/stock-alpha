@@ -53,7 +53,12 @@ export default async function InsightsPage() {
   return (
     <AppShell
       title="인사이트"
-      subtitle="전망이 아니라 측정한 것만 적습니다"
+      subtitle="전망이 아니라 측정한 것만 적습니다 — 주간 브리핑 · 매크로 · 전문가 추천."
+      stats={[
+        { label: "주간 브리핑", value: `${weekly.length + weeklyPosts.length}` },
+        { label: "매크로", value: `${macro.length + macroPosts.length}` },
+        { label: "전문가 추천", value: `${expertNotes.length}`, tone: "accent" as const },
+      ]}
     >
       {empty ? (
         <p className="rounded-[12px] border border-border-soft bg-surface/40 p-8 text-center text-[13px] text-text-mute">
