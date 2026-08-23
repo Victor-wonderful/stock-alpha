@@ -4,7 +4,13 @@ import { SampleBadge } from "@/components/ui";
 import { Crosshair, TrendingUp } from "lucide-react";
 import { getSignals, getAlphaZoneStocks, getLatestPricesBySymbols, getSignalCounts, getSignalsBySetups, getBacktests, countSignalsForCombos } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum } from "@/lib/format";
-import { holdingLabel, holdingApprox, horizonLabel } from "@/lib/holding";
+import {
+  holdingLabel,
+  holdingApprox,
+  horizonLabel,
+  HORIZONS,
+  PUBLISH_HORIZONS,
+} from "@/lib/holding";
 import type { SignalView } from "@/lib/types";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -26,12 +32,6 @@ const SETUP_LABELS: Record<string, string> = {
   ensemble: "앙상블 합의",
   sortino: "소르티노 모멘텀",
   bayes: "베이즈 결합",
-};
-const STYLE_LABELS: Record<string, string> = {
-  swing: "스윙",
-  position: "포지션",
-  day: "데이트레이딩",
-  scalping: "스캘핑",
 };
 
 function initials(name: string): string {
@@ -74,23 +74,6 @@ function SetupPill({ setup }: { setup: string }) {
   );
 }
 
-function StylePill({ style }: { style: string }) {
-  const label = STYLE_LABELS[style] ?? style;
-  const locked = style === "day" || style === "scalping";
-  if (locked) {
-    return (
-      <span className="inline-flex items-center gap-0.5 rounded-[6px] bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium text-text-mute ring-1 ring-inset ring-border whitespace-nowrap opacity-60">
-        🔒 {label}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-[6px] bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-inset ring-sky-500/25 whitespace-nowrap">
-      {label}
-    </span>
-  );
-}
-
 function AiJudge({
   signal,
 }: {
@@ -118,14 +101,16 @@ function computeHighlights(signals: SignalView[]) {
   const topSetup = [...setupCount.entries()].sort((a, b) => b[1] - a[1])[0];
   // 최고 합성 알파 (strength 기준)
   const topAlpha = signals.reduce((m, s) => Math.max(m, s.strength), 0);
-  // 평균 손익비
-  const rrList = signals.map((s) => s.risk_reward).filter((v): v is number => v != null);
-  const avgRr = rrList.length > 0 ? rrList.reduce((a, b) => a + b, 0) / rrList.length : null;
-  return { today, topSetup, topAlpha, avgRr };
+  // 평균 손익비(R:R)는 더 세지 않는다 — «목표에서 판다»를 전제한 값이라 채택 규칙
+  // (trail)에서는 실현되지 않는다. 홈·오늘의 픽에서 같은 이유로 지웠다.
+  return { today, topSetup, topAlpha };
 }
 
-// 게이트 통과·발행 중인 셋업만(유령 필터 금지). ScreenerFilters.ACTIVE_SETUPS 와 동일 기준.
-// 카운트 조회가 컴포넌트 상단에서 필요해 모듈 상수로 둔다.
+// 셋업 칩 목록. 카운트 조회가 컴포넌트 상단에서 필요해 모듈 상수로 둔다.
+// ⚠️ 하드코딩이라 실제 시그널과 어긋난다 — 2026-08-23 실측: 시그널 264건 중 115건
+// (sortino 58 · bayes 55 · double_bottom 2)이 이 목록에 없어 어떤 칩으로도 못 고른다.
+// 그중 double_bottom 은 오늘의 픽(오리온)이 실제로 쓴 셋업이다. DB 에서 만들도록
+// 바꿔야 한다 — 다음 작업.
 const ALL_SETUPS: Array<{ key: string; label: string }> = [
   { key: "leader_trend", label: "주도주 추세" },
   { key: "flow_accumulation", label: "수급 매집" },
@@ -143,7 +128,8 @@ export default async function ScreenerPage({
 }) {
   const sp = await searchParams;
   const activeSetup = sp.setup ?? null;
-  const activeStyle = sp.style ?? null;
+  // 축은 기간 하나다 — style 파라미터는 더 받지 않는다(2026-08-23 Victor).
+  const activeHorizon = sp.horizon ?? null;
   const activeMarket = sp.market ?? null;
   const search = sp.q ?? "";
   const near = sp.near === "1"; // 진입 가능 — 현재가가 진입가 ±3% (알파존 흡수)
@@ -159,7 +145,7 @@ export default async function ScreenerPage({
   } = await getSignals(
     {
       setup: activeSetup ?? undefined,
-      style: activeStyle ?? undefined,
+      horizon: activeHorizon ?? undefined,
       market: activeMarket ?? undefined,
     },
     MAX_ROWS,
@@ -198,14 +184,22 @@ export default async function ScreenerPage({
   );
   const isVerified = (setup: string, horizon: string | null | undefined, style: string) =>
     passingCombos.has(`${setup}|${horizon ?? style}`);
+  const passedRows = gate.data.filter((b) => b.passed);
   const verifiedCount = await countSignalsForCombos(
-    gate.data
-      .filter((b) => b.passed)
-      .map((b) => ({
-        setup: b.setup as string,
-        horizon: (b.horizon as string) ?? null,
-        style: (b.style as string) ?? null,
-      })),
+    passedRows.map((b) => ({
+      setup: b.setup as string,
+      horizon: (b.horizon as string) ?? null,
+      style: (b.style as string) ?? null,
+    })),
+  );
+  // 「검증 통과」와 「오늘의 픽으로 발행」은 다르다 — 이 화면이 둘을 같은 말로 쓰고
+  // 있었다(2026-08-23 Victor). 실측: 시그널 264건 전부 게이트를 통과하지만 그중
+  // 252건(95%)이 장기라 픽으로는 안 나간다. 발행은 단기·중기만이다.
+  // 스크리너는 탐색 도구라 장기를 계속 보여준다 — 다만 «발행 대상»이라 부르지 않는다.
+  const publishableCount = await countSignalsForCombos(
+    passedRows
+      .filter((b) => b.horizon && PUBLISH_HORIZONS.includes(b.horizon as never))
+      .map((b) => ({ setup: b.setup as string, horizon: b.horizon as string, style: null })),
   );
 
   // 현재가 — 진입가만 보여주면 "지금 사도 되는 자리인가"를 판단할 수 없다.
@@ -218,7 +212,7 @@ export default async function ScreenerPage({
   );
   // 필터가 하나도 없으면 '셋업별 섹션' 뷰. 1000행 표를 훑게 하는 대신
   // 오늘 어떤 셋업이 떴는지를 덩어리로 보여주고, 칩을 누르면 그 셋업 표로 파고든다.
-  const sectionView = !activeSetup && !activeStyle && !activeMarket && !search && !near;
+  const sectionView = !activeSetup && !activeHorizon && !activeMarket && !search && !near;
   const bySetupRows = sectionView
     ? await getSignalsBySetups(ALL_SETUPS.map((x) => x.key), 5)
     : new Map<string, typeof visible>();
@@ -236,7 +230,7 @@ export default async function ScreenerPage({
   const buildHref = (key: string, value: string | null) => {
     const p = new URLSearchParams();
     if (activeSetup && key !== "setup") p.set("setup", activeSetup);
-    if (activeStyle && key !== "style") p.set("style", activeStyle);
+    if (activeHorizon && key !== "horizon") p.set("horizon", activeHorizon);
     if (activeMarket && key !== "market") p.set("market", activeMarket);
     if (near && key !== "near") p.set("near", "1");
     if (search) p.set("q", search);
@@ -249,11 +243,12 @@ export default async function ScreenerPage({
   return (
     <AppShell
       title="스크리너"
-      subtitle={`시그널 ${grandTotal}건 — 셋업이 트리거된 기록이다. 매수 추천이 아니고, «검증 통과»만 실제 발행 대상이다 · 매일 16:30 갱신`}
+      subtitle={`시그널 ${grandTotal}건 — 셋업이 트리거된 기록입니다. 매수 추천이 아닙니다 · 매일 16:30 갱신`}
       badge={
-        <span className="flex items-center gap-1.5 rounded-[999px] bg-good-soft px-3 py-1 text-[11px] font-bold text-good">
-          검증 통과 {Math.min(verifiedCount, grandTotal)}건 · 미통과{" "}
-          {Math.max(0, grandTotal - verifiedCount)}건
+        <span className="flex flex-wrap items-center gap-x-1.5 rounded-[999px] bg-surface-2 px-3 py-1 text-[11px] font-bold text-text-dim">
+          <span className="text-good">게이트 통과 {Math.min(verifiedCount, grandTotal)}건</span>
+          <span className="text-text-mute">·</span>
+          <span className="text-accent">픽 발행 대상 {publishableCount}건</span>
         </span>
       }
     >
@@ -273,7 +268,7 @@ export default async function ScreenerPage({
               label: "시그널 전체",
               value: `${grandTotal}건`,
               // 두 수는 각자 캐시되므로 잠깐 어긋날 수 있다 — 전체보다 큰 «통과»는 없다.
-              sub: `그중 검증 통과 ${Math.min(verifiedCount, grandTotal)}건`,
+              sub: `그중 게이트 통과 ${Math.min(verifiedCount, grandTotal)}건`,
             },
           {
             label: "최다 셋업",
@@ -281,7 +276,15 @@ export default async function ScreenerPage({
             sub: topSetupEntry ? `${topSetupEntry[1]}건 · 전체 기준` : "",
           },
           { label: "최고 합성알파", value: fmtNum(hl.topAlpha, 2), sub: "강도 최상위" },
-          { label: "평균 손익비", value: hl.avgRr != null ? `${fmtNum(hl.avgRr, 1)} R:R` : "—", sub: `표시된 ${visible.length}건 평균` },
+          // 「평균 손익비 R:R」을 걷어냈다(2026-08-23). (목표−진입)/(진입−손절) 은
+          // «목표에서 판다»를 전제한 값인데 채택 규칙(trail)은 목표에서 팔지 않는다 —
+          // 홈·오늘의 픽에서 같은 이유로 지운 말이다. 대신 이 화면이 답해야 할 질문을
+          // 놓는다: 이 중 몇 개가 실제로 픽이 될 수 있나.
+          {
+            label: "픽 발행 대상",
+            value: `${publishableCount}건`,
+            sub: `단기·중기만 · 장기 ${Math.max(0, grandTotal - publishableCount)}건은 탐색용`,
+          },
         ].map(({ label, value, sub }) => (
           <div
             key={label}
@@ -354,42 +357,34 @@ export default async function ScreenerPage({
             </Link>
           );
         })}
-        {/* 비활성 칩 */}
-        <span className="rounded-[999px] border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-text-mute opacity-50 cursor-not-allowed">
-          🧪 멀티팩터 종합 — 검증 미통과 · 발행 중지
-        </span>
       </div>
 
-      {/* 2차 필터: 스타일 + 거래소 + 검색 */}
+      {/* 2차 필터: 기간 + 거래소 + 검색
+          「스윙·포지션」 같은 스타일 이름을 쓰지 않는다(2026-08-23 Victor). 축은
+          기간(단기·중기·장기) 하나다 — 스타일은 기간 축 도입 전 이름이고, 두 축이
+          한 화면에 같이 있으면 사용자는 둘이 다른 것인 줄 안다. 잠긴 칩
+          (🔒데이트레이딩·🔒스캘핑)도 없앤다 — 없는 기능을 자리로 잡아 둘 이유가 없다. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {/* 스타일 칩 */}
+        {/* 기간 칩 */}
         <div className="flex flex-wrap items-center gap-1.5">
           {[
             { key: null, label: "전체" },
-            { key: "swing", label: "스윙" },
-            { key: "position", label: "포지션" },
+            ...HORIZONS.map((h) => ({ key: h.key as string | null, label: h.label })),
           ].map(({ key, label }) => (
             <Link
               key={label}
-              href={buildHref("style", key)}
+              href={buildHref("horizon", key)}
               className={`rounded-[8px] px-2.5 py-1 text-xs font-medium transition-colors ${
-                activeStyle === key
+                activeHorizon === key
                   ? "bg-surface-3 text-text ring-1 ring-border-strong"
                   : "text-text-mute hover:text-text-dim"
               }`}
             >
               {label}
+              {key && !PUBLISH_HORIZONS.includes(key as never) && (
+                <span className="ml-1 text-[10px] text-text-mute">탐색용</span>
+              )}
             </Link>
-          ))}
-          {/* 비활성 스타일 */}
-          {["데이트레이딩", "스캘핑"].map((label) => (
-            <span
-              key={label}
-              className="rounded-[8px] px-2.5 py-1 text-xs font-medium text-text-mute opacity-40 cursor-not-allowed"
-              title="실시간 연동 후 활성화"
-            >
-              🔒 {label} · 실시간 연동 후
-            </span>
           ))}
         </div>
 
@@ -417,7 +412,7 @@ export default async function ScreenerPage({
         {/* 검색 — 서버 액션 없이 클라이언트 GET */}
         <form method="get" action="/screener" className="ml-auto">
           {activeSetup && <input type="hidden" name="setup" value={activeSetup} />}
-          {activeStyle && <input type="hidden" name="style" value={activeStyle} />}
+          {activeHorizon && <input type="hidden" name="horizon" value={activeHorizon} />}
           {activeMarket && <input type="hidden" name="market" value={activeMarket} />}
           <input
             name="q"
@@ -475,12 +470,10 @@ export default async function ScreenerPage({
                               {r.symbol}
                             </span>
                           </span>
-                          {/* 스타일 + 보유기간 — "언제까지 들고 있나"를 목록에서 바로 본다.
-                              이 기간이 지나면 엔진이 종가로 자동 청산한다. */}
+                          {/* 기간 — "언제까지 들고 있나"를 목록에서 바로 본다.
+                              이 기간이 지나면 엔진이 종가로 자동 청산한다.
+                              스타일 이름(스윙·포지션)은 쓰지 않는다 — 축은 기간 하나다. */}
                           <span className="flex flex-col leading-tight">
-                            <span className="text-[10px] text-text-dim">
-                              {STYLE_LABELS[r.style] ?? r.style}
-                            </span>
                             <span className="text-[10px] text-text-mute">
                               {horizonLabel(r.horizon)
                                 ? `${horizonLabel(r.horizon)} · ${holdingLabel(r.horizon, r.style)}`
@@ -506,11 +499,14 @@ export default async function ScreenerPage({
                               <span className="text-text-mute">—</span>
                             )}
                           </span>
+                          {/* 「진입 → 목표」 화살표를 버렸다(2026-08-23). 목표에서 팔지
+                              않는데 화살표를 그으면 «저기까지 간다»로 읽힌다. 진입과
+                              손절만 적는다 — 확정된 건 거는 돈뿐이다. */}
                           <span className="tnum text-right text-[12px] text-text-dim">
-                            {fmtPrice(r.entry_price)} → {fmtPrice(r.tp1)}
+                            {fmtPrice(r.entry_price)}
                           </span>
-                          <span className="tnum text-right text-[11px] text-text-mute">
-                            {r.risk_reward != null ? `${fmtNum(r.risk_reward, 1)}R` : "—"}
+                          <span className="tnum text-right text-[11px] text-bad">
+                            {fmtPrice(r.stop_loss)}
                           </span>
                           <span className="tnum text-right text-[13px] font-bold text-text">
                             {fmtNum(r.strength, 2)}
@@ -550,14 +546,15 @@ export default async function ScreenerPage({
                   {[
                     "종목",
                     "셋업",
-                    "스타일",
-                    "보유기간",
+                    "기간",
                     "신호일",
                     "현재가",
                     "진입가",
-                    "목표가",
                     "손절가",
-                    "R:R",
+                    // 「목표가」·「R:R」을 버렸다(2026-08-23). 채택 규칙(trail)은 목표에서
+                    // 팔지 않는다 — 닿으면 손절만 진입가로 올린다. 홈·오늘의 픽과 같은 말로.
+                    "본전 도달가",
+                    "1주당 리스크",
                     "합성알파",
                     "12일 추세",
                     "AI 판정",
@@ -580,6 +577,10 @@ export default async function ScreenerPage({
                   const slPct =
                     s.stop_loss != null && s.entry_price
                       ? (s.stop_loss - s.entry_price) / s.entry_price
+                      : null;
+                  const riskPerShare =
+                    s.entry_price != null && s.stop_loss != null
+                      ? s.entry_price - s.stop_loss
                       : null;
                   const dateStr = s.created_at.slice(0, 10);
                   const spark = s.spark ?? [];
@@ -612,13 +613,9 @@ export default async function ScreenerPage({
                         <SetupPill setup={s.setup} />
                       </td>
 
-                      {/* 스타일 */}
-                      <td className="px-3 py-3">
-                        <StylePill style={s.style} />
-                      </td>
-
-                      {/* 보유기간 — "언제까지 들고 있나"에 화면이 답해야 한다.
-                          엔진이 이 기간이 지나면 종가로 자동 청산한다. */}
+                      {/* 기간 — "언제까지 들고 있나"에 화면이 답해야 한다.
+                          엔진이 이 기간이 지나면 종가로 자동 청산한다.
+                          스타일 열은 없앴다 — 축은 기간 하나다. */}
                       <td className="px-3 py-3 whitespace-nowrap">
                         {horizonLabel(s.horizon) && (
                           <span className="mr-1 rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
@@ -672,19 +669,7 @@ export default async function ScreenerPage({
                         {fmtPrice(s.entry_price)}
                       </td>
 
-                      {/* 목표가 */}
-                      <td className="mono px-3 py-3">
-                        <span className="text-[13px] font-semibold text-good">
-                          {fmtPrice(s.tp1)}
-                        </span>
-                        {tpPct != null && (
-                          <span className="ml-1 text-[10px] text-good">
-                            {fmtPct(tpPct)}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* 손절가 */}
+                      {/* 손절가 — 본전 도달가보다 앞에 둔다. 잃는 쪽을 먼저 읽게. */}
                       <td className="mono px-3 py-3">
                         <span className="text-[13px] font-semibold text-bad">
                           {fmtPrice(s.stop_loss)}
@@ -696,19 +681,23 @@ export default async function ScreenerPage({
                         )}
                       </td>
 
-                      {/* R:R */}
+                      {/* 본전 도달가 — 파는 값이 아니다. 닿으면 손절이 진입가로 올라간다. */}
                       <td className="mono px-3 py-3">
-                        <span
-                          className={`text-[13px] font-bold ${
-                            (s.risk_reward ?? 0) >= 2
-                              ? "text-accent"
-                              : (s.risk_reward ?? 0) >= 1.3
-                                ? "text-good"
-                                : "text-text-mute"
-                          }`}
-                        >
-                          {s.risk_reward != null ? fmtNum(s.risk_reward, 1) : "—"}
+                        <span className="text-[13px] font-semibold text-good">
+                          {fmtPrice(s.tp1)}
                         </span>
+                        {tpPct != null && (
+                          <span className="ml-1 text-[10px] text-good">
+                            {fmtPct(tpPct)}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 1주당 리스크 = 진입가 − 손절가. 실제로 거는 돈이다. */}
+                      <td className="mono px-3 py-3 text-[13px] font-semibold text-text-dim">
+                        {riskPerShare != null
+                          ? `${Math.round(riskPerShare).toLocaleString("ko-KR")}원`
+                          : "—"}
                       </td>
 
                       {/* 합성알파 */}

@@ -40,6 +40,8 @@ import {
 } from "./sample";
 
 export interface SignalFilters {
+  /** 축은 기간이다(short/mid/long). 스타일 필터는 화면에서 걷어냈다(2026-08-23). */
+  horizon?: string;
   style?: string;
   setup?: string;
   session?: string;
@@ -470,6 +472,7 @@ export async function getSignals(
       .order("strength", { ascending: false })
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
+    if (filters.horizon) q = q.eq("horizon", filters.horizon);
     if (filters.style) q = q.eq("style", filters.style);
     if (filters.setup) q = q.eq("setup", filters.setup);
     if (filters.session) q = q.eq("session", filters.session);
