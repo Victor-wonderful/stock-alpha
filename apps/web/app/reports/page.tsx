@@ -15,7 +15,6 @@ import {
 import { nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
 import { PUBLISH_HORIZONS } from "@/lib/holding";
 import { PriceNow } from "@/components/PriceNow";
-import { RowSubLink } from "@/components/RowSubLink";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
 // (fetchCache: force-no-store). 데이터는 하루 두 번 배치로만 바뀌는데도 매 클릭마다
@@ -154,8 +153,10 @@ export default async function ReportsPage({
             placeholder="종목명 또는 코드로 검색 — 예: 삼성전자, 005930"
             className="flex-1 bg-transparent text-[15px] text-text placeholder:text-text-mute focus:outline-none"
           />
+          {/* 한 행에 목적지가 둘이라 그걸 밝힌다 — 안 적으면 종목명을 눌렀을 때
+              «왜 리포트가 아니지»가 된다. */}
           <span className="hidden shrink-0 text-[11px] text-text-mute sm:block">
-            클릭 → 종목 상세 (5축·알파존·AI 리포트)
+            행 클릭 → 분석 리포트 · <span className="text-text-dim">종목명</span> 클릭 → 종목 상세
           </span>
         </div>
       </form>
@@ -263,19 +264,25 @@ export default async function ReportsPage({
 
             const renderRow = (r: (typeof rows)[number]) => {
               const isPick = pickKeys.has(`${r.as_of}:${r.symbol}`);
-              // 종목명을 누르면 «종목 상세»로 간다 — 스크리너·오늘의 픽·진행 중과 같은
-              // 자리다(2026-08-23 Victor: "분석에서 클릭하는 거랑 스크리너에서 클릭하는 게
-              // 왜 다른 화면이 되나"). 예전에는 이 행 전체가 /reports/{id} 로 가서, 같은
-              // 종목을 어디서 눌렀느냐에 따라 5축·알파존·수급이 있는 화면과 리포트 본문이
-              // 갈렸다. 리포트는 종목 상세의 «한 부분»이므로 별도 링크로 뺀다.
+              // 목적지가 둘이다 — 한 행에서 둘 다 갈 수 있어야 한다(2026-08-23 Victor).
+              //   행 아무 데나  → 리포트 본문.  이 페이지 이름이 「분석」이고 행에 판정·
+              //                   점수·요약이 실려 있다. 그걸 더 읽으려고 누르는 것이다.
+              //   종목명        → 종목 상세.  종목명은 어느 화면에서 눌러도 같은 자리로
+              //                   가야 한다(스크리너·오늘의 픽·진행 중과 동일).
+              //
+              // 한 번 «행 전체 → 종목 상세»로 바꿔 봤다가 되돌렸다. 그러면 판정을 읽으러
+              // 온 사람이 종목 화면을 한 번 거쳐야 하고, 리포트는 이 페이지의 주인공인데
+              // 곁가지가 된다. 종목 상세로 가는 길은 종목명 하나로 충분하다.
               return (
                 <div key={r.id} className="block">
-                  {/* stretched link — 행 전체를 누를 수 있게 하되 마크업은 유효하게.
-                      `<a>` 안에 버튼(종목코드 복사·리포트 →)을 넣으면 명세 위반이고
-                      스크린리더가 링크 안의 버튼을 제대로 읽지 못한다. 그래서 링크는
-                      종목명 하나에만 걸고, ::after 로 행 전체를 덮는다. 다른
-                      상호작용 요소는 z-10 으로 그 위에 올린다. */}
+                  {/* stretched link — 행 전체가 리포트로 간다. 링크 안에 버튼을 넣으면
+                      명세 위반이라, 행을 덮는 «보이지 않는 링크»를 z-0 으로 깔고
+                      종목명·코드는 z-10 으로 그 위에 올린다. */}
                   <div className="relative flex items-center gap-3 rounded-[12px] border border-border bg-surface-2 px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-3">
+                    <Link href={`/reports/${r.id}`} className="absolute inset-0 z-0">
+                      <span className="sr-only">{r.name ?? r.title} 분석 리포트 열기</span>
+                    </Link>
+
                     {/* 판정 배지 */}
                     <RatingBadge rating={r.rating} />
 
@@ -283,7 +290,8 @@ export default async function ReportsPage({
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <Link
                         href={`/stocks/${r.symbol}`}
-                        className="shrink-0 text-[13px] font-bold text-text after:absolute after:inset-0 after:content-[''] hover:text-accent"
+                        className="relative z-10 shrink-0 text-[13px] font-bold text-text hover:text-accent hover:underline"
+                        title={`${r.name ?? ""} 종목 상세 — 5축·알파존·밸류·수급`}
                       >
                         {r.name ?? r.title}
                       </Link>
@@ -327,15 +335,6 @@ export default async function ReportsPage({
                           {r.score}
                         </span>
                       )}
-                      {/* 리포트 본문으로 바로 가는 길은 남긴다 — 종목 상세 안에도
-                          「전체 리포트 →」가 있지만, 판정을 읽으러 온 사람은 한 번에
-                          가고 싶다. 행 링크 안의 링크라 클릭을 여기서 멈춘다. */}
-                      <RowSubLink
-                        href={`/reports/${r.id}`}
-                        className="relative z-10 hidden text-[11px] font-semibold text-accent sm:block"
-                      >
-                        리포트 →
-                      </RowSubLink>
                       <ChevronRight className="h-4 w-4 text-text-mute" />
                     </div>
                   </div>
