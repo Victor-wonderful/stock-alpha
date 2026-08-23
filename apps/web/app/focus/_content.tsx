@@ -208,6 +208,11 @@ export default async function FocusContent() {
   // 국면 문구는 컴포넌트가 아니라 값으로 받아 헤더 밴드 안에 얹는다.
   const rc = regimeCopy(marketState);
 
+  // 지금 발행을 쉬는 기간 — 그 기간에 남은 픽이 없을 때만 «안 낸다»고 말할 수 있다.
+  const pausedHorizons = HORIZONS.filter(
+    (hz) => isHorizonPaused(hz.key) && !picks.some((p) => p.horizon === hz.key),
+  );
+
   return (
     <div className="flex min-h-screen flex-col bg-bg">
       <GNB />
@@ -494,13 +499,24 @@ export default async function FocusContent() {
               // 갈리므로 한 줄로 세우면 사용자가 섞어 읽는다.
               // 0건인 기간도 접지 않는다 — 기간은 1급 차원이라 «단기는 왜 없지»에
               // 답해야 한다. 접으면 사용자는 그 기간이 존재하지 않는 줄로 읽는다.
-              HORIZONS.map((hz) => {
+              // 구역은 «발행하는 기간»만 세운다(2026-08-23 Victor 지적). 예전에는
+              // 카탈로그(HORIZONS) 셋을 다 세우고 장기 자리에 「발행을 쉬고 있습니다」를
+              // 적었는데, 그러면 장기가 «오늘 마침 비어 있는 칸»으로 읽힌다. 내일도
+              // 모레도 안 나오는 것을 매일 빈 칸으로 그리면 사용자는 계속 기다린다.
+              // 쉬는 기간은 목록 아래 각주에서 한 번만 말한다.
+              //
+              // 다만 그 기간에 픽이 실제로 있으면(전환 전 발행분) 구역을 세운다 —
+              // 발행 목록에서 빠졌다고 이미 낸 픽까지 숨기면 사용자는 픽이 사라진
+              // 걸로 본다.
+              HORIZONS.filter(
+                (hz) =>
+                  !isHorizonPaused(hz.key) || picks.some((p) => p.horizon === hz.key),
+              ).map((hz) => {
                 const group = picks.filter((p) => p.horizon === hz.key);
-                // 빈 기간은 한 줄로 접는다. 지우지는 않는다 — 기간은 1급 차원이라
+                // 빈 기간은 한 줄로 접는다. 지우지는 않는다 — 발행하는 기간이라면
                 // «단기는 왜 없지»에 답해야 한다. 하지만 머리글 + 점선 상자로 자리를
-                // 잡으면 «곧 채워질 칸»처럼 읽혀서, 픽 1건과 없는 기간 2개가 화면에서
-                // 같은 무게를 갖는다(홈에서 유령 행을 걷어낸 것과 같은 이유).
-                // 「오늘 안 나왔다」와 「아예 쉬는 중」은 계속 다른 말로 적는다.
+                // 잡으면 «곧 채워질 칸»처럼 읽혀서, 픽 1건과 없는 기간이 화면에서 같은
+                // 무게를 갖는다(홈에서 유령 행을 걷어낸 것과 같은 이유).
                 if (group.length === 0) {
                   return (
                     <p
@@ -510,11 +526,7 @@ export default async function FocusContent() {
                       <span className="font-semibold text-text-dim">{hz.label}</span>
                       <span className="tnum">0건</span>
                       <span>—</span>
-                      <span>
-                        {isHorizonPaused(hz.key)
-                          ? "발행을 쉬고 있습니다(지난 1년 재현에서 성적이 가장 낮아 단기·중기만 내보냅니다)"
-                          : "기준을 통과한 종목이 없습니다"}
-                      </span>
+                      <span>기준을 통과한 종목이 없습니다</span>
                     </p>
                   );
                 }
@@ -572,6 +584,24 @@ export default async function FocusContent() {
                 권장 비중 = 손절 시 손실이 계좌의 {riskPct}%가 되도록 역산(상한 25%) ·{" "}
                 {picks.length}종목 전부 집행 시 총 리스크 약{" "}
                 {(picks.length * riskPct).toFixed(1)}%
+              </p>
+            )}
+
+            {/* 쉬는 기간은 여기서 한 번만 말한다 — 구역으로 세우면 «오늘 마침 빈 칸»이
+                되고, 아무 말도 안 하면 «장기는 어디 갔지»가 된다. 이유에 측정값을
+                같이 적는다: 근거 없이 «성적이 낮아서»라고만 하면 임의로 뺀 것처럼 읽힌다.
+                게이트·백테스트는 세 기간을 그대로 재고 있고, 내보내는 것만 줄인 것이다. */}
+            {pausedHorizons.length > 0 && (
+              <p className="mt-3 border-t border-border-soft pt-3 text-[11px] leading-relaxed text-text-mute">
+                <span className="font-semibold text-text-dim">
+                  {pausedHorizons.map((h) => h.label).join("·")}는 발행하지 않습니다
+                </span>{" "}
+                — 지난 1년 재현에서 거래당 기대값이 단기 +0.331R · 중기 +0.457R ·
+                장기 +0.204R 로 가장 낮았습니다. 검증은 세 기간 모두 계속 돌리고 있고,
+                내보내는 것만 줄였습니다.{" "}
+                <Link href="/strategies" className="text-accent hover:underline">
+                  검증 결과 보기 →
+                </Link>
               </p>
             )}
 
