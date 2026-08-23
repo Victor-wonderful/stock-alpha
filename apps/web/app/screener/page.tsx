@@ -429,43 +429,73 @@ export default async function ScreenerPage({
         </form>
       </div>
 
-      {/* 셋업별 섹션 — 기본 화면 */}
+      {/* 셋업별 섹션 — 기본 화면.
+          섹션마다 «카드»로 가른다(2026-08-23 Victor — "각 섹션 별로 구분된 모습이
+          나타나면 좋겠어"). 예전에는 밑줄 하나로만 갈라서 일곱 덩어리가 한 장처럼
+          흘렀고, 0건 섹션이 125건 섹션과 같은 무게로 자리를 먹었다.
+          숫자 열에 머리글을 단다 — 예전에는 104,100 / 99,584 / 0.80 이 라벨 없이
+          나란히 있어 어느 게 진입가고 어느 게 손절가인지 알 수 없었다. */}
       {sectionView ? (
-        <div className="flex flex-col gap-7">
+        <div className="flex flex-col gap-4">
           {ALL_SETUPS.map(({ key, label }) => {
             const rows = bySetupRows.get(key) ?? [];
             const cnt = setupCounts.get(key) ?? 0;
+            // 0건 섹션은 카드 한 줄로 접는다. 지우지는 않는다 — 「이 셋업은 오늘
+            // 없었다」도 답이다. 다만 자리를 작게 잡는다.
+            if (cnt === 0) {
+              return (
+                <section
+                  key={key}
+                  className="flex flex-wrap items-baseline gap-x-2 rounded-[12px] border border-border bg-surface/50 px-4 py-2.5 text-[11.5px]"
+                >
+                  <span className="font-semibold text-text-dim">{label}</span>
+                  <span className="tnum text-text-mute">0건</span>
+                  <span className="text-text-mute">— 오늘 이 셋업의 시그널은 없습니다</span>
+                </section>
+              );
+            }
             return (
-              <section key={key}>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border-soft pb-2.5">
+              <section
+                key={key}
+                className="overflow-hidden rounded-[12px] border border-border bg-surface"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border bg-surface-2 px-4 py-2.5">
                   <h2 className="flex items-baseline gap-2 text-sm font-bold text-text">
                     {label}
                     <span className="tnum text-[11px] font-medium text-text-mute">
                       {cnt}건
                     </span>
                   </h2>
-                  {cnt > 0 && (
-                    <Link
-                      href={`?setup=${key}`}
-                      className="text-xs text-text-dim transition-colors hover:text-text"
-                    >
-                      전체 보기 →
-                    </Link>
-                  )}
+                  <Link
+                    href={`?setup=${key}`}
+                    className="text-xs text-accent transition-colors hover:underline"
+                  >
+                    전체 보기 →
+                  </Link>
                 </div>
                 {rows.length === 0 ? (
-                  <p className="py-4 text-[12px] text-text-mute">
+                  <p className="px-4 py-4 text-[12px] text-text-mute">
                     오늘 이 셋업의 시그널은 없습니다.
                   </p>
                 ) : (
-                  <div className="no-scrollbar divide-y divide-border-soft overflow-x-auto">
+                  <div className="no-scrollbar overflow-x-auto px-4">
+                    {/* 항목 머리 — 아래 행과 같은 그리드를 써야 열이 맞는다. */}
+                    <div className="grid min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-baseline gap-3 border-b border-border-soft py-2 text-[10px] text-text-mute">
+                      <span>종목</span>
+                      <span>기간</span>
+                      <span className="text-right">현재가</span>
+                      <span className="text-right">진입가</span>
+                      <span className="text-right">손절가</span>
+                      <span className="text-right">합성알파</span>
+                    </div>
+                    <div className="divide-y divide-border-soft">
                     {rows.map((r) => {
                       const px = sectionPrices.get(r.symbol);
                       return (
                         <Link
                           key={r.id}
                           href={`/stocks/${r.symbol}`}
-                          className="grid min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-center gap-3 px-1 py-3 transition-colors hover:bg-surface"
+                          className="grid min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-center gap-3 py-3 transition-colors hover:bg-surface-2"
                         >
                           <span className="flex min-w-0 items-baseline gap-2">
                             <span className="truncate text-[13px] font-semibold text-text">
@@ -517,6 +547,7 @@ export default async function ScreenerPage({
                         </Link>
                       );
                     })}
+                    </div>
                   </div>
                 )}
               </section>
