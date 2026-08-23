@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { fmtPrice, fmtPct } from "@/lib/format";
+import { computePositionSizePct } from "@/lib/position";
 import { MiniSnowflake } from "@/components/MiniSnowflake";
 import { PriceNow } from "@/components/PriceNow";
 import { setupCharacter, TONE_CLASS } from "@/lib/setupCharacter";
@@ -91,18 +92,19 @@ export function PickCard({
   const [open, setOpen] = useState(false);
 
   const isFirst = rank === 1;
-  const rr =
-    pick.entry_price && pick.stop_loss && pick.target_price
-      ? (pick.target_price - pick.entry_price) / (pick.entry_price - pick.stop_loss)
-      : null;
-  // 권장 비중: 손절 시 계좌 riskPct% 손실 → 포지션 크기
-  const sizePct =
-    pick.entry_price && pick.stop_loss && pick.entry_price > pick.stop_loss
-      ? Math.min(
-          (riskPct / 100 / ((pick.entry_price - pick.stop_loss) / pick.entry_price)) * 100,
-          25,
-        )
-      : null;
+  // 레벨 파생값 — 홈 표(HomePicksTable)와 **같은 공식·같은 이름**을 쓴다. 한 종목이
+  // 두 화면에서 다른 말을 하면(홈 「본전 도달가」 / 여기 「목표가」) 사용자는 둘 중
+  // 하나가 틀렸다고 읽는다. R:R·2차 목표·상승여력은 «목표에서 판다»를 전제한 값이라
+  // 지금 규칙(trail: 목표에 닿으면 손절만 본전으로 올림)에서는 실현되지 않는다.
+  const entryP = pick.entry_price;
+  const stopP = pick.stop_loss;
+  const targetP = pick.target_price;
+  const stopPct = entryP != null && entryP > 0 && stopP != null ? stopP / entryP - 1 : null;
+  const toTarget = entryP != null && entryP > 0 && targetP != null ? targetP / entryP - 1 : null;
+  // 1주당 리스크 = 진입가 − 손절가. 실제로 거는 돈이다.
+  const riskPerShare = entryP != null && stopP != null ? entryP - stopP : null;
+  // 권장 비중은 읽는 시점 계산 — DB 의 weight 는 null 이다(엔진이 안 넣는다).
+  const sizePct = computePositionSizePct(entryP, stopP, riskPct);
 
   // 진입 규칙 — 2026-08-21 부터 발행 픽은 «다음 거래일 시가 시장가»다.
   // 이 픽들에는 "지금 진입 타이밍/대기/무효" 판정이 성립하지 않는다: 살 시점이
@@ -114,7 +116,7 @@ export function PickCard({
   const es = entryStatus(lastPrice ?? null, pick.entry_price, pick.stop_loss);
   const entryLabel = awaitingEntry ? "예상 진입가" : "진입가";
   const entryNote = awaitingEntry
-    ? "다음 거래일 시가에 매수 — 손절·목표는 시가 확정 후 다시 계산됩니다"
+    ? "다음 거래일 시가에 매수 — 손절가·본전 도달가는 시가가 확정된 뒤 다시 계산됩니다"
     : es.alert;
 
   // 매매 계획 — "언제 사서 언제 파나". 규칙은 엔진이 자동 집행하는데 화면에
@@ -174,19 +176,35 @@ export function PickCard({
           </div>
         </div>
 
-        {/* 5분할 스탯 */}
+        {/* 5분할 스탯 — 순서·이름·보조문구를 홈 표와 맞춘다.
+             칸의 보조문구는 «그 숫자가 무엇을 시키는가»다(전량 매도 / 손절이 본전으로).
+             10자 안쪽으로 두고, 공통 규칙은 아래 매매 계획 줄이 말한다. */}
         <div className="hidden xl:grid grid-cols-5 gap-3 text-center">
           {[
-            { label: entryLabel, value: fmtPrice(pick.entry_price) },
+            { label: entryLabel, value: fmtPrice(entryP), sub: awaitingEntry ? "다음 거래일 시가" : "시가 매수" },
             {
-              label: pick.tp2_price != null ? "목표가 (1차)" : "목표가",
-              value: fmtPrice(pick.target_price),
-              tone: "good",
-              sub: pick.tp2_price != null ? `2차 ${fmtPrice(pick.tp2_price)}` : undefined,
+              label: "손절가",
+              value: fmtPrice(stopP),
+              tone: "bad",
+              sub: stopPct != null ? `${fmtPct(stopPct)} · 전량 매도` : "전량 매도",
             },
-            { label: "손절가", value: fmtPrice(pick.stop_loss), tone: "bad" },
-            { label: "R:R", value: rr != null ? `${rr.toFixed(1)}` : "—" },
-            { label: "권장 비중", value: sizePct != null ? `${sizePct.toFixed(1)}%` : "—", tone: "accent" },
+            {
+              label: "본전 도달가",
+              value: fmtPrice(targetP),
+              tone: "good",
+              sub: toTarget != null ? `${fmtPct(toTarget)} · 손절이 본전으로` : "손절이 본전으로",
+            },
+            {
+              label: "1주당 리스크",
+              value: riskPerShare != null ? `${Math.round(riskPerShare).toLocaleString("ko-KR")}원` : "—",
+              sub: "진입 − 손절",
+            },
+            {
+              label: "권장 비중",
+              value: sizePct != null ? `${sizePct.toFixed(1)}%` : "—",
+              tone: "accent",
+              sub: `계좌 리스크 ${riskPct}%`,
+            },
           ].map(({ label, value, tone, sub }) => (
             <div key={label} className="min-w-[56px]">
               <p className="text-[10px] text-text-mute">{label}</p>
@@ -203,7 +221,7 @@ export function PickCard({
               >
                 {value}
               </p>
-              {sub && <p className="tnum mt-0.5 text-[10px] text-good">{sub}</p>}
+              {sub && <p className="tnum mt-0.5 text-[10px] text-text-mute">{sub}</p>}
             </div>
           ))}
         </div>
@@ -238,22 +256,17 @@ export function PickCard({
         </div>
       </div>
 
-      {/* 모바일 스탯 (xl 미만) */}
+      {/* 모바일 스탯 (xl 미만) — 좁은 화면에서는 매매에 꼭 필요한 세 값만.
+           순서는 진입 → 손절 → 본전으로, 손실 쪽을 먼저 읽게 둔다. */}
       <div className="grid grid-cols-3 gap-2 px-5 pb-3 xl:hidden">
         {[
-          { label: awaitingEntry ? "예상 진입" : "진입", value: fmtPrice(pick.entry_price) },
-          {
-            label: pick.tp2_price != null ? "목표 1·2차" : "목표",
-            value:
-              pick.tp2_price != null
-                ? `${fmtPrice(pick.target_price)} / ${fmtPrice(pick.tp2_price)}`
-                : fmtPrice(pick.target_price),
-          },
-          { label: "손절", value: fmtPrice(pick.stop_loss) },
-        ].map(({ label, value }) => (
+          { label: awaitingEntry ? "예상 진입" : "진입", value: fmtPrice(entryP), tone: "" },
+          { label: "손절", value: fmtPrice(stopP), tone: "text-bad" },
+          { label: "본전 도달", value: fmtPrice(targetP), tone: "text-good" },
+        ].map(({ label, value, tone }) => (
           <div key={label} className="rounded-[8px] bg-surface-2 px-2.5 py-2 text-center">
             <p className="text-[10px] text-text-mute">{label}</p>
-            <p className="tnum mt-0.5 text-xs font-bold text-text">{value}</p>
+            <p className={`tnum mt-0.5 text-xs font-bold ${tone || "text-text"}`}>{value}</p>
           </div>
         ))}
       </div>

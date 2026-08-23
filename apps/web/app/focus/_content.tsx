@@ -251,12 +251,17 @@ export default async function FocusContent() {
   const closedPicks = history.data.filter((h) => h.closed);
   const tr = {
     closed: closedPicks.length,
-    target: closedPicks.filter((h) => h.status === "목표 도달").length,
-    stopped: closedPicks.filter((h) => h.status === "손절").length,
-    expired: closedPicks.filter((h) => h.status === "만료").length,
-    partial: closedPicks.filter((h) => h.status === "1차 익절").length,
     wins: closedPicks.filter((h) => (h.return_pct ?? 0) > 0).length,
   };
+  // 종료 사유 내역 — 예전에는 목표·1차익절·손절·만료 넷만 셌다. 그 넷에 안 잡히는
+  // 「본전 청산」·「규칙 교체 정리」가 생기면서 내역 합계가 종료 건수보다 작아졌고
+  // (35건 종료인데 내역은 23건), 화면은 나머지 12건을 조용히 감췄다. 상태 목록을
+  // 고정하지 않고 실제 값에서 세어 0건이 아닌 것만 적는다 — 새 상태가 생겨도 샌다.
+  // 「목표 도달」은 채택 규칙(trail)에서는 더 나오지 않는다(그 자리에서 안 판다).
+  const breakdown = [...new Set(closedPicks.map((h) => h.status))]
+    .map((st) => ({ label: st, n: closedPicks.filter((h) => h.status === st).length }))
+    .filter((b) => b.n > 0)
+    .sort((a, b) => b.n - a.n);
   const winRate = tr.closed > 0 ? tr.wins / tr.closed : null;
   const expectancy =
     tr.closed > 0
@@ -473,18 +478,16 @@ export default async function FocusContent() {
                         종목입니다 — 지금은 국면 때문에 발행이 막혀 있을 뿐, 시장이 돌면 가장 먼저
                         진입할 후보입니다.
                       </p>
-                      {/* 표로 분리 — 현재가·목표가·점수가 라벨 없이 한 열에 쌓여 있어
-                          어느 숫자가 무엇인지 구분되지 않았다. 열마다 머리글을 단다.
+                      {/* 표로 분리 — 숫자가 라벨 없이 한 열에 쌓여 있어 어느 값이
+                          무엇인지 구분되지 않았다. 열마다 머리글을 단다.
                           '국면 대기' 배지는 이 목록 전체의 성격이라 행마다 반복하지 않는다. */}
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[680px] text-sm">
+                        <table className="w-full min-w-[520px] text-sm">
                           <thead>
                             <tr className="border-b border-border text-[10px] uppercase tracking-wide text-text-mute">
                               <th className="py-2 pl-1 text-left font-medium">종목</th>
                               <th className="px-3 py-2 text-right font-medium">현재가</th>
                               <th className="px-3 py-2 text-right font-medium">전일대비</th>
-                              <th className="px-3 py-2 text-right font-medium">목표가</th>
-                              <th className="px-3 py-2 text-right font-medium">상승여력</th>
                               <th className="px-3 py-2 text-right font-medium">점수</th>
                               <th className="px-3 py-2 text-right font-medium">
                                 <span className="sr-only">액션</span>
@@ -494,11 +497,11 @@ export default async function FocusContent() {
                           <tbody>
                             {waitlist.map((r) => {
                               const px = waitPrices.get(r.symbol ?? "");
-                              // 상승여력 = 목표가 대비 현재가. '지금 사면 얼마 남았나'를 한 눈에.
-                              const upside =
-                                px?.close != null && r.target_price != null && px.close > 0
-                                  ? r.target_price / px.close - 1
-                                  : null;
+                              // 「목표가」·「상승여력」을 뺐다(2026-08-23). 이 목록은 아직
+                              // 픽이 아니라 진입가가 없다 — 진입가가 없으면 본전 도달가도
+                              // 없고, «목표까지 남은 폭»은 그 목표에서 팔지 않으므로 실현되지
+                              // 않는다. 여기서 답해야 할 질문은 «얼마 벌 수 있나»가 아니라
+                              // «왜 후보인가»이고, 그건 이름 밑 「검증 통과」 줄이 말한다.
                               return (
                                 <tr
                                   key={r.id}
@@ -542,12 +545,6 @@ export default async function FocusContent() {
                                     }`}
                                   >
                                     {px?.changePct != null ? fmtPct(px.changePct) : "—"}
-                                  </td>
-                                  <td className="tnum px-3 py-2.5 text-right text-text-dim">
-                                    {fmtPrice(r.target_price)}
-                                  </td>
-                                  <td className="tnum px-3 py-2.5 text-right font-semibold text-good">
-                                    {upside != null ? fmtPct(upside) : "—"}
                                   </td>
                                   <td className="tnum px-3 py-2.5 text-right text-lg font-extrabold text-accent">
                                     {r.score}
@@ -735,8 +732,7 @@ export default async function FocusContent() {
                     </div>
                   </div>
                   <p className="mt-2 text-[10px] leading-relaxed text-text-mute">
-                    목표 {tr.target} · 1차익절 {tr.partial} · 손절 {tr.stopped} ·
-                    만료 {tr.expired} · 추세 전략은 손절이 잦아도{" "}
+                    {breakdown.map((b) => `${b.label} ${b.n}`).join(" · ")} · 추세 전략은 손절이 잦아도{" "}
                     <span className="font-semibold text-text-dim">
                       평균 손익(기대값)이 양(+)
                     </span>
