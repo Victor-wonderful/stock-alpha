@@ -336,7 +336,7 @@ export default async function PicksPage({
                     <th className="py-2 pl-1 text-left font-medium">종목</th>
                     <th className="px-3 py-2 text-left font-medium">발행일</th>
                     <th className="px-3 py-2 text-right font-medium">진입가</th>
-                    <th className="px-3 py-2 text-right font-medium">목표가</th>
+                    <th className="px-3 py-2 text-right font-medium">본전 도달가</th>
                     <th className="px-3 py-2 text-right font-medium">손절가</th>
                     <th className="px-3 py-2 text-right font-medium">수익률</th>
                     <th className="px-3 py-2 text-right font-medium">상태</th>

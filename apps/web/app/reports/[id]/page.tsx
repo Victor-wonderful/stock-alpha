@@ -205,7 +205,10 @@ export default async function ReportDetailPage({
                         <Badge variant={status.variant} size="sm">{status.label}</Badge>
                       </div>
 
-                      {/* 5분할 수치 */}
+                      {/* 5분할 수치 — 홈·오늘의 픽·스크리너·종목 상세와 같은 이름·같은
+                          순서(2026-08-23). 「목표가」·「R:R」을 버렸다: 채택 규칙(trail)은
+                          목표에서 팔지 않고 손절만 진입가로 올린다. 잃는 쪽을 먼저 읽게 두고,
+                          마지막 칸에는 실제로 거는 돈(1주당 리스크)을 놓는다. */}
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                         {[
                           {
@@ -215,22 +218,25 @@ export default async function ReportDetailPage({
                             tone: "text-text",
                           },
                           {
-                            label: "목표가",
-                            value: fmtPrice(row.tp1),
-                            sub: tpPct != null ? `+${tpPct.toFixed(1)}%` : "",
-                            tone: "text-good",
-                          },
-                          {
                             label: "손절가",
                             value: fmtPrice(row.stop_loss),
                             sub: slPct != null ? `${slPct.toFixed(1)}%` : "",
                             tone: "text-bad",
                           },
                           {
-                            label: "R:R",
-                            value: row.risk_reward != null ? fmtNum(row.risk_reward, 1) : "—",
-                            sub: "",
-                            tone: "text-accent",
+                            label: "본전 도달가",
+                            value: fmtPrice(row.tp1),
+                            sub: tpPct != null ? `+${tpPct.toFixed(1)}% · 손절이 본전으로` : "손절이 본전으로",
+                            tone: "text-good",
+                          },
+                          {
+                            label: "1주당 리스크",
+                            value:
+                              row.entry_price != null && row.stop_loss != null
+                                ? `${Math.round(row.entry_price - row.stop_loss).toLocaleString("ko-KR")}원`
+                                : "—",
+                            sub: "진입 − 손절",
+                            tone: "text-text-dim",
                           },
                           {
                             label: "권장 비중",

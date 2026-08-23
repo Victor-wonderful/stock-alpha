@@ -42,7 +42,7 @@ export default function WatchlistPage() {
           <div className="space-y-2">
             {[
               { icon: "★", tone: "text-accent", nm: "SK스퀘어", desc: "오늘의 픽 1위로 선정 — 52주 신고가 셋업" },
-              { icon: "⚡", tone: "text-good", nm: "SK하이닉스", desc: "신규 시그널 발생 — 주도주 추세 (스윙)" },
+              { icon: "⚡", tone: "text-good", nm: "SK하이닉스", desc: "신규 시그널 발생 — 주도주 추세 (중기)" },
               { icon: "↕", tone: "text-warn", nm: "삼성전자", desc: "판정 변경: 관망 → 중립 — 업황 회복 신호 반영" },
             ].map((c) => (
               <div key={c.nm} className="flex items-center gap-3 rounded-[12px] bg-surface-2 px-3.5 py-2.5">

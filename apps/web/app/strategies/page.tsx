@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { horizonLabel, PUBLISH_HORIZONS } from "@/lib/holding";
 import { Panel, SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { getBacktests } from "@/lib/data";
@@ -115,13 +116,11 @@ const SETUP_GUIDE: Partial<Record<TradeSetup, { name: string; desc: string }>> =
   },
 };
 
-// 스타일 한국어 — 같은 전략이 스윙·포지션으로 각각 검증되므로 표에 반드시 구분 표기.
-const STYLE_LABEL: Record<string, string> = {
-  swing: "스윙",
-  position: "포지션",
-  day: "데이",
-  scalping: "스캘핑",
-};
+// 축은 기간이다(2026-08-23). 예전에는 「스타일(스윙·포지션)」 열이었는데, 발행을 정하는
+// 게이트가 (셋업 × 기간)으로 바뀐 뒤로 이 표가 **옛 축 성적을 현재 검증 결과처럼**
+// 보여주고 있었다. 실측: backtests 1,584행 중 기간 축은 66행(통과 12)이고 나머지
+// 1,518행(통과 542)이 옛 스타일 축이다. 「통과 542건」이 화면에 뜨면 지금 발행 근거가
+// 그만큼 두터운 줄로 읽힌다.
 
 // 미통과 사유 — 어떤 기준에 걸렸는지. 기대값이 높은데 미통과인 행(워크포워드 탈락)이
 // 고장처럼 보이던 문제를 해소한다.
@@ -176,12 +175,20 @@ export default async function StrategiesPage() {
   // 멀티팩터(횡단면 검증)는 지표 체계가 달라(IC 기반) 본 표와 분리 표시
   // 같은 플레이북의 스타일별 행이 흩어져 있으면 판정이 모순돼 보인다 → 이름·스타일순 정렬로
   // 나란히 붙인다(예: 돌파 스윙 미통과 / 돌파 포지션 통과).
-  const data = allRows
-    .filter((b) => b.setup !== "factor_composite")
+  const rows = allRows.filter((b) => b.setup !== "factor_composite");
+  // 지금 발행 근거는 기간 축뿐이다. 옛 스타일 축 행은 표에서 빼고 «몇 건이 있었는지»만
+  // 아래 각주로 밝힌다 — 지우면 성적을 감춘 것이 되고, 섞으면 현재 근거를 부풀린다.
+  const legacyRows = rows.filter((b) => !b.horizon);
+  const data = rows
+    .filter((b) => !!b.horizon)
     .sort((a, b) => {
       const an = SETUP_GUIDE[a.setup]?.name ?? a.setup;
       const bn = SETUP_GUIDE[b.setup]?.name ?? b.setup;
-      return an.localeCompare(bn, "ko") || (a.style ?? "").localeCompare(b.style ?? "");
+      const order = { short: 0, mid: 1, long: 2 } as Record<string, number>;
+      return (
+        an.localeCompare(bn, "ko") ||
+        (order[a.horizon ?? ""] ?? 9) - (order[b.horizon ?? ""] ?? 9)
+      );
     });
   const factor = allRows.find((b) => b.setup === "factor_composite");
   const passed = data.filter((b) => b.passed).length;
@@ -212,9 +219,9 @@ export default async function StrategiesPage() {
                 <span className="text-text-mute">+0.05R 이상이어야 통과.</span>
               </li>
               <li>
-                <span className="font-medium text-text">승률 · 손익비</span> —
+                <span className="font-medium text-text">승률 · 이기면 몇 배</span> —
                 이긴 거래의 비율, 그리고 평균 이익이 평균 손실의 몇 배인가.
-                승률이 낮아도 손익비가 크면 돈을 법니다(추세 전략의 전형).
+                승률이 낮아도 이길 때 크게 벌면 돈을 법니다(추세 전략의 전형).
                 참고용 지표.
               </li>
               <li>
@@ -251,13 +258,13 @@ export default async function StrategiesPage() {
               <thead>
                 <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
                   <th className="py-2 pl-1 text-left font-medium">플레이북</th>
-                  <th className="px-3 py-2 text-center font-medium">스타일</th>
+                  <th className="px-3 py-2 text-center font-medium">기간</th>
                   <th className="px-3 py-2 text-center font-medium">검증</th>
                   <th className="px-3 py-2 text-right font-medium">
                     기대값 (R/거래)
                   </th>
                   <th className="px-3 py-2 text-right font-medium">승률</th>
-                  <th className="px-3 py-2 text-right font-medium">손익비</th>
+                  <th className="px-3 py-2 text-right font-medium">이기면</th>
                   <th className="px-3 py-2 text-right font-medium">최대 낙폭</th>
                   <th className="px-3 py-2 text-left font-medium">마지막 검증</th>
                 </tr>
@@ -280,7 +287,10 @@ export default async function StrategiesPage() {
                         </p>
                       </td>
                       <td className="px-3 py-2.5 text-center text-2xs text-text-dim">
-                        {b.style ? (STYLE_LABEL[b.style] ?? b.style) : "—"}
+                        {horizonLabel(b.horizon) ?? "—"}
+                        {b.horizon && !PUBLISH_HORIZONS.includes(b.horizon as never) && (
+                          <span className="ml-1 text-text-mute">· 발행 안 함</span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <Badge variant={b.passed ? "pass" : "fail"} size="md">
@@ -373,10 +383,19 @@ export default async function StrategiesPage() {
               </tbody>
             </table>
           </div>
+          {legacyRows.length > 0 && (
+            <p className="mt-3 rounded-[10px] border border-border-soft bg-surface-2 px-3 py-2 text-2xs leading-relaxed text-text-mute">
+              <span className="font-semibold text-text-dim">
+                옛 축(스타일) 검증 {legacyRows.length}건은 표에서 뺐습니다
+              </span>{" "}
+              — 발행을 정하는 게이트가 (셋업 × 기간)으로 바뀌기 전에 잰 성적이라 지금
+              발행 근거가 아닙니다. 지우지는 않았고, 위 표는 현재 축만 보여줍니다.
+            </p>
+          )}
           <p className="mt-3 text-2xs text-text-mute">
             검증 기준: 표본 ≥ 20거래 · 기대값 ≥ +0.05R · 최대 낙폭 ≤ 40%(일일
-            리스크 1% 기준) · 최근 구간 기대값 ≥ 0. 같은 플레이북도 보유기간(스타일)별로
-            따로 검증하므로, 스윙은 통과하고 포지션은 미통과일 수 있습니다.
+            리스크 1% 기준) · 최근 구간 기대값 ≥ 0. 같은 플레이북도 기간별로
+            따로 검증하므로, 단기는 통과하고 중기는 미통과일 수 있습니다.
             과거 성과는 미래 수익을 보장하지 않습니다.
           </p>
         </Panel>
