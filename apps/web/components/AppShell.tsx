@@ -23,6 +23,11 @@ export type PageStat = {
  * 속에 문자열로 박혀 묻혔다(스크리너의 「시그널 264건」이 문장 안에 있었다).
  * 숫자를 오른쪽 고정석으로 빼면 그 두 가지가 구조적으로 사라진다.
  *
+ * 색은 네이비다(2026-08-23 Victor — "색상 말이야, 상단에"). 홈만 상단이 네이비고
+ * 나머지는 흰 바탕이라 같은 제품으로 안 보였다. 네이비를 장식으로 쓰는 것도 아니다 —
+ * 이 밴드에 세우는 값(분석 179 · 발행 1 · 레짐 45 · 시그널 264)이 전부 **엔진이 계산한
+ * 수치**라 「네이비 = 기계가 낸 데이터」 규칙과 그대로 맞는다.
+ *
  * 홈은 이 골격을 쓰지 않는다 — 랜딩은 «우리가 무엇을 하는 곳인가»를 말하고,
  * 나머지는 이미 들어온 사람이 «지금 여기 상태»를 본다. 하는 일이 다르면 모양도 다르다.
  */
@@ -32,6 +37,7 @@ export function AppShell({
   subtitle,
   stats,
   badge,
+  headerExtra,
   hideHeader,
   children,
 }: {
@@ -41,8 +47,10 @@ export function AppShell({
   /** 이 화면이 무엇을 하는가. 한 문장으로 끝낸다 — 길어지면 숫자가 밀린다. */
   subtitle?: React.ReactNode;
   stats?: PageStat[];
-  /** 샘플 데이터 배지처럼 제목 옆에 붙는 것. */
+  /** 샘플 데이터 배지처럼 제목 옆에 붙는 것. 네이비 위에 올라가니 밝은 칩을 쓴다. */
   badge?: React.ReactNode;
+  /** 머리 밴드 안 아래쪽에 더 들어갈 것 — 「오늘의 픽」의 국면·깔때기 줄. */
+  headerExtra?: React.ReactNode;
   hideHeader?: boolean;
   children: React.ReactNode;
 }) {
@@ -51,45 +59,54 @@ export function AppShell({
       <GNB />
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-7 py-7 pb-10">
         {!hideHeader && (
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-baseline gap-2">
-                <h1 className="text-xl font-bold text-text">{title}</h1>
-                {asOf && (
-                  <span className="rounded-[999px] bg-surface-3 px-2.5 py-1 text-[10px] font-semibold text-text-dim">
-                    {asOf}
-                  </span>
+          <div className="mb-6 rounded-[14px] bg-navy px-6 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <h1 className="text-xl font-bold text-on-navy">{title}</h1>
+                  {asOf && (
+                    <span className="rounded-[999px] bg-on-navy/10 px-2.5 py-1 text-[10px] font-semibold text-on-navy-2">
+                      {asOf}
+                    </span>
+                  )}
+                  {badge}
+                </div>
+                {subtitle && (
+                  <p className="mt-1.5 max-w-[70ch] text-xs leading-relaxed text-on-navy-2">
+                    {subtitle}
+                  </p>
                 )}
-                {badge}
               </div>
-              {subtitle && (
-                <p className="mt-1.5 max-w-[70ch] text-xs leading-relaxed text-text-mute">
-                  {subtitle}
-                </p>
+
+              {stats && stats.length > 0 && (
+                <div className="flex shrink-0 flex-wrap items-start gap-x-7 gap-y-2">
+                  {stats.map((s) => (
+                    <div key={s.label} className="text-right">
+                      <p className="text-[10px] text-on-navy-3">{s.label}</p>
+                      <p
+                        className={`tnum mt-0.5 text-lg font-extrabold ${
+                          s.tone === "accent"
+                            ? "text-accent-on-navy"
+                            : s.tone === "good"
+                              ? "text-up-on-navy"
+                              : s.tone === "bad"
+                                ? "text-down-on-navy"
+                                : "text-on-navy"
+                        }`}
+                      >
+                        {s.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
-            {stats && stats.length > 0 && (
-              <div className="flex shrink-0 flex-wrap items-start gap-x-7 gap-y-2">
-                {stats.map((s) => (
-                  <div key={s.label} className="text-right">
-                    <p className="text-[10px] text-text-mute">{s.label}</p>
-                    <p
-                      className={`tnum mt-0.5 text-lg font-extrabold ${
-                        s.tone === "accent"
-                          ? "text-accent"
-                          : s.tone === "good"
-                            ? "text-good"
-                            : s.tone === "bad"
-                              ? "text-bad"
-                              : "text-text"
-                      }`}
-                    >
-                      {s.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
+            {/* 머리 안에 더 들어갈 것(오늘의 픽의 «전제» 줄처럼). 같은 네이비 안에
+                두는 이유 — 네이비 밴드를 위아래로 두 개 세우면 어느 쪽이 «지금»인지
+                흐려진다(홈에서 배운 것). 실선 대신 얇은 구분선으로 가른다. */}
+            {headerExtra && (
+              <div className="mt-4 border-t border-on-navy/15 pt-4">{headerExtra}</div>
             )}
           </div>
         )}

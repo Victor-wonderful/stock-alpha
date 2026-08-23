@@ -249,35 +249,8 @@ export default async function FocusContent() {
         { label: "발행", value: `${picks.length}`, tone: "accent" as const },
         { label: "진행 중", value: `${openPicks.length}` },
       ]}
-      badge={
-        <>
-          {planDay && (
-            <span className="rounded-[999px] bg-accent px-3 py-1 text-[11px] font-bold text-text-on-accent">
-              → {planDay} 장 시작 전 플랜
-            </span>
-          )}
-          {recs.isSample && <SampleBadge />}
-        </>
-      }
-    >
-      <div id="today-picks">
-
-        {/* ── 오늘의 전제 — 국면 + 깔때기를 한 밴드로 ──
-             전에는 여기가 네 덩어리였다: 국면 헤더 → 시장 브리프(네이비) → 하락장
-             경고 → 선정 과정 3단계. 넷 다 «지금 시장이 어떤가»를 말해서 같은 얘기를
-             세 번 했고, 정작 픽은 다섯 번째 블록에서야 나왔다.
-
-             시장 브리프 카드를 통째로 뺐다. 겹쳐서만이 아니라 **틀린 말을 하고
-             있었다** — 브리프는 8/21 에 만들어져 「다음 거래일 플랜 5종목」이라
-             적고 TYM·서울바이오시스·LG전자의 진입가를 나열했는데, 새 예산·게이트
-             규칙에서 실제 발행은 오리온 1건이다. 오늘의 픽 바로 위에서 «오늘의 픽이
-             아닌 종목 3개»가 진입가를 달고 있으면 어느 게 추천인지 알 수 없다.
-             브리프의 제자리는 홈과 「시장」이다. 여기서는 링크로만 보낸다.
-
-             레짐 게이지도 뺐다 — 게이지는 「중립」이라 하고 국면 줄은 「횡보」라 해서
-             한 화면이 같은 것을 두 이름으로 불렀다. 이름은 국면 줄 하나로 통일한다. */}
-        {(rc || scoreBoard.total > 0) && (
-          <div className="mb-5 rounded-[14px] bg-navy px-5 py-4">
+      headerExtra={
+        rc || scoreBoard.total > 0 ? (
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_1px_minmax(0,280px)]">
               {/* 좌 — 국면. 픽을 읽기 전에 깔고 가는 전제다. */}
               <div>
@@ -351,8 +324,22 @@ export default async function FocusContent() {
                 </p>
               </div>
             </div>
-          </div>
-        )}
+        ) : null
+      }
+      badge={
+        <>
+          {planDay && (
+            // 네이비 위에서는 인디고(accent)가 묻힌다(대비 2.4:1) — 밝은 인디고 바탕에
+            // 네이비 글자로 뒤집는다.
+            <span className="rounded-[999px] bg-accent-on-navy px-3 py-1 text-[11px] font-bold text-navy">
+              → {planDay} 장 시작 전 플랜
+            </span>
+          )}
+          {recs.isSample && <SampleBadge onNavy />}
+        </>
+      }
+    >
+      <div id="today-picks">
 
         {/* ── 메인 2컬럼 ── */}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">

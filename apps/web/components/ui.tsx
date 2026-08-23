@@ -1,9 +1,23 @@
 // 공통 UI 프리미티브 (다크 터미널 토큰)
 
-export function SampleBadge() {
+/**
+ * 예시 데이터 배지.
+ *
+ * onNavy — 페이지 머리 밴드가 네이비가 되면서(2026-08-23) 기본 색(어두운 앰버)이
+ * 네이비 위에서 안 읽힌다. 네이비용 밝은 앰버로 바꾼다.
+ */
+export function SampleBadge({ onNavy = false }: { onNavy?: boolean } = {}) {
   return (
-    <span className="inline-flex items-center gap-1 rounded border border-warn/40 bg-warn/10 px-2 py-0.5 text-2xs font-medium text-warn">
-      <span className="inline-block h-1 w-1 rounded-full bg-warn" />
+    <span
+      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium ${
+        onNavy
+          ? "border border-warn-on-navy/40 bg-warn-on-navy/15 text-warn-on-navy"
+          : "border border-warn/40 bg-warn/10 text-warn"
+      }`}
+    >
+      <span
+        className={`inline-block h-1 w-1 rounded-full ${onNavy ? "bg-warn-on-navy" : "bg-warn"}`}
+      />
       예시 데이터
     </span>
   );

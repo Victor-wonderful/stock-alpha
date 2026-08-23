@@ -24,8 +24,9 @@ export default function WatchlistPage() {
         { label: "오늘 변화", value: `${PREVIEW.filter((r) => r.badge).length}`, tone: "accent" as const },
         { label: "알림 켠 종목", value: `${PREVIEW.filter((r) => r.bell).length}` },
       ]}
+      // 네이비 머리 위 — 밝은 바탕 + 어두운 글자로 뒤집어야 읽힌다.
       badge={
-        <span className="rounded-[999px] bg-warn-soft px-3 py-1 text-[11px] font-semibold text-warn">
+        <span className="rounded-[999px] bg-warn-on-navy px-3 py-1 text-[11px] font-semibold text-navy">
           로그인 기능 준비 중 — 아래는 예시 화면
         </span>
       }

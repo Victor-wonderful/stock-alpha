@@ -159,7 +159,7 @@ export default async function MarketPage() {
         { label: "레짐 점수", value: `${gauge}`, tone: "accent" as const },
         { label: "섹터", value: `${sectors.length}` },
       ]}
-      badge={isSample ? <SampleBadge /> : undefined}
+      badge={isSample ? <SampleBadge onNavy /> : undefined}
     >
       {brief.data?.market && (
         <section className="mb-5 rounded-[12px] border border-border-soft bg-surface/40 p-5">
