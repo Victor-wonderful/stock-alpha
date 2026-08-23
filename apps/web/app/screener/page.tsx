@@ -480,16 +480,24 @@ export default async function ScreenerPage({
                     {rows.map((r) => {
                       const px = sectionPrices.get(r.symbol);
                       return (
-                        <Link
+                        // stretched link — 행 전체를 누를 수 있게 하되 링크 안에
+                        // 버튼(종목코드 복사)을 넣지 않는다. 링크는 종목명에만 걸고
+                        // ::after 로 행을 덮는다(마크업 유효 · 스크린리더 정상).
+                        <div
                           key={r.id}
-                          href={`/stocks/${r.symbol}`}
-                          className="grid min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-center gap-3 py-3 transition-colors hover:bg-surface-2"
+                          className="relative grid min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-center gap-3 py-3 transition-colors hover:bg-surface-2"
                         >
                           <span className="flex min-w-0 items-baseline gap-2">
-                            <span className="truncate text-[13px] font-semibold text-text">
+                            <Link
+                              href={`/stocks/${r.symbol}`}
+                              className="truncate text-[13px] font-semibold text-text after:absolute after:inset-0 after:content-[''] hover:text-accent"
+                            >
                               {r.name}
-                            </span>
-                            <SymbolCode symbol={r.symbol} className="shrink-0 text-[10px] text-text-mute" />
+                            </Link>
+                            <SymbolCode
+                              symbol={r.symbol}
+                              className="relative z-10 shrink-0 text-[10px] text-text-mute"
+                            />
                           </span>
                           {/* 기간 — "언제까지 들고 있나"를 목록에서 바로 본다.
                               이 기간이 지나면 엔진이 종가로 자동 청산한다.
@@ -532,7 +540,7 @@ export default async function ScreenerPage({
                           <span className="tnum text-right text-[13px] font-bold text-text">
                             {fmtNum(r.strength, 2)}
                           </span>
-                        </Link>
+                        </div>
                       );
                     })}
                     </div>

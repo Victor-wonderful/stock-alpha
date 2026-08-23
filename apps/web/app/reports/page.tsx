@@ -269,17 +269,28 @@ export default async function ReportsPage({
               // 종목을 어디서 눌렀느냐에 따라 5축·알파존·수급이 있는 화면과 리포트 본문이
               // 갈렸다. 리포트는 종목 상세의 «한 부분»이므로 별도 링크로 뺀다.
               return (
-                <Link key={r.id} href={`/stocks/${r.symbol}`} className="block">
-                  <div className="flex items-center gap-3 rounded-[12px] border border-border bg-surface-2 px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-3">
+                <div key={r.id} className="block">
+                  {/* stretched link — 행 전체를 누를 수 있게 하되 마크업은 유효하게.
+                      `<a>` 안에 버튼(종목코드 복사·리포트 →)을 넣으면 명세 위반이고
+                      스크린리더가 링크 안의 버튼을 제대로 읽지 못한다. 그래서 링크는
+                      종목명 하나에만 걸고, ::after 로 행 전체를 덮는다. 다른
+                      상호작용 요소는 z-10 으로 그 위에 올린다. */}
+                  <div className="relative flex items-center gap-3 rounded-[12px] border border-border bg-surface-2 px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-3">
                     {/* 판정 배지 */}
                     <RatingBadge rating={r.rating} />
 
                     {/* 종목명+코드+픽 배지 */}
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="shrink-0 text-[13px] font-bold text-text">
+                      <Link
+                        href={`/stocks/${r.symbol}`}
+                        className="shrink-0 text-[13px] font-bold text-text after:absolute after:inset-0 after:content-[''] hover:text-accent"
+                      >
                         {r.name ?? r.title}
-                      </span>
-                      <SymbolCode symbol={r.symbol} className="shrink-0 text-[10px] text-text-mute" />
+                      </Link>
+                      <SymbolCode
+                        symbol={r.symbol}
+                        className="relative z-10 shrink-0 text-[10px] text-text-mute"
+                      />
                       {isPick && (
                         <span className="shrink-0 rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
                           ⭐ {isLatest ? "오늘의 픽" : "픽"}
@@ -321,14 +332,14 @@ export default async function ReportsPage({
                           가고 싶다. 행 링크 안의 링크라 클릭을 여기서 멈춘다. */}
                       <RowSubLink
                         href={`/reports/${r.id}`}
-                        className="hidden text-[11px] font-semibold text-accent sm:block"
+                        className="relative z-10 hidden text-[11px] font-semibold text-accent sm:block"
                       >
                         리포트 →
                       </RowSubLink>
                       <ChevronRight className="h-4 w-4 text-text-mute" />
                     </div>
                   </div>
-                </Link>
+                </div>
               );
             };
 

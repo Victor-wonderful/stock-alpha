@@ -76,18 +76,23 @@ function ZoneCard({ c }: { c: AlphaZoneCard }) {
   const fill = Math.max(0, Math.min(1, c.zonePos)) * 100;
 
   return (
-    <Link
-      href={`/stocks/${c.symbol}`}
-      className="group flex flex-col rounded-[16px] border border-border bg-surface p-4 transition-colors hover:border-accent"
-    >
+    // stretched link — 카드 전체를 누를 수 있게 하되 링크 안에 버튼(종목코드 복사)을
+    // 넣지 않는다. 링크는 종목명에만 걸고 ::after 로 카드를 덮는다.
+    <div className="group relative flex flex-col rounded-[16px] border border-border bg-surface p-4 transition-colors hover:border-accent">
       {/* 헤더 */}
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-[15px] font-bold text-text group-hover:text-accent">
+            <Link
+              href={`/stocks/${c.symbol}`}
+              className="truncate text-[15px] font-bold text-text after:absolute after:inset-0 after:content-[''] group-hover:text-accent"
+            >
               {c.name}
-            </span>
-            <SymbolCode symbol={c.symbol} className="shrink-0 text-[10px] text-text-mute" />
+            </Link>
+            <SymbolCode
+              symbol={c.symbol}
+              className="relative z-10 shrink-0 text-[10px] text-text-mute"
+            />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {(() => {
@@ -165,7 +170,7 @@ function ZoneCard({ c }: { c: AlphaZoneCard }) {
           value={`${Math.round(c.entry - c.stop).toLocaleString("ko-KR")}원`}
         />
       </div>
-    </Link>
+    </div>
   );
 }
 

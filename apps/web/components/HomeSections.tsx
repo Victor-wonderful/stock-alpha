@@ -287,18 +287,25 @@ function ReportRows({ items }: { items: ReportListItem[] }) {
     <ul className="mt-6 overflow-hidden rounded-[12px] border border-border bg-surface">
       {items.map((r, i) => (
         <li key={r.id} className={i > 0 ? "border-t border-border-soft" : ""}>
-          <Link
-            href={`/reports/${r.id}`}
-            className="group flex items-center gap-5 px-5 py-4 transition-colors hover:bg-surface-2"
-          >
+          {/* stretched link — 행 전체를 누를 수 있게 하되 링크 안에 버튼(종목코드
+              복사)을 넣지 않는다. 링크는 제목에만 걸고 ::after 로 행을 덮는다. */}
+          <div className="group relative flex items-center gap-5 px-5 py-4 transition-colors hover:bg-surface-2">
             <span className="tnum w-[46px] shrink-0 text-[12px] text-text-mute">
               {r.as_of.slice(5).replace("-", ".")}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[14.5px] font-bold leading-[1.5] text-text group-hover:text-accent">
-                {r.name ?? r.title}
+              <p className="truncate text-[14.5px] font-bold leading-[1.5] text-text">
+                <Link
+                  href={`/reports/${r.id}`}
+                  className="after:absolute after:inset-0 after:content-[''] group-hover:text-accent"
+                >
+                  {r.name ?? r.title}
+                </Link>
                 {r.symbol && (
-                  <SymbolCode symbol={r.symbol} className="ml-2 text-[11.5px] font-normal text-text-mute" />
+                  <SymbolCode
+                    symbol={r.symbol}
+                    className="relative z-10 ml-2 text-[11.5px] font-normal text-text-mute"
+                  />
                 )}
               </p>
               {r.summary && (
@@ -317,7 +324,7 @@ function ReportRows({ items }: { items: ReportListItem[] }) {
                 <span className="tnum text-[12px] text-text-mute">{r.score.toFixed(1)}점</span>
               )}
             </span>
-          </Link>
+          </div>
         </li>
       ))}
     </ul>
