@@ -34,9 +34,20 @@ const STATE: Record<
   },
 };
 
-export function RegimeHeader({ state }: { state: MarketStateView | null }) {
+/**
+ * 국면 문구만 꺼내 쓰는 창구 — 「오늘의 픽」은 이 말을 자기 헤더 밴드 안에서
+ * 네이비 위에 얹는다(별도 박스로 두면 시장 얘기가 화면에 두 번 나온다).
+ * 문구는 한 곳에서만 정의한다 — 두 화면이 다른 국면 이름을 말하면 안 된다.
+ */
+export function regimeCopy(state: MarketStateView | null) {
   if (!state) return null;
   // 미상이면 횡보로 — «방향이 애매한 구간» 이 곧 횡보의 정의다.
+  const s = STATE[state.market_state ?? ""] ?? STATE.range;
+  return { ...s, drivers: state.drivers ?? [] };
+}
+
+export function RegimeHeader({ state }: { state: MarketStateView | null }) {
+  if (!state) return null;
   const s = STATE[state.market_state ?? ""] ?? STATE.range;
   return (
     <div className={`mb-4 rounded-[14px] border px-4 py-3 ${s.cls}`}>

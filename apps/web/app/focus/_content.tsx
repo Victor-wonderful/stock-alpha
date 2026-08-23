@@ -2,7 +2,6 @@
 // 토글 인터랙션은 _pick-card.tsx (클라이언트)에 위임
 
 import Link from "next/link";
-import { Calculator, ListFilter, ScanSearch } from "lucide-react";
 import { GNB } from "@/components/GNB";
 import { TRADE_SETUP_LABELS as SETUP_LABELS } from "@stock-alpha/db";
 import {
@@ -18,7 +17,7 @@ import {
   getSnowflakesForSymbols,
   getUserRiskPct,
 } from "@/lib/data";
-import { RegimeHeader } from "@/components/RegimeHeader";
+import { regimeCopy } from "@/components/RegimeHeader";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
@@ -26,99 +25,6 @@ import { PickCard } from "./_pick-card";
 import { HORIZONS, isHorizonPaused } from "@/lib/holding";
 
 // 레짐 게이지 (3구간 바 + 마커)
-function RegimeGauge({ score, onNavy = false }: { score: number; onNavy?: boolean }) {
-  // score: -1 ~ 1 → 0 ~ 100% 포지션
-  const pct = Math.max(0, Math.min(100, (score + 1) * 50));
-  return (
-    <div className="space-y-1.5">
-      <div className="relative h-2.5 w-full overflow-hidden rounded-full">
-        <div className="absolute inset-0 flex">
-          {/* 네이비 위에서는 라이트 바탕용 적/청이 묻힌다 — 밝은 변형을 쓴다. */}
-          <div className={`flex-1 ${onNavy ? "bg-down-on-navy/70" : "bg-bad/60"}`} />
-          <div className="flex-1 bg-warn/60" />
-          <div className={`flex-1 ${onNavy ? "bg-up-on-navy/70" : "bg-good/60"}`} />
-        </div>
-        {/* 마커 */}
-        <div
-          className="absolute top-0 h-full w-1 rounded-full bg-white shadow"
-          style={{ left: `calc(${pct}% - 2px)` }}
-        />
-      </div>
-      <div className={`flex justify-between text-[10px] ${onNavy ? "text-on-navy-3" : "text-text-mute"}`}>
-        <span>약세 · 방어</span>
-        <span>중립</span>
-        <span>강세 · 공격</span>
-      </div>
-    </div>
-  );
-}
-
-// 선정 3단계 스트립
-function HowItWorks({ analyzed }: { analyzed: number }) {
-  const steps = [
-    {
-      icon: ScanSearch,
-      title: "1 검토",
-      desc: "유동 종목 1,200+ 스캔 — 시그널 발생 + 시총 상위",
-      badge: `오늘 ${analyzed}종목 분석`,
-      color: "text-accent",
-      bg: "bg-accent-soft",
-      highlight: false,
-    },
-    {
-      icon: Calculator,
-      title: "2 평가",
-      desc: "팩터 40 + 밸류 30 + 시그널 30 = 100점 · 거래가능 게이트",
-      badge: "매수≥65 · 중립≥45",
-      color: "text-warn",
-      bg: "bg-warn-soft",
-      highlight: false,
-    },
-    {
-      icon: ListFilter,
-      title: "3 선정",
-      desc: "60점+ & 게이트 통과 & 검증 플랜 보유 → 점수순 상위 5",
-      badge: "미달이면 빈 날",
-      color: "text-good",
-      bg: "bg-good-soft",
-      highlight: true, // accent-soft 강조
-    },
-  ];
-  return (
-    <div className="mb-4 grid gap-2 sm:grid-cols-3">
-      {steps.map((s, i) => {
-        const Icon = s.icon;
-        return (
-          <div
-            key={s.title}
-            className={`relative rounded-[12px] px-3.5 py-3 ${
-              s.highlight ? "bg-accent-soft border border-accent/20" : "bg-surface-2"
-            }`}
-          >
-            {i < steps.length - 1 && (
-              <span className="absolute -right-1.5 top-1/2 hidden -translate-y-1/2 text-text-mute sm:block">
-                →
-              </span>
-            )}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className={`grid h-6 w-6 place-items-center rounded-[6px] ${s.bg}`}>
-                  <Icon className={`h-3.5 w-3.5 ${s.color}`} strokeWidth={2} />
-                </span>
-                <span className="text-xs font-bold text-text">{s.title}</span>
-              </div>
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${s.bg} ${s.color}`}>
-                {s.badge}
-              </span>
-            </div>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-text-mute">{s.desc}</p>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export default async function FocusContent() {
   const [recs, allReports, history, brief, riskPct, marketState, backtests] =
     await Promise.all([
@@ -267,15 +173,12 @@ export default async function FocusContent() {
     tr.closed > 0
       ? closedPicks.reduce((s, h) => s + (h.return_pct ?? 0), 0) / tr.closed
       : null;
-  const briefData = brief.data;
-  const regime = briefData?.regime ?? null;
-  const regimeScore = regime?.score ?? 0;
-  const regimeLabel =
-    regime?.regime === "risk_on"
-      ? "강세 · 위험선호"
-      : regime?.regime === "risk_off"
-        ? "약세 · 방어"
-        : "중립";
+  // 브리프에서 남겨 쓰는 건 «위험회피 구간인가» 하나뿐이다. 헤드라인·워치포인트·
+  // 매크로·레짐 게이지는 이 페이지에서 뺐다(홈과 「시장」이 같은 것을 이미 말한다).
+  const regime = brief.data?.regime ?? null;
+
+  // 국면 문구는 컴포넌트가 아니라 값으로 받아 헤더 밴드 안에 얹는다.
+  const rc = regimeCopy(marketState);
 
   return (
     <div className="flex min-h-screen flex-col bg-bg">
@@ -303,113 +206,100 @@ export default async function FocusContent() {
               종가로 분석해 다음 거래일 장전 플랜으로 제시합니다
             </p>
           </div>
-          {/* 국면 배지는 여기 두지 않는다 — 바로 아래 RegimeHeader 가 같은 것을 더
+          {/* 국면 배지는 여기 두지 않는다 — 바로 아래 전제 밴드가 같은 것을 더
               자세히(그래서 무엇을 발행하는가까지) 말한다. 둘 다 두면 «강세»와
               «횡보»가 나란히 떠서 어느 쪽이 지금인지 되묻게 된다. */}
         </div>
 
-        {/* ── 국면 헤더 — 지금 시장 상태 → 그래서 이 종류를 추천(알파 노하우 ②) ──
-             추천 = 필터 없는 큐레이션(IA 2026-06-24): 4탭(RecommendTabs) 폐지, 탐색은 스크리너로 분리. ── */}
-        <RegimeHeader state={marketState} />
+        {/* ── 오늘의 전제 — 국면 + 깔때기를 한 밴드로 ──
+             전에는 여기가 네 덩어리였다: 국면 헤더 → 시장 브리프(네이비) → 하락장
+             경고 → 선정 과정 3단계. 넷 다 «지금 시장이 어떤가»를 말해서 같은 얘기를
+             세 번 했고, 정작 픽은 다섯 번째 블록에서야 나왔다.
 
-        {/* ── 모닝 브리프 카드 ──
-             시장 브리프는 «전제»다 — 추천을 읽기 전에 깔고 가는 배경.
-             라이트 카드로 두면 아래 픽 카드들과 같은 무게로 읽혀 배경이 되지 못한다.
-             히어로와 같은 네이비를 써서 «이건 맥락이고 아래가 본문»임을 색으로 말한다.
-             안쪽 글자는 전부 on-navy 계열 — text/text-dim 을 쓰면 네이비 위에서 안 보인다. */}
-        {briefData && (
-          <div className="mb-6 rounded-[12px] bg-navy p-5">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_1px_260px]">
-              {/* 좌: 헤드라인 + 드라이버 칩 */}
+             시장 브리프 카드를 통째로 뺐다. 겹쳐서만이 아니라 **틀린 말을 하고
+             있었다** — 브리프는 8/21 에 만들어져 「다음 거래일 플랜 5종목」이라
+             적고 TYM·서울바이오시스·LG전자의 진입가를 나열했는데, 새 예산·게이트
+             규칙에서 실제 발행은 오리온 1건이다. 오늘의 픽 바로 위에서 «오늘의 픽이
+             아닌 종목 3개»가 진입가를 달고 있으면 어느 게 추천인지 알 수 없다.
+             브리프의 제자리는 홈과 「시장」이다. 여기서는 링크로만 보낸다.
+
+             레짐 게이지도 뺐다 — 게이지는 「중립」이라 하고 국면 줄은 「횡보」라 해서
+             한 화면이 같은 것을 두 이름으로 불렀다. 이름은 국면 줄 하나로 통일한다. */}
+        {(rc || gradeBoard.total > 0) && (
+          <div className="mb-5 rounded-[14px] bg-navy px-5 py-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_1px_minmax(0,280px)]">
+              {/* 좌 — 국면. 픽을 읽기 전에 깔고 가는 전제다. */}
               <div>
-                <div className="mb-2.5 flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-on-navy">시장 브리프</h2>
-                  {asOf && (
-                    <span className="rounded bg-on-navy/10 px-2 py-0.5 text-[10px] text-on-navy-2">
-                      {asOf} 발행
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm font-semibold leading-relaxed text-on-navy">
-                  {briefData.headline}
-                </p>
-                {(briefData.watchpoints ?? []).length > 0 && (
-                  <ul className="mt-2.5 space-y-1.5">
-                    {briefData.watchpoints.slice(0, 3).map((w, i) => (
-                      <li key={i} className="flex gap-2 text-[11px] leading-relaxed text-on-navy-2">
-                        <span className="font-bold text-accent-on-navy">▸</span>
-                        {w}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {/* 드라이버 칩 */}
-                {regime?.drivers && regime.drivers.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {regime.drivers.slice(0, 3).map((d, i) => (
-                      <span
-                        key={i}
-                        className="rounded-[999px] bg-on-navy/10 px-2.5 py-1 text-[10px] text-on-navy-2"
-                      >
-                        {d}
+                {rc ? (
+                  <>
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="text-sm font-bold text-on-navy">
+                        {rc.icon} 지금 시장: {rc.name}
                       </span>
-                    ))}
-                  </div>
+                      <span className="text-[12px] font-medium text-on-navy-2">
+                        → {rc.routing}
+                      </span>
+                    </div>
+                    {rc.drivers.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {rc.drivers.slice(0, 3).map((d, i) => (
+                          <span
+                            key={i}
+                            className="rounded-[999px] bg-on-navy/10 px-2.5 py-1 text-[10px] text-on-navy-2"
+                          >
+                            {d}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {/* 하락장 경고를 별도 박스로 두지 않는다 — 위 routing 이 이미
+                        «무엇을 막는가»를 말했다. 여기서는 «그래서 어떻게 사는가»만 덧댄다. */}
+                    {regime?.regime === "risk_off" && picks.length > 0 && (
+                      <p className="mt-2 text-[11px] leading-relaxed text-warn-on-navy">
+                        하락장 구간입니다 — 진입은 분할로, 손절은 계획대로 타이트하게.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[12px] text-on-navy-2">국면 판정을 불러오지 못했습니다.</p>
                 )}
+                <Link
+                  href="/market"
+                  className="mt-2.5 inline-block text-[11px] font-semibold text-accent-on-navy hover:underline"
+                >
+                  시장 브리프·지표 자세히 →
+                </Link>
               </div>
 
-              {/* 구분선 */}
               <div className="hidden bg-on-navy/15 lg:block" />
 
-              {/* 우: 레짐 게이지 + 지수 쿼트 */}
-              <div className="flex flex-col gap-4">
-                <div>
-                  <p className="mb-2 text-[11px] font-semibold text-on-navy-3">시장 레짐</p>
-                  <RegimeGauge score={regimeScore} onNavy />
-                </div>
-                {(briefData.macro ?? []).length > 0 && (
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {briefData.macro.slice(0, 3).map((m) => (
-                      <div key={m.series} className="rounded-[8px] bg-on-navy/10 px-2 py-1.5">
-                        <p className="truncate text-[10px] text-on-navy-3">{m.label}</p>
-                        <p className="tnum text-xs font-bold text-on-navy">
-                          {m.value.toLocaleString()}
-                        </p>
-                        {m.change_pct != null && (
-                          <p
-                            className={`tnum text-[10px] font-semibold ${
-                              m.change_pct >= 0 ? "text-up-on-navy" : "text-down-on-navy"
-                            }`}
-                          >
-                            {m.change_pct >= 0 ? "+" : ""}
-                            {(m.change_pct * 100).toFixed(2)}%
-                          </p>
-                        )}
-                      </div>
-                    ))}
+              {/* 우 — 깔때기. 「왜 오늘 이것뿐인가」에 숫자로 답한다.
+                  전에는 3단계 카드로 「점수순 상위 5」까지 적었는데, 발행 수를 정하는
+                  건 이제 점수 순위가 아니라 예산(리스크·노출·종목수)이다. 화면에 숫자를
+                  박아두면 규칙이 바뀔 때 또 틀린다 — 세는 값만 적는다. */}
+              <div>
+                <p className="text-[11px] font-semibold text-on-navy-3">오늘 선정</p>
+                <div className="mt-1.5 flex items-end gap-3">
+                  <div>
+                    <p className="tnum text-xl font-extrabold text-on-navy">
+                      {gradeBoard.total}
+                    </p>
+                    <p className="text-[10px] text-on-navy-3">종목 분석</p>
                   </div>
-                )}
+                  <span className="pb-1.5 text-on-navy-3">→</span>
+                  <div>
+                    <p className="tnum text-xl font-extrabold text-accent-on-navy">
+                      {picks.length}
+                    </p>
+                    <p className="text-[10px] text-on-navy-3">건 발행</p>
+                  </div>
+                </div>
+                <p className="mt-2 text-[10.5px] leading-relaxed text-on-navy-3">
+                  점수 미달 · 백테스트 게이트 미통과 · 국면 억제 · 예산 초과는 발행하지
+                  않습니다. 통과가 없으면 빈 날로 둡니다.
+                </p>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* ── 선정 과정 3단계 ── */}
-        <HowItWorks analyzed={gradeBoard.total} />
-
-        {/* ── 하락장 경고 — 픽이 있을 때만(빈 날은 아래 방어 surface 가 대신 설명) ── */}
-        {regime?.regime === "risk_off" && picks.length > 0 && (
-          <div className="mb-4 flex items-start gap-2.5 rounded-[14px] border border-bad/30 bg-bad-soft px-4 py-3">
-            <span className="mt-0.5 shrink-0 text-bad" aria-hidden>
-              ⚠
-            </span>
-            <p className="text-[12px] leading-relaxed text-text-dim">
-              <span className="font-bold text-bad">하락장(위험회피) 구간</span> — 추세·돌파 매수픽은
-              하락장에서 손실 위험이 커 <span className="font-semibold text-text">자동 억제</span>됩니다.
-              대신 <span className="font-semibold text-text">과대낙폭 반등(역추세)·수급</span> 픽 위주로
-              제시하며, 기준을 통과하는 종목이 없으면 <span className="font-semibold text-text">빈 날</span>로
-              둡니다(억지로 채우지 않음). 진입 시 분할·타이트 손절 권장.
-            </p>
           </div>
         )}
 
@@ -675,9 +565,11 @@ export default async function FocusContent() {
                   </div>
                 ))}
               </div>
+              {/* 분석 건수(총계)는 위 전제 밴드가 이미 말했다 — 여기는 그 내역이다.
+                  같은 숫자를 두 번 적으면 어느 쪽이 무엇인지 되묻게 된다. */}
               <p className="mt-2.5 text-[11px] text-text-mute">
-                {latestDay ?? "—"} 발행 {gradeBoard.total}건 ·{" "}
-                거래 부적합 {gradeBoard.부적합}건 기본 숨김
+                {latestDay ?? "—"} 판정 · 「거래 부적합」 {gradeBoard.부적합}건은 목록에서
+                기본 숨김
               </p>
               <Link
                 href="/reports"
