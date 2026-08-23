@@ -134,17 +134,29 @@ def fallback_narrative(ctx: dict) -> dict:
     bts = ctx.get("backtests") or []
 
     thesis = _thesis(name, v, fac, ctx.get("flows"), top)
-    trader = (
-        f"가장 강한 셋업은 {top['setup']}({top['style']}) — 진입 {_won(top['entry_price'])}, "
-        f"손절 {_won(top['stop_loss'])}, 1차 목표 {_won(top['tp1'])}, "
-        f"손익비 {top['risk_reward'] if top['risk_reward'] is not None else '—'}R 입니다."
-        if top else "현재 발행된 매수 셋업이 없습니다."
-    )
+    # 영문 키·옛 스타일 축·「1차 목표」·「손익비」를 걷어낸다(2026-08-23).
+    # 화면에 「가장 강한 셋업은 bayes(position) … 1차 목표 4,050원, 손익비 2.5R」이
+    # 그대로 나가고 있었다. 채택 규칙(trail)은 목표에서 팔지 않는다 — 닿으면 손절만
+    # 진입가로 올린다. 실제로 확정된 값은 거는 돈(진입 − 손절)이다.
+    if top:
+        t_setup = SETUP_LABELS.get(top["setup"], top["setup"])
+        t_hz = HORIZON_LABELS.get(top.get("horizon") or "", None)
+        e, sl = top.get("entry_price"), top.get("stop_loss")
+        risk = f"{round(e - sl):,}원" if isinstance(e, (int, float)) and isinstance(sl, (int, float)) and e > sl else "—"
+        trader = (
+            f"가장 강한 셋업은 {t_setup}" + (f"({t_hz})" if t_hz else "") + " — "
+            f"진입 {_won(top['entry_price'])}, 손절 {_won(top['stop_loss'])}, "
+            f"본전 도달가 {_won(top['tp1'])}(닿으면 손절이 진입가로 올라갑니다), "
+            f"1주당 리스크 {risk} 입니다."
+        )
+    else:
+        trader = "현재 발행된 매수 셋업이 없습니다."
     alpha = fac.get("composite_alpha")
     quant = (
         f"합성 알파 {alpha if alpha is not None else '—'}, "
         + ", ".join(
-            f"{b['setup']} 백테스트 승률 {_pct((b['win_rate'] or 0) * 100, 0)}"
+            f"{SETUP_LABELS.get(b['setup'], b['setup'])} 백테스트 승률 "
+            f"{_pct((b['win_rate'] or 0) * 100, 0)}"
             for b in bts[:2]
         )
         if bts else "퀀트 팩터·백테스트 수치는 본문 표를 참조하십시오."
@@ -187,16 +199,24 @@ def render_body_md(ctx: dict, narrative: dict) -> str:
         # 참고 항목은 판정을 막지 않는다는 것을 본문에서도 밝힌다.
         note = "" if c.get("blocking", c.get("key") != "backtest_gate") else " (참고 — 판정에 반영 안 함)"
         lines.append(f"- {mark} {c['label']}{note}")
-    lines += ["", "## ③ 실행 플랜 (스타일별 진입·손절·목표)", ""]
+    # 본문 표도 화면과 같은 말·같은 축으로(2026-08-23). 「스타일 / TP1 / TP2 / R:R」은
+    # 폐기한 이름이다 — 목표에서 팔지 않으므로 TP2 는 쓰이지도 않는다.
+    lines += ["", "## ③ 실행 플랜 (기간별 진입·손절·본전 도달가)", ""]
     plan = ctx.get("plan") or []
     if plan:
-        lines.append("| 스타일 | 셋업 | 진입 | 손절 | TP1 | TP2 | R:R |")
-        lines.append("|---|---|---|---|---|---|---|")
+        lines.append("| 기간 | 셋업 | 진입 | 손절 | 본전 도달가 | 1주당 리스크 |")
+        lines.append("|---|---|---|---|---|---|")
         for p in plan:
+            e, sl = p.get("entry_price"), p.get("stop_loss")
+            risk = (
+                f"{round(e - sl):,}원"
+                if isinstance(e, (int, float)) and isinstance(sl, (int, float)) and e > sl
+                else "—"
+            )
             lines.append(
-                f"| {p['style']} | {p['setup']} | {_won(p['entry_price'])} "
-                f"| {_won(p['stop_loss'])} | {_won(p['tp1'])} | {_won(p['tp2'])} "
-                f"| {p['risk_reward'] if p['risk_reward'] is not None else '—'} |"
+                f"| {HORIZON_LABELS.get(p.get('horizon') or '', '—')} "
+                f"| {SETUP_LABELS.get(p['setup'], p['setup'])} | {_won(p['entry_price'])} "
+                f"| {_won(p['stop_loss'])} | {_won(p['tp1'])} | {risk} |"
             )
     else:
         lines.append("현재 발행된 매수 셋업 없음.")

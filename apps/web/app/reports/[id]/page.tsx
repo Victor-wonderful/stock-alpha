@@ -51,6 +51,50 @@ function planStatus(
   return { label: "진입 대기", variant: "warn" };
 }
 
+/**
+ * 레벨이 같은 플랜을 한 줄로 묶는다.
+ *
+ * 왜 같은 값이 여러 줄로 나왔나(2026-08-23 Victor) — 진입·손절·본전은 **셋업이 아니라
+ * 기간 프로파일**(ATR × 기간)로 계산한다. 그래서 한 종목의 같은 기간 셋업들은 레벨이
+ * 전부 같다. 실제 화면: 「주도주 추세」와 「눌림목」이 진입 104,100 / 손절 99,584 /
+ * 본전 115,391 / 리스크 4,516원 / 비중 23.1% 로 완전히 같은 카드 두 장이었다.
+ * 다른 건 셋업 이름과 근거 문장뿐이라 그 둘만 묶어서 보여준다.
+ *
+ * 만료·무효는 뒤로 내린다(그 안에서는 발행 순서 유지).
+ */
+function groupPlans(plan: ReportPlanRow[], last: number | null) {
+  const out: {
+    row: ReportPlanRow;
+    setups: string[];
+    rationales: string[];
+    status: ReturnType<typeof planStatus>;
+  }[] = [];
+  const byKey = new Map<string, (typeof out)[number]>();
+  for (const row of plan) {
+    const status = planStatus(row, last);
+    // 상태까지 키에 넣는다 — 하나는 살아 있고 하나는 만료라면 같은 줄이 아니다.
+    const key = [row.horizon ?? row.style, row.entry_price, row.stop_loss, row.tp1, status.label]
+      .join("|");
+    const hit = byKey.get(key);
+    if (hit) {
+      if (!hit.setups.includes(row.setup)) hit.setups.push(row.setup);
+      if (row.rationale) hit.rationales.push(row.rationale);
+      continue;
+    }
+    const entry = {
+      row,
+      setups: [row.setup as string],
+      rationales: row.rationale ? [row.rationale] : [],
+      status,
+    };
+    byKey.set(key, entry);
+    out.push(entry);
+  }
+  return out.sort(
+    (a, b) => Number(isDeadPlan(a.status.label)) - Number(isDeadPlan(b.status.label)),
+  );
+}
+
 /** 더는 실행할 수 없는 플랜인가 — 만료·무효. 화면에서 뒤로 내리고 흐리게 둔다. */
 function isDeadPlan(label: string): boolean {
   return label === "만료" || label.startsWith("무효");
@@ -180,7 +224,16 @@ export default async function ReportDetailPage({
                 <span className="h-3.5 w-0.5 rounded-full bg-border-strong" aria-hidden />
                 실행 플랜
               </h2>
-              <span className="text-[10px] text-text-mute">상태는 현재가 기준 실시간 판정</span>
+              {/* 「현재가 기준 판정」이라 적어 놓고 정작 현재가가 화면에 없었다
+                  (2026-08-23 Victor). 「진입권」이 왜 진입권인지 대조할 값이 없으면
+                  배지는 근거 없는 라벨이 된다. */}
+              <span className="flex items-baseline gap-1.5 text-[10px] text-text-mute">
+                현재가
+                <span className="tnum text-[12px] font-bold text-text">
+                  {lastNow != null ? fmtPrice(lastNow) : "—"}
+                </span>
+                기준 실시간 판정
+              </span>
             </div>
 
             {p.plan.length === 0 ? (
@@ -194,14 +247,13 @@ export default async function ReportDetailPage({
                     순서대로 나와서 만료 3개가 살아 있는 1개보다 위에 서 있었다. */}
                 <p className="mb-3 text-[11px] leading-relaxed text-text-mute">
                   같은 종목에서 셋업마다 따로 계산한 <span className="font-semibold text-text-dim">대안</span>입니다
-                  — 위에서 아래로 실행하는 단계가 아닙니다. 진입가가 같아도 셋업이 다르면
-                  손절가가 다릅니다.
+                  — 위에서 아래로 실행하는 단계가 아닙니다.{" "}
+                  <span className="text-text-dim">
+                    같은 기간이면 진입·손절이 같습니다(레벨은 셋업이 아니라 기간 프로파일로
+                    계산합니다) — 그런 줄은 셋업만 묶어 한 줄로 보여줍니다.
+                  </span>
                 </p>
-                {[...p.plan]
-                  .map((row) => ({ row, status: planStatus(row, lastNow) }))
-                  // 만료·무효는 뒤로. 그 안에서는 발행 순서를 유지한다.
-                  .sort((a, b) => Number(isDeadPlan(a.status.label)) - Number(isDeadPlan(b.status.label)))
-                  .map(({ row, status }, i) => {
+                {groupPlans(p.plan, lastNow).map(({ row, setups, rationales, status }, i) => {
                   const dead = isDeadPlan(status.label);
                   const sz = computePositionSizePct(row.entry_price, row.stop_loss, riskPct);
                   const tpPct =
@@ -237,10 +289,14 @@ export default async function ReportDetailPage({
                             픽으로 발행 안 함
                           </span>
                         )}
-                        <span className="rounded-[6px] bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 ring-1 ring-inset ring-violet-500/25">
-                          {TRADE_SETUP_LABELS[row.setup as keyof typeof TRADE_SETUP_LABELS] ??
-                            row.setup}
-                        </span>
+                        {setups.map((st) => (
+                          <span
+                            key={st}
+                            className="rounded-[6px] bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 ring-1 ring-inset ring-violet-500/25"
+                          >
+                            {TRADE_SETUP_LABELS[st as keyof typeof TRADE_SETUP_LABELS] ?? st}
+                          </span>
+                        ))}
                         <Badge variant={status.variant} size="sm">{status.label}</Badge>
                       </div>
 
@@ -294,10 +350,23 @@ export default async function ReportDetailPage({
                         ))}
                       </div>
 
-                      {row.rationale && (
-                        <p className="mt-2.5 text-[11px] leading-relaxed text-text-mute">
-                          {row.rationale}
-                        </p>
+                      {/* 근거는 셋업마다 다르다 — 레벨이 같아 한 줄로 묶었어도 «왜»는
+                          각각 적는다. 묶기 전에는 이 줄 하나 때문에 같은 카드가 여럿
+                          늘어서 있었다. */}
+                      {rationales.length > 0 && (
+                        <ul className="mt-2.5 space-y-1">
+                          {rationales.map((rt, k) => (
+                            <li key={k} className="text-[11px] leading-relaxed text-text-mute">
+                              {setups.length > 1 && (
+                                <span className="mr-1 font-semibold text-text-dim">
+                                  {TRADE_SETUP_LABELS[setups[k] as keyof typeof TRADE_SETUP_LABELS] ??
+                                    setups[k]}
+                                </span>
+                              )}
+                              {rt}
+                            </li>
+                          ))}
+                        </ul>
                       )}
                     </div>
                   );
