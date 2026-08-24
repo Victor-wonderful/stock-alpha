@@ -25,8 +25,17 @@ import Link from "next/link";
  * 옆에 나란히 두지 않고 뒤에 까는 이유: 좁은 폭에서 이미지를 한 단으로 쌓으면 그만큼
  * 아래 추천 종목이 밀린다. 배경이면 높이를 한 픽셀도 더 먹지 않는다. 대신 글자가
  * 사진 위로 올라가므로 네이비를 덮어 대비를 지킨다.
+ *
+ * cta — 기본은 「검증 성적표」(/picks)다. **비로그인 랜딩에서는 그 링크가 벽이다**
+ * (2026-08-24: 홈을 뺀 전 화면이 회원 전용이 됐다). 처음 온 사람에게 «눌러 봐야
+ * 로그인 화면으로 튕기는 버튼»을 첫 화면에 두면 그게 첫인상이 된다. 그래서 랜딩은
+ * 여기에 「무료로 시작하기」를 끼운다 — 컴포넌트는 하나로 두고 목적지만 갈린다.
  */
-export function HomeHero() {
+export function HomeHero({
+  cta = { href: "/picks", label: "검증 성적표", labelTail: " 보기" },
+}: {
+  cta?: { href: string; label: string; labelTail?: string };
+} = {}) {
   return (
     <section className="relative mb-8 overflow-hidden rounded-[16px] bg-navy px-6 py-8 xl:flex xl:h-[340px] xl:items-stretch xl:rounded-[18px] xl:p-0">
       {/* 1280 미만 — 사진을 뒤에 깔고 네이비로 덮는다. 높이를 늘리지 않는다. */}
@@ -77,10 +86,13 @@ export function HomeHero() {
             /strategies 는 메뉴에 없어 한 번 들어가면 되돌아올 길이 없었다. */}
         <div className="flex flex-wrap items-center gap-[11px] pt-1 xl:pt-0.5">
           <Link
-            href="/picks"
+            href={cta.href}
             className="inline-flex min-h-10 items-center rounded-[9px] bg-accent px-6 text-[14px] font-semibold text-on-navy transition-colors duration-200 hover:bg-accent-2"
           >
-            검증 성적표<span className="hidden sm:inline"> 보기</span>
+            {cta.label}
+            {cta.labelTail && (
+              <span className="hidden sm:inline">{cta.labelTail}</span>
+            )}
           </Link>
         </div>
 
