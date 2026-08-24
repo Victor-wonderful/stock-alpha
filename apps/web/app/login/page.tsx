@@ -184,23 +184,57 @@ export default async function LoginPage({
           />
         </div>
 
-        {/* 개인정보를 받는 이상 동의 없이 저장하지 않는다. 무엇을 왜 받는지 이 자리에
-            적는다 — 링크 뒤에 숨기면 아무도 읽지 않는다. */}
+        {/* 동의는 둘로 나눈다 — 약관과 개인정보는 다른 문서다. 하나로 묶으면 무엇에
+            동의한 것인지 나중에 아무도 말할 수 없다.
+            요약을 체크박스 안에 적고, 전문은 새 창으로 연다(가입하다 말고 화면을
+            떠나면 입력값이 사라진다). */}
         {isSignup && (
-          <label className="flex gap-2.5 rounded-[10px] border border-border bg-surface-2 px-3.5 py-3">
-            <input
-              type="checkbox"
-              name="agree"
-              required
-              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
-            />
-            <span className="text-[12px] leading-[1.7] text-text-dim">
-              <span className="font-semibold text-text">개인정보 수집·이용에 동의합니다</span>
-              <br />
-              닉네임·연락처·이메일을 받습니다. 본인 확인과 중요 공지에 쓰고, 탈퇴하면
-              지웁니다. 제3자에게 넘기지 않습니다.
-            </span>
-          </label>
+          <div className="space-y-2.5 rounded-[10px] border border-border bg-surface-2 px-3.5 py-3">
+            <label className="flex gap-2.5">
+              <input
+                type="checkbox"
+                name="agree_terms"
+                required
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+              />
+              <span className="text-[12px] leading-[1.7] text-text-dim">
+                <span className="font-semibold text-text">이용약관에 동의합니다</span>{" "}
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="text-accent hover:underline"
+                >
+                  전문 보기
+                </Link>
+                <br />
+                투자 참고 정보를 제공하는 서비스입니다. 자금을 맡거나 매매를 대신하지
+                않으며, 수익을 약속하지 않습니다.
+              </span>
+            </label>
+            <label className="flex gap-2.5 border-t border-border-soft pt-2.5">
+              <input
+                type="checkbox"
+                name="agree_privacy"
+                required
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+              />
+              <span className="text-[12px] leading-[1.7] text-text-dim">
+                <span className="font-semibold text-text">
+                  개인정보 수집·이용에 동의합니다
+                </span>{" "}
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="text-accent hover:underline"
+                >
+                  전문 보기
+                </Link>
+                <br />
+                닉네임·연락처·이메일을 받습니다. 본인 확인과 중요 공지에 쓰고, 탈퇴하면
+                지웁니다. 제3자에게 넘기거나 광고에 쓰지 않습니다.
+              </span>
+            </label>
+          </div>
         )}
 
         <button

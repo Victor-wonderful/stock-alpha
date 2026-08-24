@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { LEGAL_VERSION } from "@/lib/legal";
 
 /**
  * 로그인·회원가입·로그아웃.
@@ -63,7 +64,10 @@ export async function signUp(next: string | null, formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const nickname = String(formData.get("nickname") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
-  const agreed = formData.get("agree") === "on";
+  // 동의는 둘로 나눈다 — 약관과 개인정보는 다른 문서이고, 하나로 묶으면 «무엇에
+  // 동의했나»가 흐려진다.
+  const agreeTerms = formData.get("agree_terms") === "on";
+  const agreePrivacy = formData.get("agree_privacy") === "on";
 
   if (!nickname) fail(to, "닉네임을 입력해 주세요.", "signup");
   if (nickname.length > 20) fail(to, "닉네임은 20자 이내로 정해 주세요.", "signup");
@@ -73,8 +77,12 @@ export async function signUp(next: string | null, formData: FormData) {
   }
   const phone = normalizePhone(phoneRaw);
   if (!phone) fail(to, "연락처를 숫자 9~11자리로 입력해 주세요. (예: 010-1234-5678)", "signup");
-  // 개인정보를 받는 이상 동의 없이 저장하지 않는다. 체크박스가 장식이 되면 안 된다.
-  if (!agreed) fail(to, "개인정보 수집·이용에 동의해야 가입할 수 있습니다.", "signup");
+  // 동의 없이 저장하지 않는다. 체크박스가 장식이 되면 안 된다 — 화면이 required 를
+  // 걸어도 서버가 다시 본다(폼은 우회할 수 있다).
+  if (!agreeTerms) fail(to, "이용약관에 동의해야 가입할 수 있습니다.", "signup");
+  if (!agreePrivacy) {
+    fail(to, "개인정보 수집·이용에 동의해야 가입할 수 있습니다.", "signup");
+  }
 
   const supabase = await createClient();
   // 닉네임·연락처를 **가입 메타데이터**로 넘긴다. 이메일 확인을 쓰는 프로젝트에서는
@@ -82,7 +90,17 @@ export async function signUp(next: string | null, formData: FormData) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { nickname, phone } },
+    // 동의 «시각»은 여기서 만들지 않는다 — DB 트리거가 now() 로 찍는다(0044).
+    // 클라이언트나 웹 서버가 보낸 시각을 믿으면 증빙이 되지 않는다.
+    options: {
+      data: {
+        nickname,
+        phone,
+        agreed_terms: "true",
+        agreed_privacy: "true",
+        doc_version: LEGAL_VERSION,
+      },
+    },
   });
   if (error) {
     const msg = /already registered|already exists/i.test(error.message)
