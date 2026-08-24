@@ -53,10 +53,10 @@ export async function AuthMenu() {
 
   // 전문가로 등록된 사람에게만 「추천 쓰기」가 보인다. 남에게 보여 봐야 눌러도 막힌다.
   const [expert, profile] = await Promise.all([getMyExpert(), getMyProfile()]);
-  // 부르는 순서: 전문가 필명 → 가입 때 정한 닉네임 → 아이디.
+  // 부르는 순서: 전문가 필명 → 가입 때 정한 닉네임.
   // 이메일은 쓰지 않는다 — 개인정보를 굳이 머리에 띄울 이유가 없다(예전엔 앞부분을 썼다).
-  const label =
-    expert?.name ?? profile?.displayName ?? profile?.username ?? "내 계정";
+  // 닉네임은 가입 때 필수라, 여기까지 내려오는 건 트리거 전에 만들어진 옛 계정뿐이다.
+  const label = expert?.name ?? profile?.displayName ?? "내 계정";
 
   return (
     <div className="flex items-center gap-1.5 sm:gap-2">
