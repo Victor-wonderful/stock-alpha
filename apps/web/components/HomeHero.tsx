@@ -17,12 +17,34 @@ import Link from "next/link";
  * 「추천 종목」 제목이 여전히 첫 화면에 걸리면서 히어로도 제 무게를 유지한다.
  * 높이를 줄일 때는 제목 46→38, 줄간격 22→17 도 같이 줄인다 — 높이만 줄이면
  * 안이 눌린 것처럼 보인다.
- * 1280 미만에서는 이미지를 빼고 높이를 내용에 맡긴다(블로그도 같은 판단).
+ * 1280 미만에서는 이미지를 **배경으로** 깐다(2026-08-24 Victor — "이미지들이 다
+ * 안 나온다"). 원래는 통째로 빼는 판단이었는데, 이 앱의 이미지는 이 한 장뿐이라
+ * 폰에서는 사이트 전체에 사진이 0장이 됐다. 갤럭시 Z 폴드는 펼쳐도 1280 미만이라
+ * 큰 화면에서도 안 나왔다.
+ *
+ * 옆에 나란히 두지 않고 뒤에 까는 이유: 좁은 폭에서 이미지를 한 단으로 쌓으면 그만큼
+ * 아래 추천 종목이 밀린다. 배경이면 높이를 한 픽셀도 더 먹지 않는다. 대신 글자가
+ * 사진 위로 올라가므로 네이비를 덮어 대비를 지킨다.
  */
 export function HomeHero() {
   return (
-    <section className="mb-8 overflow-hidden rounded-[16px] bg-navy px-6 py-8 xl:flex xl:h-[340px] xl:items-stretch xl:rounded-[18px] xl:p-0">
-      <div className="flex flex-col justify-center gap-[18px] xl:gap-[17px] xl:w-[720px] xl:shrink-0 xl:pl-14">
+    <section className="relative mb-8 overflow-hidden rounded-[16px] bg-navy px-6 py-8 xl:flex xl:h-[340px] xl:items-stretch xl:rounded-[18px] xl:p-0">
+      {/* 1280 미만 — 사진을 뒤에 깔고 네이비로 덮는다. 높이를 늘리지 않는다. */}
+      <div className="absolute inset-0 xl:hidden" aria-hidden>
+        <Image
+          src="/images/home/hero.webp"
+          alt=""
+          fill
+          sizes="100vw"
+          className="object-cover opacity-[0.28]"
+          priority
+        />
+        {/* 글자가 얹히는 왼쪽은 네이비를 거의 그대로 두고, 오른쪽으로 갈수록 사진을
+            드러낸다. 균일하게 덮으면 사진이 «회색 얼룩»으로만 보인다. */}
+        <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/85 to-navy/45" />
+      </div>
+
+      <div className="relative flex flex-col justify-center gap-[18px] xl:gap-[17px] xl:w-[720px] xl:shrink-0 xl:pl-14">
         <span className="self-start rounded-[999px] bg-on-navy/10 px-3.5 py-[7px] text-[12px] font-semibold uppercase tracking-[0.6px] text-on-navy-2">
           VICTOR @ VECTA
           <span className="hidden sm:inline"> · 종목 리서치 터미널</span>
