@@ -1,6 +1,7 @@
 // 기본은 공개(무쿠키·60초 캐시) 클라이언트. 쿠키를 읽으면 요청이 동적으로 확정돼
 // fetch 캐시가 전부 무효화되므로, 세션이 실제로 필요한 곳에서만 createUserClient 를 쓴다.
 import { createPublicClient } from "@/lib/supabase/public";
+import { getSessionUser } from "@/lib/session";
 import { createClient as createUserClient } from "@/lib/supabase/server";
 import type { TradeSetup, TradeStyle } from "@stock-alpha/db";
 import {
@@ -52,12 +53,12 @@ export interface SignalFilters {
 // (RLS: profiles 는 본인만 read → anon 은 자동으로 기본값)
 export async function getUserRiskPct(): Promise<number> {
   try {
-    // 여기만 로그인 세션이 필요하다 — 쿠키 클라이언트 유지(캐시 대상 아님).
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // 여기만 로그인 세션이 필요하다 — 쿠키 클라이언트 유지(공개 캐시 대상 아님).
+    // 세션 자체는 요청당 한 번만 묻는다(lib/session) — 예전엔 화면 하나에 이 왕복이
+    // 다섯 번이었다(2026-08-25 측정).
+    const user = await getSessionUser();
     if (!user) return DEFAULT_RISK_PER_TRADE_PCT;
+    const supabase = await createUserClient();
     const { data } = await supabase
       .from("profiles")
       .select("risk_per_trade_pct")

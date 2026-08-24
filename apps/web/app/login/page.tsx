@@ -4,6 +4,7 @@ import { CheckCircle2, TriangleAlert } from "lucide-react";
 
 import { VectaLogo } from "@/components/VectaLogo";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/session";
 import { signIn, signUp } from "./actions";
 
 /**
@@ -70,10 +71,7 @@ export default async function LoginPage({
   const { error, next, mode, sent } = await searchParams;
 
   // 이미 로그인한 사람에게 로그인 화면을 보여주지 않는다.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (user) redirect(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
 
   const isSignup = mode === "signup";

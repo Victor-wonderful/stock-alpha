@@ -1,4 +1,5 @@
 import { createClient as createUserClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/session";
 
 /**
  * 운영자인가 — 관리 화면의 출입 조건(0047 profiles.is_admin).
@@ -16,11 +17,9 @@ import { createClient as createUserClient } from "@/lib/supabase/server";
  */
 export async function isAdmin(): Promise<boolean> {
   try {
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return false;
+    const supabase = await createUserClient();
     const { data } = await supabase
       .from("profiles")
       .select("is_admin")
@@ -88,11 +87,9 @@ export async function getExpertApplications(): Promise<ExpertApplication[]> {
 /** 내가 낸 신청 — 신청 화면이 «이미 냈습니다»를 말하려면 필요하다. */
 export async function getMyApplication(): Promise<ExpertApplication | null> {
   try {
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return null;
+    const supabase = await createUserClient();
     const { data } = await supabase
       .from("expert_applications")
       .select(SELECT)
