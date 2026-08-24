@@ -58,9 +58,12 @@ export function AppShell({
   return (
     <div className="flex min-h-screen flex-col">
       <GNB authSlot={<AuthMenu />} />
-      <main className="mx-auto w-full max-w-[1440px] flex-1 px-7 py-7 pb-10">
+      {/* 좌우 여백은 폰에서 16px, sm 이상에서 28px 다. 390px 화면에서 28px 을 양쪽에
+          두면 본문이 334px 로 줄어 표·카드가 그만큼 더 눌린다(홈은 이미 그렇게 하고
+          있었는데 나머지 메뉴는 28 고정이었다 — 2026-08-24). */}
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-10 pt-5 sm:px-7 sm:pt-7">
         {!hideHeader && (
-          <div className="mb-6 rounded-[14px] bg-navy px-6 py-5">
+          <div className="mb-5 rounded-[14px] bg-navy px-4 py-4 sm:mb-6 sm:px-6 sm:py-5">
             <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline gap-2">
