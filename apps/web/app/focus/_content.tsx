@@ -409,7 +409,70 @@ export default async function FocusContent() {
                       {/* 표로 분리 — 숫자가 라벨 없이 한 열에 쌓여 있어 어느 값이
                           무엇인지 구분되지 않았다. 열마다 머리글을 단다.
                           '국면 대기' 배지는 이 목록 전체의 성격이라 행마다 반복하지 않는다. */}
-                      <div className="overflow-x-auto">
+                      {/* ── 폰 (768 미만) — 후보 하나가 한 항목 ── */}
+                      <div className="md:hidden">
+                        {waitlist.map((r) => {
+                          const px = waitPrices.get(r.symbol ?? "");
+                          return (
+                            <div
+                              key={`m-${r.id}`}
+                              className="border-b border-border/50 py-3 last:border-0"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Link
+                                      href={`/stocks/${r.symbol}`}
+                                      className="text-[15px] font-bold text-text"
+                                    >
+                                      {r.name}
+                                    </Link>
+                                    <SymbolCode
+                                      symbol={r.symbol}
+                                      className="text-[12px] text-text-mute"
+                                    />
+                                    {r.rating && (
+                                      <Badge variant={r.rating === "매수" ? "bull" : "warn"} size="sm">
+                                        {r.rating}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {passedSetupsByReport.get(r.id) && (
+                                    <p className="mt-1 text-[12px] text-good">
+                                      검증 통과: {passedSetupsByReport.get(r.id)!.join(" · ")}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <p className="tnum text-[15px] font-bold text-text">
+                                    {fmtPrice(px?.close ?? null)}
+                                  </p>
+                                  <p
+                                    className={`tnum text-[12.5px] font-semibold ${
+                                      (px?.changePct ?? 0) >= 0 ? "text-good" : "text-bad"
+                                    }`}
+                                  >
+                                    {px?.changePct != null ? fmtPct(px.changePct) : "—"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-2 flex items-center gap-3">
+                                <span className="tnum text-[15px] font-extrabold text-accent">
+                                  {r.score}점
+                                </span>
+                                <Link
+                                  href={`/reports/${r.id}`}
+                                  className="ml-auto inline-block whitespace-nowrap rounded-[8px] border border-border px-3 py-1.5 text-[12px] font-semibold text-accent"
+                                >
+                                  🔔 알림·분석
+                                </Link>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="hidden overflow-x-auto md:block">
                         <table className="w-full min-w-[520px] text-sm">
                           <thead>
                             <tr className="border-b border-border text-[10px] uppercase tracking-wide text-text-mute">

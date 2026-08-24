@@ -62,7 +62,57 @@ export default async function PortfolioPage() {
                 </span>
               }
             >
-              <div className="overflow-x-auto">
+              {/* ── 폰 (768 미만) — 종목 하나가 카드 한 장 ── */}
+              <div className="md:hidden">
+                {rows.map((r) => {
+                  const upside =
+                    r.target_price && r.entry_price ? r.target_price / r.entry_price - 1 : null;
+                  return (
+                    <article key={`m-${r.symbol}`} className="border-b border-border-soft py-3.5 last:border-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-baseline gap-x-2">
+                            <Link href={`/stocks/${r.symbol}`} className="text-[15px] font-bold text-text">
+                              {r.name}
+                            </Link>
+                            <SymbolCode symbol={r.symbol} className="text-[12px] text-text-mute" />
+                          </div>
+                          <p className="mt-1 text-[12px] leading-[1.6] text-text-mute">{r.thesis}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="tnum text-[15px] font-bold text-text">
+                            {(r.weight * 100).toFixed(0)}%
+                          </p>
+                          <p className="text-[11.5px] text-text-mute">비중</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <HorizonChip horizon={r.horizon} />
+                        <StrengthBar value={r.conviction} />
+                      </div>
+                      <dl className="mono mt-2.5 flex flex-wrap gap-x-4 gap-y-1 rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px]">
+                        <span>
+                          <dt className="inline text-text-mute">진입 </dt>
+                          <dd className="inline font-semibold text-text">{fmtPrice(r.entry_price)}</dd>
+                        </span>
+                        <span>
+                          <dt className="inline text-text-mute">손절 </dt>
+                          <dd className="inline font-semibold text-bear">{fmtPrice(r.stop_loss)}</dd>
+                        </span>
+                        <span>
+                          <dt className="inline text-text-mute">목표 </dt>
+                          <dd className="inline font-semibold text-bull">
+                            {fmtPrice(r.target_price)}
+                            <span className="ml-1 font-normal">{fmtPct(upside)}</span>
+                          </dd>
+                        </span>
+                      </dl>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">

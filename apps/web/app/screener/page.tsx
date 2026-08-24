@@ -466,9 +466,9 @@ export default async function ScreenerPage({
                     오늘 이 셋업의 시그널은 없습니다.
                   </p>
                 ) : (
-                  <div className="no-scrollbar overflow-x-auto px-4">
+                  <div className="no-scrollbar px-4 md:overflow-x-auto">
                     {/* 항목 머리 — 아래 행과 같은 그리드를 써야 열이 맞는다. */}
-                    <div className="grid min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-baseline gap-3 border-b border-border-soft py-2 text-[10px] text-text-mute">
+                    <div className="hidden min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-baseline gap-3 border-b border-border-soft py-2 text-[10px] text-text-mute md:grid">
                       <span>종목</span>
                       <span>기간</span>
                       <span className="text-right">현재가</span>
@@ -485,7 +485,10 @@ export default async function ScreenerPage({
                         // ::after 로 행을 덮는다(마크업 유효 · 스크린리더 정상).
                         <div
                           key={r.id}
-                          className="relative grid min-w-[660px] grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] items-center gap-3 py-3 transition-colors hover:bg-surface-2"
+                          /* 폰에서는 6열을 2열로 접는다 — 종목|기간 / 현재가|진입가 /
+                             손절가|합성알파 세 줄이 된다. 660px 그리드를 그대로 두면
+                             옆으로 밀어야 하고, 이 목록은 훑는 용도라 그게 가장 나쁘다. */
+                          className="relative grid grid-cols-2 items-center gap-x-3 gap-y-1 py-3 transition-colors hover:bg-surface-2 md:min-w-[660px] md:grid-cols-[minmax(140px,2fr)_6.5rem_minmax(110px,1.4fr)_minmax(130px,1.6fr)_3.5rem_3rem] md:gap-3"
                         >
                           <span className="flex min-w-0 items-baseline gap-2">
                             <Link

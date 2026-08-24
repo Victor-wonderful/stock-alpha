@@ -253,7 +253,72 @@ export default async function StrategiesPage() {
             </span>
           }
         >
-          <div className="overflow-x-auto">
+          {/* ── 폰 (768 미만) — 플레이북 하나가 카드 한 장 ──
+              열이 8개다. 표로 두면 기대값·승률이 스크롤 뒤로 숨는데, 이 화면은
+              «어느 전략이 통과했나»를 보는 곳이라 검증 결과가 먼저 보여야 한다.
+              (멀티팩터 종합 행은 표에만 둔다 — 카드로 옮기면 같은 것이 두 모양이 된다.) */}
+          <div className="md:hidden">
+            {data.map((b, i) => {
+              const guide = SETUP_GUIDE[b.setup];
+              const exp = b.expectancy_r ?? null;
+              return (
+                <article key={`m-${i}`} className="border-b border-border-soft py-3.5 last:border-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-bold text-text">{guide?.name ?? b.setup}</p>
+                      <p className="mt-1 text-[12px] leading-[1.6] text-text-mute">
+                        {guide?.desc ?? ""}
+                      </p>
+                      <p className="mt-1 text-[12px] text-text-dim">
+                        {horizonLabel(b.horizon) ?? "기간 미상"}
+                        {b.horizon && !PUBLISH_HORIZONS.includes(b.horizon as never) && (
+                          <span className="text-text-mute"> · 발행 안 함</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <Badge variant={b.passed ? "pass" : "fail"} size="md">
+                        {b.passed ? "통과" : "미통과"}
+                      </Badge>
+                      <p
+                        className={`mono mt-1 text-[15px] font-bold ${
+                          exp != null && exp > 0 ? "text-bull" : "text-bear"
+                        }`}
+                      >
+                        {exp != null ? `${exp > 0 ? "+" : ""}${fmtNum(exp, 3)}` : "—"}
+                      </p>
+                      <p className="text-[11.5px] text-text-mute">기대값 R</p>
+                    </div>
+                  </div>
+                  {!b.passed && failReason(b) && (
+                    <p className="mt-1.5 text-[12px] text-text-mute">{failReason(b)}</p>
+                  )}
+                  <dl className="mono mt-2.5 flex flex-wrap gap-x-4 gap-y-1 rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px]">
+                    <span>
+                      <dt className="inline text-text-mute">승률 </dt>
+                      <dd className="inline font-semibold text-text">{fmtPct(b.win_rate, 0)}</dd>
+                    </span>
+                    <span>
+                      <dt className="inline text-text-mute">이기면 </dt>
+                      <dd className="inline font-semibold text-text">{fmtNum(b.avg_rr, 2)}</dd>
+                    </span>
+                    <span>
+                      <dt className="inline text-text-mute">최대 낙폭 </dt>
+                      <dd className="inline font-semibold text-text">
+                        {b.mdd != null ? `${(b.mdd * 100).toFixed(1)}%` : "—"}
+                      </dd>
+                    </span>
+                    <span>
+                      <dt className="inline text-text-mute">검증 </dt>
+                      <dd className="inline text-text-dim">{b.verified_at ?? b.period ?? "—"}</dd>
+                    </span>
+                  </dl>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
