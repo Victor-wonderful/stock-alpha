@@ -353,6 +353,35 @@ def weekly(
 
 
 @app.command()
+def blog(
+    as_of: str = typer.Option("", help="기준일(YYYY-MM-DD). 비우면 각 종류의 최신 리포트"),
+    kind: str = typer.Option("all", help="all | daily | weekly | analysis"),
+) -> None:
+    """엔진 글 발행 — 계산 결과를 «읽는 글»로 옮겨 blog_posts 에 넣는다.
+
+    vecta-blog 가 그 표를 읽어 진열한다. 파일을 커밋하지 않으므로 빌드도 push 권한도
+    필요 없고, 잘못 나간 글은 published=false 한 줄로 내린다.
+
+    LLM 을 쓰지 않는다 — 문장은 전부 이미 발행된 리포트의 수치에서 규칙으로 나온다.
+    그래서 여러 번 돌려도 같은 글이 나오고(멱등), API 키가 죽어 있어도 돈다.
+    """
+    from engine.blog import publish as bp
+
+    day = as_of or None
+    fns = {"daily": bp.publish_daily, "weekly": bp.publish_weekly,
+           "analysis": bp.publish_analysis}
+    if kind == "all":
+        out = bp.publish_all(day)
+    elif kind in fns:
+        out = {kind: fns[kind](day)}
+    else:
+        raise typer.BadParameter("kind 는 all | daily | weekly | analysis")
+
+    for k, v in out.items():
+        typer.echo(f"{k}: {v['title'] if v else '건너뜀(원본 리포트 없음)'}")
+
+
+@app.command()
 def daily(
     skip_ingest: bool = typer.Option(False, help="시세 인제스트 생략(데이터 최신일 때)"),
     ingest_days: int = typer.Option(7, help="시세 인제스트 기간(일)"),
@@ -578,7 +607,10 @@ def worker(
                   ["ingest-disclosures", "--days", "3"],
                   # 주간 브리핑은 맨 뒤 — 같은 주를 덮어쓰므로 언제 돌려도 복구된다.
                   # 앞 명령이 실패하면 이건 안 돌지만, 다음날 실행이 그 주를 다시 채운다.
-                  ["weekly"]]},
+                  ["weekly"],
+                  # 글 발행은 그 뒤 — 이미 나온 리포트를 옮기기만 하므로 계산이 끝난
+                  # 다음이어야 한다. 멱등이라 다시 돌려도 같은 글이 덮인다.
+                  ["blog"]]},
     ]
 
     def load_state() -> dict:

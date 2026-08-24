@@ -1946,6 +1946,26 @@ export async function getBlogPosts(): Promise<BlogPost[]> {
   }
 }
 
+/**
+ * 사람 글 + 엔진 글을 한 섹션에 세운다 — **사람 글이 먼저**다.
+ *
+ * 2026-08-24 부터 엔진이 매 배치 끝에 글을 발행한다(engine/daily · engine/weekly ·
+ * engine/analysis). 블로그의 원칙은 «결론은 사람이 낸다»이므로, 같은 주제에 사람 글이
+ * 있으면 그것이 위에 선다. 기계 글은 그 아래를 채운다 — 자리를 비워 두지 않되
+ * 사람 글을 밀어내지도 않는다.
+ */
+export function pickBlogPostsWithEngine(
+  posts: BlogPost[],
+  humanCategory: string,
+  humanSub: string,
+  engineSub: string,
+  limit = 20,
+): BlogPost[] {
+  const human = pickBlogPosts(posts, humanCategory, humanSub, limit);
+  const engine = pickBlogPosts(posts, "engine", engineSub, limit);
+  return [...human, ...engine].slice(0, limit);
+}
+
 /** 카테고리·하위분류로 골라 최신순 N건. 홈 세 섹션이 각각 한 번씩 부른다. */
 export function pickBlogPosts(
   posts: BlogPost[],
