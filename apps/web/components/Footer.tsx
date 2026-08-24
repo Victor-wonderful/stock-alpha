@@ -98,9 +98,25 @@ export function Footer() {
             지연이나 오류가 그대로 반영될 수 있으며, 화면의 값은 표시된 기준일 시점의
             것입니다.
           </p>
-          <p className="mt-5 text-[11.5px] text-text-mute">
-            © {new Date().getFullYear()} VECTA Stock
-          </p>
+          {/* 약관·방침은 가입 화면에서만 닿을 수 있으면 안 된다 — 이미 가입한 사람이
+              «내가 무엇에 동의했더라»를 찾을 자리가 여기다(2026-08-24). */}
+          <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Link
+              href="/terms"
+              className="text-[11.5px] font-semibold text-text-dim transition-colors hover:text-accent"
+            >
+              이용약관
+            </Link>
+            <Link
+              href="/privacy"
+              className="text-[11.5px] font-semibold text-text-dim transition-colors hover:text-accent"
+            >
+              개인정보처리방침
+            </Link>
+            <p className="ml-auto text-[11.5px] text-text-mute">
+              © {new Date().getFullYear()} VECTA Stock
+            </p>
+          </div>
         </div>
       </div>
     </footer>
