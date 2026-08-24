@@ -3,6 +3,7 @@ import { MarketTicker } from "@/components/MarketTicker";
 
 import { DEFAULT_RISK_PER_TRADE_PCT } from "@/lib/position";
 import { GNB } from "@/components/GNB";
+import { AuthMenu } from "@/components/AuthMenu";
 import { HomeHero } from "@/components/HomeHero";
 import { OpenPicksTable } from "@/components/OpenPicksTable";
 import { OpenPicksSummary } from "@/components/OpenPicksSummary";
@@ -223,7 +224,7 @@ export default async function HomePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-bg">
-      <GNB />
+      <GNB authSlot={<AuthMenu />} />
 
       {/* 지수 티커 — components/MarketTicker 로 옮겼다(2026-08-23). 시장 페이지의
           매크로도 같은 모양을 쓰므로 두 곳이 갈라지지 않게 한 컴포넌트로 둔다. */}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Search, User } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VectaLogo } from "@/components/VectaLogo";
 
@@ -40,7 +40,7 @@ const NAV_ITEMS = [
   { href: "/watchlist", label: "내 자산", match: ["/watchlist", "/diagnosis", "/alerts"] },
 ] as const;
 
-export function GNB() {
+export function GNB({ authSlot }: { authSlot?: React.ReactNode }) {
   const path = usePathname();
 
   return (
@@ -111,14 +111,10 @@ export function GNB() {
           >
             <Bell className="h-4 w-4" />
           </Link>
-          <button
-            type="button"
-            aria-label="프로필 — 로그인 준비 중"
-            title="로그인 준비 중"
-            className="hidden h-11 w-11 place-items-center rounded-full border border-border bg-surface-2 text-text-dim transition-colors hover:text-text sm:grid"
-          >
-            <User className="h-4 w-4" />
-          </button>
+          {/* 계정 — 서버에서 세션을 읽어 넘어온다(components/AuthMenu).
+              여기 있던 «로그인 준비 중» 버튼은 눌러도 아무 일도 없었고, 그 탓에
+              /login 화면이 있는데도 사이트에서 갈 길이 없었다(2026-08-24). */}
+          {authSlot}
         </div>
       </div>
     </header>

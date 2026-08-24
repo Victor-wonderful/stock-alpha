@@ -1,4 +1,5 @@
 import { GNB } from "./GNB";
+import { AuthMenu } from "./AuthMenu";
 
 /** 머리 오른쪽에 세우는 «지금 상태» 숫자. 페이지마다 2~3개. */
 export type PageStat = {
@@ -56,7 +57,7 @@ export function AppShell({
 }) {
   return (
     <div className="flex min-h-screen flex-col">
-      <GNB />
+      <GNB authSlot={<AuthMenu />} />
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-7 py-7 pb-10">
         {!hideHeader && (
           <div className="mb-6 rounded-[14px] bg-navy px-6 py-5">
