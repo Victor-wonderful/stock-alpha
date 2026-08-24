@@ -3,11 +3,13 @@ import { SectionHead } from "@/components/SectionHead";
 import {
   getWeeklyReports,
   getMacroSeries,
+  getMorningBriefs,
   getBlogPosts,
   getExpertNotes,
   pickBlogPosts,
 } from "@/lib/data";
 import { WeeklyBriefs, MacroSection, BlogPosts } from "@/components/HomeSections";
+import { BriefArchive } from "@/components/BriefArchive";
 import { ExpertNotes } from "@/components/ExpertNotes";
 
 /**
@@ -19,18 +21,26 @@ import { ExpertNotes } from "@/components/ExpertNotes";
  *
  * 기업 분석은 여기 두지 않는다 — 이미 '종목'(/reports)이 그 역할을 한다.
  * 대신 블로그가 쓴 종목 글은 이 시스템의 리포트와 성격이 달라 아래 「블로그에서」로 모은다.
+ *
+ * 2026-08-24 — 매일 나오는 유일한 글이 이 페이지에 없었다. 모닝 브리프가 6/10 부터
+ * 매 거래일 쌓여 48편인데 로더가 최신 1건만 읽어, 어제 브리프조차 다시 읽을 데가
+ * 없었다. 「매일 브리프」를 이 페이지의 척추로 세운다.
  */
 export const metadata = {
   title: "인사이트 — VECTA Stock",
-  description: "주간 브리핑과 매크로. 전망이 아니라 측정한 것만 적습니다.",
+  description: "매일 브리프와 주간 브리핑, 매크로. 전망이 아니라 측정한 것만 적습니다.",
 };
 
+/** 인사이트 본문에 세우는 브리프 수. 나머지는 /insights/brief 로 보낸다. */
+const BRIEF_PREVIEW = 12;
+
 export default async function InsightsPage() {
-  const [weekly, macro, blogPosts, expertNotes] = await Promise.all([
+  const [weekly, macro, briefs, blogPosts, expert] = await Promise.all([
     getWeeklyReports(20),
     // 제외 목록을 비운다 — 원달러가 USDKRW(네이버, 매일)로 바뀌어 더는 지연된
     // 시리즈가 아니다. 티커와 값이 갈리던 원인이었다(2026-08-22).
     getMacroSeries(),
+    getMorningBriefs(400),
     getBlogPosts(),
     // 전문가 추천 — 홈은 4건만, 여기가 전체 목록이다.
     getExpertNotes(24),
@@ -45,33 +55,45 @@ export default async function InsightsPage() {
   // 전문가 추천도 조건에 넣는다 — 엔진 산출물이 다 비어도 사람 글이 있으면 화면은
   // 비어 있지 않다(2026-08-23).
   const empty =
+    briefs.length === 0 &&
     weekly.length === 0 &&
     macro.length === 0 &&
     blogPosts.length === 0 &&
-    expertNotes.length === 0;
+    expert.notes.length === 0;
+
+  // 사람 글이 있으면 사람이 먼저다 — 여기는 «읽을 것»이고, 읽는 사람에게는 사람이 쓴
+  // 글이 먼저다(2026-08-23). 다만 아직 한 편도 없는 동안 그 빈 상자가 첫 화면을
+  // 통째로 먹으면, 매일 갱신되는 브리프가 스크롤 아래로 밀린다. 첫 글이 올라오는
+  // 순간 자동으로 맨 위로 돌아온다 — 코너를 지우는 것이 아니라 순서만 양보한다.
+  const expertFirst = expert.notes.length > 0;
+  const expertSection = (
+    <ExpertNotes notes={expert.notes} failed={expert.failed} moreHref={null} />
+  );
 
   return (
     <AppShell
       title="인사이트"
-      subtitle="전망이 아니라 측정한 것만 적습니다 — 주간 브리핑 · 매크로 · 전문가 추천."
+      subtitle="전망이 아니라 측정한 것만 적습니다 — 매일 브리프 · 주간 브리핑 · 매크로 · 전문가 추천."
       stats={[
+        { label: "매일 브리프", value: `${briefs.length}`, tone: "accent" as const },
         { label: "주간 브리핑", value: `${weekly.length + weeklyPosts.length}` },
         { label: "매크로", value: `${macro.length + macroPosts.length}` },
-        { label: "전문가 추천", value: `${expertNotes.length}`, tone: "accent" as const },
       ]}
     >
       {empty ? (
         <p className="rounded-[12px] border border-border-soft bg-surface/40 p-8 text-center text-[13px] text-text-mute">
-          아직 쌓인 글이 없습니다. 주간 브리핑은 매 거래일 배치가 그 주를 갱신합니다.
+          아직 쌓인 글이 없습니다. 브리프는 매 거래일 장 마감 뒤 배치가 한 편씩 남깁니다.
         </p>
       ) : (
         // 섹션 컴포넌트는 홈의 리듬대로 mt-12 를 갖고 있다. 여기서는 첫 섹션만 0 으로
         // 되돌린다 — 제목과 첫 섹션 사이는 AppShell 의 mb-6 로 충분하다.
         // (-mt-12 로 당겼더니 제목 위로 올라타 겹쳤다)
         <div className="[&>section:first-child]:mt-0">
-          {/* 사람이 고른 종목 — 엔진 산출물보다 위에 둔다. 여기는 «읽을 것»이고,
-              읽는 사람에게는 사람이 쓴 글이 먼저다. */}
-          <ExpertNotes notes={expertNotes} moreHref={null} />
+          {expertFirst && expertSection}
+          <BriefArchive
+            items={briefs.slice(0, BRIEF_PREVIEW)}
+            moreHref={briefs.length > BRIEF_PREVIEW ? "/insights/brief" : null}
+          />
           <WeeklyBriefs posts={weeklyPosts} reports={weekly} moreHref={null} />
           <MacroSection posts={macroPosts} indicators={macro} moreHref={null} />
           {otherPosts.length > 0 && (
@@ -83,6 +105,7 @@ export default async function InsightsPage() {
               <BlogPosts posts={otherPosts} />
             </section>
           )}
+          {!expertFirst && <div className="mt-12">{expertSection}</div>}
         </div>
       )}
     </AppShell>
