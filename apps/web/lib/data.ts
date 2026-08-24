@@ -1199,13 +1199,26 @@ export interface MorningBrief {
   headline: string;
   market_view: string;
   watchpoints: string[];
-  regime: { regime: string; score: number; drivers: string[] } | null;
+  regime: {
+    regime: string;
+    score: number;
+    drivers: string[];
+    /** uptrend|downtrend|range — 옛 브리프에는 없다(그때는 축이 regime 하나였다). */
+    market_state?: string | null;
+  } | null;
   market: MarketBreadth | null;
+  /** 'outage' 면 그날 배치가 안 돌았다는 기록이다(브리프가 아니다).
+   *  «내용이 비었다»로 판정하면 안 된다 — 2026-08-13 이전 브리프는 시장 폭이 없을 뿐
+   *  멀쩡한 글이다. 없는 것과 안 돈 것을 값으로 갈라 둔다. */
+  kind: string | null;
   macro: {
     series: string;
     label: string;
     value: number;
     change_pct: number | null;
+    /** 그 지표의 기준일. 지표마다 발표 주기가 달라 한 브리프 안에서도 날짜가 갈린다 —
+     *  그래서 반드시 적는다(2026-08-22: 4일 전 유가가 «오늘 값»처럼 보였다). */
+    date?: string | null;
   }[];
   created_at: string;
 }
@@ -1566,10 +1579,20 @@ export interface ExpertNote {
  * 화면에서 모양을 다르게 그려야 한다(표가 아니라 카드). 같은 모양으로 그리면
  * 사용자가 «이것도 검증된 것»으로 읽고, 손절 없이 산 뒤 당황한다.
  */
-export async function getExpertNotes(limit = 6): Promise<ExpertNote[]> {
+export interface ExpertNotesLoad {
+  notes: ExpertNote[];
+  /** true 면 «아직 글이 없다»가 아니라 «읽어 오지 못했다».
+   *
+   *  두 말을 섞지 않는다(2026-08-23 원칙). 실제로 0040 마이그레이션이 운영 DB 에
+   *  적용되지 않아 expert_notes 표 자체가 없던 동안, 화면은 태연히 "아직 올라온
+   *  추천이 없습니다"라고 말했다. 코너가 준비 중인 것과 우리가 못 읽는 것은 다르다. */
+  failed: boolean;
+}
+
+export async function getExpertNotes(limit = 6): Promise<ExpertNotesLoad> {
   try {
     const supabase = createPublicClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("expert_notes")
       .select(
         "id,as_of,stance,summary,tags,experts(name,headline,avatar_url,active),instruments(symbol,name)",
@@ -1578,6 +1601,7 @@ export async function getExpertNotes(limit = 6): Promise<ExpertNote[]> {
       .order("as_of", { ascending: false })
       .order("id", { ascending: false })
       .limit(limit * 2);
+    if (error) throw error;
     const rows = (data ?? []) as unknown as {
       id: number;
       as_of: string;
@@ -1587,7 +1611,7 @@ export async function getExpertNotes(limit = 6): Promise<ExpertNote[]> {
       experts: { name: string; headline: string | null; avatar_url: string | null; active: boolean } | null;
       instruments: { symbol: string; name: string } | null;
     }[];
-    return rows
+    const notes = rows
       .filter((r) => r.experts?.active !== false)
       .slice(0, limit)
       .map((r) => ({
@@ -1598,13 +1622,14 @@ export async function getExpertNotes(limit = 6): Promise<ExpertNote[]> {
         symbol: r.instruments?.symbol ?? null,
         name: r.instruments?.name ?? null,
         asOf: r.as_of,
-        stance: r.stance === "buy" ? "buy" : "watch",
+        stance: (r.stance === "buy" ? "buy" : "watch") as ExpertNote["stance"],
         summary: r.summary,
         tags: r.tags ?? [],
       }));
+    return { notes, failed: false };
   } catch {
-    // 표가 아직 없거나(마이그레이션 전) 비어 있으면 조용히 빈 목록 — 화면이 스스로 숨는다.
-    return [];
+    // 표가 없거나(0040 미적용) 조회가 실패한 경우 — «글이 없다»고 말하지 않는다.
+    return { notes: [], failed: true };
   }
 }
 
@@ -1656,6 +1681,23 @@ export async function getTradingCalendar(): Promise<{
   }
 }
 
+/** reports 한 행 → 모닝 브리프. 최신 1건(홈·시장)과 아카이브 상세가 같은 해석을 쓴다. */
+function mapMorningBrief(row: Record<string, unknown>): MorningBrief {
+  const p = (row.payload ?? {}) as Record<string, unknown>;
+  const n = (p.narrative ?? {}) as Record<string, unknown>;
+  return {
+    as_of: row.as_of as string,
+    headline: (n.headline as string) ?? (row.summary as string) ?? "",
+    market_view: (n.market_view as string) ?? "",
+    watchpoints: (n.watchpoints as string[]) ?? [],
+    regime: (p.regime as MorningBrief["regime"]) ?? null,
+    market: (p.market as MarketBreadth) ?? null,
+    kind: (p.kind as string) ?? null,
+    macro: (p.macro as MorningBrief["macro"]) ?? [],
+    created_at: (row.created_at as string) ?? "",
+  };
+}
+
 export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
   try {
     const supabase = createPublicClient();
@@ -1668,24 +1710,90 @@ export async function getMorningBrief(): Promise<Loaded<MorningBrief | null>> {
       .order("id", { ascending: false })
       .limit(1);
     if (error || !data || data.length === 0) throw error ?? new Error("none");
-    const row = data[0] as Record<string, unknown>;
-    const p = (row.payload ?? {}) as Record<string, unknown>;
-    const n = (p.narrative ?? {}) as Record<string, unknown>;
-    return {
-      data: {
-        as_of: row.as_of as string,
-        headline: (n.headline as string) ?? (row.summary as string) ?? "",
-        market_view: (n.market_view as string) ?? "",
-        watchpoints: (n.watchpoints as string[]) ?? [],
-        regime: (p.regime as MorningBrief["regime"]) ?? null,
-        market: (p.market as MarketBreadth) ?? null,
-        macro: (p.macro as MorningBrief["macro"]) ?? [],
-        created_at: (row.created_at as string) ?? "",
-      },
-      isSample: false,
-    };
+    return { data: mapMorningBrief(data[0] as Record<string, unknown>), isSample: false };
   } catch {
     return { data: null, isSample: false };
+  }
+}
+
+// ── 모닝 브리프 아카이브 ──
+// 브리프는 2026-06-10 부터 매 거래일 한 편씩 쌓이는데, 로더가 최신 1건만 읽어
+// **어제 것조차 다시 읽을 데가 없었다**(2026-08-24 확인 — DB 48건, 화면 1건).
+// 인사이트에 목록을 세우고 하루치를 그대로 읽게 한다. 그동안 payload 에만 있고
+// 어디에도 그리지 않던 market_view·watchpoints 가 여기서 처음 화면에 나온다.
+export interface MorningBriefListItem {
+  as_of: string;
+  headline: string;
+  /** 그날 전 종목 동일가중 수익률 — 목록 우측 숫자(주간 브리핑 행과 같은 자리). */
+  market_ret: number | null;
+  /** 그 브리프가 쓴 시장 데이터의 기준일. 장 시작 전에 쓰는 글이라 월요일 브리프는
+   *  금요일 마감을 담는다 — 그러면 목록에 같은 장이 두 번 서므로 날짜를 적어 가른다. */
+  market_as_of: string | null;
+  /** 그날의 국면(uptrend|downtrend|range). 옛 브리프는 market_state 가 없어 regime 으로
+   *  되돌려 읽는다 — 국면 이름은 RegimeHeader 한 곳에서만 정의한다. */
+  market_state: string | null;
+  /** 'outage' 면 브리프가 아니라 «그날 배치가 안 돌았다»는 기록이다. 지우지 않는다 —
+   *  공백을 감추면 나중에 그 날을 «분석했는데 결과가 없던 날»로 오해한다. */
+  kind: string | null;
+}
+
+export async function getMorningBriefs(limit = 60): Promise<MorningBriefListItem[]> {
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("reports")
+      // payload 통째로 받으면 한 행이 3KB 다(60행 = 180KB). 목록에 쓰는 네 값만 뽑는다.
+      .select(
+        "id,as_of,summary,headline:payload->narrative->>headline,market_ret:payload->market->>market_ret,market_as_of:payload->market->>as_of,state:payload->regime->>market_state,regime:payload->regime->>regime,kind:payload->>kind",
+      )
+      .eq("report_type", "market")
+      .eq("status", "published")
+      .order("as_of", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit * 2);
+    if (error || !data) throw error ?? new Error("none");
+    const out: MorningBriefListItem[] = [];
+    const seen = new Set<string>();
+    for (const r of data as Record<string, unknown>[]) {
+      const asOf = r.as_of as string;
+      // 같은 날 두 번 발행된 적이 있다(배치 재실행). id 큰 것이 최신이라 먼저 온 게 이긴다.
+      if (seen.has(asOf)) continue;
+      seen.add(asOf);
+      const ret = r.market_ret == null ? NaN : Number(r.market_ret);
+      out.push({
+        as_of: asOf,
+        headline: (r.headline as string) ?? (r.summary as string) ?? "",
+        market_ret: Number.isNaN(ret) ? null : ret,
+        market_as_of: (r.market_as_of as string) ?? null,
+        market_state:
+          (r.state as string) ??
+          (r.regime === "risk_on" ? "uptrend" : r.regime === "risk_off" ? "downtrend" : r.regime ? "range" : null),
+        kind: (r.kind as string) ?? null,
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** 하루치 브리프 — 아카이브 상세. 그날 배치가 안 돌았으면 없다(null). */
+export async function getMorningBriefByDate(asOf: string): Promise<MorningBrief | null> {
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("reports")
+      .select("as_of,summary,payload,created_at")
+      .eq("report_type", "market")
+      .eq("status", "published")
+      .eq("as_of", asOf)
+      .order("id", { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) throw error ?? new Error("none");
+    return mapMorningBrief(data[0] as Record<string, unknown>);
+  } catch {
+    return null;
   }
 }
 

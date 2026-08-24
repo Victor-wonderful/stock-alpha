@@ -46,6 +46,19 @@ export function regimeCopy(state: MarketStateView | null) {
   return { ...s, drivers: state.drivers ?? [] };
 }
 
+/**
+ * 국면 «이름과 색»만 꺼내 쓰는 창구 — 지난 브리프 목록처럼 «지금»이 아닌 화면이 쓴다.
+ * RegimeHeader 는 "지금 시장: 상승추세"라고 말하는데, 두 달 전 브리프에 그 문장을
+ * 얹으면 거짓말이 된다. 이름은 여기 한 곳에서만 정의한다.
+ *
+ * 모르는 값이면 null 이다 — 횡보로 되돌리지 않는다. 목록에서는 «모른다»와 «횡보였다»가
+ * 전혀 다른 말이고, 모르는 것에 색을 주면 아는 것처럼 읽힌다.
+ */
+export function regimeName(marketState: string | null | undefined) {
+  const s = marketState ? STATE[marketState] : undefined;
+  return s ? { name: s.name, cls: s.cls } : null;
+}
+
 export function RegimeHeader({ state }: { state: MarketStateView | null }) {
   if (!state) return null;
   const s = STATE[state.market_state ?? ""] ?? STATE.range;

@@ -129,6 +129,28 @@ const MACRO_DESC: Record<string, string> = {
   DEXKOUS: "원달러 환율 — 외국인 수급과 수출 기업 실적의 전제",
 };
 
+/** 변화량의 단위는 값의 단위와 다르다 — 금리 4.69% 가 0.04 오르면 «+0.04%p» 이지
+ *  «+0.04%» 가 아니다. 단위 없이 «+0.04 / -2.2 / +1.12» 만 늘어놓으면 어느 게 원이고
+ *  어느 게 포인트인지 읽는 사람이 알 길이 없다(2026-08-24). */
+function changeUnit(unit: string): string {
+  return unit === "%" ? "%p" : unit === "" ? "pt" : unit;
+}
+
+/** 기준일이 며칠 전인가. 지표마다 발표 주기가 달라 한 섹션 안에서 날짜가 갈리는 게
+ *  정상이고, 그래서 오래된 값은 오래됐다고 말해야 한다(2026-08-22: 4일 전 유가가
+ *  «오늘 값»처럼 보였다). 좁은 칸에만 있던 이 경고를 넓은 행에도 붙인다. */
+function daysAgo(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso + "T00:00:00Z");
+  if (Number.isNaN(t)) return null;
+  const now = new Date();
+  return Math.floor(
+    (Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - t) / 864e5,
+  );
+}
+
+const STALE_DAYS = 3;
+
 /** 매크로 지표 행 — 글이 아직 없을 때 이 자리를 채운다. 행 형태는 글과 똑같다. */
 function MacroRows({ items }: { items: MacroSeriesView[] }) {
   return (
@@ -137,6 +159,8 @@ function MacroRows({ items }: { items: MacroSeriesView[] }) {
         // 매크로는 '오르면 좋다'가 아니다 — VIX 는 오르면 나쁘다.
         // 좋고 나쁨이 아니라 방향만 칠한다(상승=적/하락=청).
         const up = m.change >= 0;
+        const ago = daysAgo(m.as_of);
+        const stale = ago != null && ago >= STALE_DAYS;
         return (
           <li
             key={m.series_id}
@@ -144,7 +168,12 @@ function MacroRows({ items }: { items: MacroSeriesView[] }) {
               i > 0 ? "border-t border-border-soft" : ""
             }`}
           >
-            <span className="tnum w-[46px] shrink-0 text-[12px] text-text-mute">
+            <span
+              className={`tnum w-[46px] shrink-0 text-[12px] ${
+                stale ? "text-warn" : "text-text-mute"
+              }`}
+              title={stale ? `${ago}일 전 발표된 값입니다` : undefined}
+            >
               {m.as_of ? m.as_of.slice(5).replace("-", ".") : "—"}
             </span>
             <div className="min-w-0 flex-1">
@@ -164,6 +193,7 @@ function MacroRows({ items }: { items: MacroSeriesView[] }) {
             >
               {up ? "+" : ""}
               {m.change.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+              {changeUnit(m.unit)}
             </span>
           </li>
         );
@@ -182,19 +212,13 @@ function MacroCompactRows({ items }: { items: MacroSeriesView[] }) {
   // 기준일을 반드시 적는다. 컴팩트로 줄이면서 뺐더니 4일 전 유가가 «오늘 값»처럼
   // 보였다(2026-08-22 Victor — "매일 하는 브리핑인데 이상하다"). 지표마다 발표
   // 주기가 달라 한 섹션 안에서 날짜가 갈리는 게 정상이고, 그래서 더 적어야 한다.
-  const today = new Date();
-  const daysAgo = (iso: string | null | undefined) => {
-    if (!iso) return null;
-    const d = Date.parse(iso + "T00:00:00Z");
-    if (Number.isNaN(d)) return null;
-    return Math.floor((Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - d) / 864e5);
-  };
+  // 판정은 모듈 위 daysAgo/STALE_DAYS 한 곳에서 한다 — 넓은 행과 기준이 갈리면 안 된다.
   return (
     <ul className="mt-4 overflow-hidden rounded-[12px] border border-border bg-surface">
       {items.map((m, i) => {
         const up = m.change >= 0;
         const ago = daysAgo(m.as_of);
-        const stale = ago != null && ago >= 3;
+        const stale = ago != null && ago >= STALE_DAYS;
         return (
           <li
             key={m.series_id}
@@ -217,12 +241,13 @@ function MacroCompactRows({ items }: { items: MacroSeriesView[] }) {
               {m.unit}
             </span>
             <span
-              className={`tnum w-[52px] shrink-0 text-right text-[11.5px] font-semibold ${
+              className={`tnum w-[62px] shrink-0 text-right text-[11.5px] font-semibold ${
                 up ? "text-good" : "text-bad"
               }`}
             >
               {up ? "+" : ""}
               {m.change.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}
+              {changeUnit(m.unit)}
             </span>
           </li>
         );
