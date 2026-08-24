@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
 import { Footer } from "@/components/Footer";
@@ -6,6 +6,20 @@ import { Footer } from "@/components/Footer";
 export const metadata: Metadata = {
   title: "VECTA Stock — 전문가급 주식 리서치 터미널",
   description: "멀티팩터 퀀트 · 펀더멘털 밸류에이션 · AI 애널리스트 리포트",
+};
+
+/**
+ * 강제 다크 모드를 끈다.
+ *
+ * CSS 의 `color-scheme: only light` 와 **같은 말을 헤더에서도** 한다. 일부 모바일
+ * 브라우저는 스타일시트를 받기 전에 배경을 먼저 칠하는데, 그때 참고하는 것이 이 메타다.
+ * 둘 중 하나만 있으면 첫 화면이 깜빡 어두웠다가 밝아진다.
+ *
+ * themeColor 는 주소창 색이다 — 페이지 배경과 같은 값으로 둬야 화면 위쪽이 갈리지 않는다.
+ */
+export const viewport: Viewport = {
+  colorScheme: "only light",
+  themeColor: "#F5F6FC",
 };
 
 export default function RootLayout({
