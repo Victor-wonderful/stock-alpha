@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search, Star } from "lucide-react";
+import { Search, ShieldCheck, Star } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
 import { AssetTabs } from "@/components/AssetTabs";
@@ -64,6 +64,24 @@ export default async function WatchlistPage() {
         <EmptyWatchlist />
       ) : (
         <>
+          {/* 관심 → 진단. 반대 방향(진단한 종목을 담기)은 /diagnosis 가 갖는다.
+              같은 탭 안의 두 화면이 서로를 모르면 사용자가 종목 코드를 손으로 옮겨
+              적게 된다(2026-08-25 Victor 지적).
+              비중은 비워서 넘긴다 — 우리는 그 사람이 얼마씩 들고 있는지 모른다.
+              진단 화면이 «비중 미입력이면 동일가중»으로 받아 준다. */}
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-border bg-surface px-4 py-3">
+            <span className="text-[12.5px] text-text-dim">
+              담아 둔 {items.length}종목을 하나의 조합으로 보면 어떤가요?
+            </span>
+            <Link
+              href={`/diagnosis?h=${encodeURIComponent(items.map((r) => `${r.symbol}:0`).join(","))}`}
+              className="ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-[9px] border border-border px-4 text-[12.5px] font-semibold text-text-dim transition-colors hover:border-border-strong hover:text-text"
+            >
+              <ShieldCheck className="h-4 w-4" aria-hidden />
+              관심 종목으로 리스크 진단
+            </Link>
+          </div>
+
           {/* 데스크톱 — 표 */}
           <div className="hidden overflow-hidden rounded-[12px] border border-border bg-surface md:block">
             <table className="w-full text-[13px]">

@@ -68,3 +68,38 @@ export async function removeFromWatchlist(symbol: string) {
 
   refresh(symbol);
 }
+
+/**
+ * 여러 종목을 한 번에 담기 — 리스크 진단에서 넘어온다.
+ *
+ * 진단은 조합을 통째로 다루는 화면이라 종목을 하나씩 담게 하면 손이 많이 간다.
+ * 진단 입력 자체는 **여전히 저장하지 않는다**(화면의 약속) — 담는 것은 사용자가
+ * 별을 누른 것과 같은 명시적인 행동일 때만이다.
+ */
+export async function addManyToWatchlist(symbols: string[]) {
+  const supabase = await createUserClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const uniq = [...new Set(symbols.filter(Boolean))];
+  if (uniq.length === 0) return;
+
+  const { data } = await supabase
+    .from("instruments")
+    .select("id,symbol")
+    .in("symbol", uniq);
+  const rows = ((data ?? []) as { id: number; symbol: string }[]).map((r) => ({
+    user_id: user.id,
+    instrument_id: Number(r.id),
+  }));
+  if (rows.length === 0) return;
+
+  await supabase
+    .from("watchlists")
+    .upsert(rows, { onConflict: "user_id,instrument_id" });
+
+  revalidatePath("/watchlist");
+  revalidatePath("/diagnosis");
+}
