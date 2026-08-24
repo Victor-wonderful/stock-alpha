@@ -28,37 +28,33 @@ function fail(next: string, msg: string, mode?: "signup"): never {
   redirect(`/login?${q.toString()}`);
 }
 
-/** 아이디 규격 — DB 의 check 제약(0045)과 **같은 정규식**이어야 한다. */
-const USERNAME_RE = /^[a-z0-9][a-z0-9_-]{3,19}$/;
-
+/**
+ * 로그인 — 이메일과 비밀번호.
+ *
+ * 2026-08-24 오후에 잠깐 «아이디 로그인»이었다(0045). 되돌렸다 — Victor: "회원가입에
+ * ID랑 이메일이 동일하면 되잖아. 왜 따로따로 해놓았지?". 아이디를 따로 두면 신원값이
+ * 둘이 되는데, 가입 확인 메일과 비밀번호 찾기가 전부 이메일 기준이라 **남는 쪽은
+ * 이메일**이다. 아이디는 지어내고 따로 기억해야 하는 값이 하나 늘 뿐이었다.
+ *
+ * 그래서 이제 우회로(아이디 → 이메일을 찾아 주는 RPC)가 없다. Supabase 인증을 바로
+ * 부른다 — 원래 그것이 이 인증 서버가 하는 일이다.
+ */
 export async function signIn(next: string | null, formData: FormData) {
   const to = safeNext(next);
-  const username = String(formData.get("username") ?? "").trim().toLowerCase();
+  const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  if (!username || !password) fail(to, "아이디와 비밀번호를 모두 입력해 주세요.");
+  if (!email || !password) fail(to, "이메일과 비밀번호를 모두 입력해 주세요.");
 
   const supabase = await createClient();
 
-  // 인증 자체는 여전히 이메일로 한다(Supabase 가 그렇게 만들어져 있다). 아이디로
-  // 이메일을 찾되, **비밀번호가 맞을 때만** 돌려주는 함수를 쓴다(0045 login_email).
-  // 그래서 이 단계에서 남의 이메일이 새거나 «그 아이디가 있는지»가 드러나지 않는다.
-  const { data: email, error: rpcError } = await supabase.rpc("login_email", {
-    p_username: username,
-    p_password: password,
-  });
-  if (rpcError) fail(to, `로그인하지 못했습니다 — ${rpcError.message}`);
-  if (!email) fail(to, "아이디 또는 비밀번호가 맞지 않습니다.");
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email: String(email),
-    password,
-  });
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    // 위에서 비밀번호를 이미 맞춰 봤으므로 여기 오는 건 대개 «메일 확인 전»이다.
+    // 「메일 확인 전」과 「비밀번호 틀림」은 사용자가 할 일이 완전히 다르다 — 뭉뚱그리면
+    // 메일함을 열어야 할 사람이 비밀번호만 계속 다시 친다.
     const msg = /email not confirmed/i.test(error.message)
       ? "아직 이메일 확인이 끝나지 않았습니다. 가입할 때 적은 메일의 링크를 눌러 주세요."
       : /invalid login credentials/i.test(error.message)
-        ? "아이디 또는 비밀번호가 맞지 않습니다."
+        ? "이메일 또는 비밀번호가 맞지 않습니다."
         : error.message;
     fail(to, msg);
   }
@@ -78,7 +74,6 @@ export async function signUp(next: string | null, formData: FormData) {
   const to = safeNext(next);
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const username = String(formData.get("username") ?? "").trim().toLowerCase();
   const nickname = String(formData.get("nickname") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
   // 동의는 둘로 나눈다 — 약관과 개인정보는 다른 문서이고, 하나로 묶으면 «무엇에
@@ -86,9 +81,6 @@ export async function signUp(next: string | null, formData: FormData) {
   const agreeTerms = formData.get("agree_terms") === "on";
   const agreePrivacy = formData.get("agree_privacy") === "on";
 
-  if (!USERNAME_RE.test(username)) {
-    fail(to, "아이디는 영문 소문자·숫자·밑줄·하이픈 4~20자로 정해 주세요.", "signup");
-  }
   if (!nickname) fail(to, "닉네임을 입력해 주세요.", "signup");
   if (nickname.length > 20) fail(to, "닉네임은 20자 이내로 정해 주세요.", "signup");
   if (!email || !password) fail(to, "이메일과 비밀번호를 모두 입력해 주세요.", "signup");
@@ -106,13 +98,6 @@ export async function signUp(next: string | null, formData: FormData) {
 
   const supabase = await createClient();
 
-  // 먼저 아이디 중복을 본다. 인증부터 부르면 계정이 만들어진 뒤 프로필 트리거가
-  // 유니크 위반으로 죽어, «가입은 됐는데 프로필이 없는» 반쪽 계정이 남는다.
-  const { data: taken } = await supabase.rpc("username_taken", {
-    p_username: username,
-  });
-  if (taken) fail(to, "이미 쓰고 있는 아이디입니다. 다른 것으로 정해 주세요.", "signup");
-
   // 닉네임·연락처를 **가입 메타데이터**로 넘긴다. 이메일 확인을 쓰는 프로젝트에서는
   // 가입 직후 세션이 없어 profiles 에 직접 못 쓴다 — DB 트리거가 옮긴다(0043).
   const { data, error } = await supabase.auth.signUp({
@@ -122,7 +107,6 @@ export async function signUp(next: string | null, formData: FormData) {
     // 클라이언트나 웹 서버가 보낸 시각을 믿으면 증빙이 되지 않는다.
     options: {
       data: {
-        username,
         nickname,
         phone,
         agreed_terms: "true",

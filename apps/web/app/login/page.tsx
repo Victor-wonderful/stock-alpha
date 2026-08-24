@@ -149,8 +149,8 @@ export default async function LoginPage({
       )}
 
       <form action={isSignup ? doSignUp : doSignIn} className="mt-5 space-y-4">
-        {/* 가입에만 있는 두 칸 — 순서는 Victor 가 정한 대로(닉네임 · 연락처 · 이메일 ·
-            비밀번호). 로그인은 이메일·비밀번호 둘이면 된다. */}
+        {/* 가입에만 있는 두 칸(닉네임 · 연락처). 순서는 닉네임 · 연락처 · 이메일 ·
+            비밀번호이고, 로그인은 이메일·비밀번호 둘이면 된다. */}
         {isSignup && (
           <>
             <div>
@@ -193,51 +193,33 @@ export default async function LoginPage({
             </div>
           </>
         )}
+        {/* 신원값은 이메일 하나다(2026-08-24 되돌림). 잠깐 아이디 칸을 따로 뒀는데,
+            가입 확인 메일과 비밀번호 찾기가 전부 이메일 기준이라 아이디는 «지어내고
+            따로 기억해야 하는 값»이 하나 느는 것뿐이었다(Victor: "ID랑 이메일이
+            동일하면 되잖아"). 로그인도 가입도 같은 칸을 쓴다. */}
         <div>
-          <label className="block text-[13px] font-semibold text-text" htmlFor="username">
-            아이디{" "}
-            {isSignup && (
-              <span className="font-normal text-text-mute">
-                영문 소문자·숫자·밑줄·하이픈 4~20자
-              </span>
-            )}
+          <label className="block text-[13px] font-semibold text-text" htmlFor="email">
+            이메일
           </label>
           <input
-            id="username"
-            name="username"
-            type="text"
-            autoComplete="username"
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
             required
-            inputMode="text"
+            inputMode="email"
             autoCapitalize="none"
             spellCheck={false}
-            placeholder="namsan"
+            placeholder="name@example.com"
             className={FIELD}
           />
+          {isSignup && (
+            <p className="mt-1.5 text-[11.5px] leading-[1.6] text-text-mute">
+              로그인에 쓰는 주소입니다. 가입 확인 메일과 비밀번호 찾기도 이리로 갑니다.
+            </p>
+          )}
         </div>
 
-        {/* 이메일은 **가입에만** 받는다. 로그인은 아이디로 한다(2026-08-24 Victor).
-            그래도 이메일을 안 받을 수는 없다 — 비밀번호를 잊었을 때 되찾을 길이
-            여기밖에 없고, 지금 프로젝트는 가입 확인 메일도 쓰고 있다. */}
-        {isSignup && (
-          <div>
-            <label className="block text-[13px] font-semibold text-text" htmlFor="email">
-              이메일
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              placeholder="name@example.com"
-              className={FIELD}
-            />
-            <p className="mt-1.5 text-[11.5px] leading-[1.6] text-text-mute">
-              가입 확인과 비밀번호 찾기에 씁니다. 로그인은 아이디로 합니다.
-            </p>
-          </div>
-        )}
         <div>
           <label className="block text-[13px] font-semibold text-text" htmlFor="password">
             비밀번호{" "}
