@@ -329,7 +329,73 @@ export default async function PicksPage({
               {all.length === 0 ? "발행된 픽이 없습니다 — 매일 16:30 일일 배치에서 생성됩니다" : "해당 상태의 픽이 없습니다"}
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* ── 폰 (768 미만) — 픽 한 건이 카드 한 장 ──
+                열 7개짜리 표를 390px 에 넣으면 수익률·상태가 스크롤 뒤로 숨는다.
+                이 화면은 «성적»을 보는 곳이라 그 둘이 가장 먼저 보여야 한다. */}
+            <div className="md:hidden">
+              {rows.map((r, i) => (
+                <article
+                  key={`m-${r.as_of}-${r.symbol}-${i}`}
+                  className="border-b border-border-soft py-3.5 last:border-0"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <Link
+                          href={`/stocks/${r.symbol}`}
+                          className="text-[15px] font-bold text-text"
+                        >
+                          {r.name}
+                        </Link>
+                        <SymbolCode symbol={r.symbol} className="text-[12px] text-text-mute" />
+                        {r.reselects != null && r.reselects > 1 && (
+                          <span className="rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent">
+                            {r.reselects}일 선정
+                          </span>
+                        )}
+                      </div>
+                      <p className="tnum mt-1 text-[12px] text-text-mute">{r.as_of} 발행</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={`tnum text-[17px] font-bold ${
+                          r.return_pct == null
+                            ? "text-text-mute"
+                            : r.return_pct >= 0
+                              ? "text-good"
+                              : "text-bad"
+                        }`}
+                      >
+                        {r.return_pct != null ? fmtPct(r.return_pct) : "—"}
+                      </p>
+                      <span
+                        className={`mt-1 inline-block rounded-[999px] px-2.5 py-0.5 text-[11px] font-bold ${STATUS_BADGE[r.status]}`}
+                      >
+                        {r.status}
+                        {!r.closed && r.status !== "진행중" && r.status !== "—" ? " (예정)" : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <dl className="tnum mt-2.5 flex flex-wrap gap-x-4 gap-y-1 rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px]">
+                    <span>
+                      <dt className="inline text-text-mute">진입 </dt>
+                      <dd className="inline font-semibold text-text">{fmtPrice(r.entry_price)}</dd>
+                    </span>
+                    <span>
+                      <dt className="inline text-text-mute">손절 </dt>
+                      <dd className="inline font-semibold text-bad">{fmtPrice(r.stop_loss)}</dd>
+                    </span>
+                    <span>
+                      <dt className="inline text-text-mute">본전 </dt>
+                      <dd className="inline font-semibold text-good">{fmtPrice(r.target_price)}</dd>
+                    </span>
+                  </dl>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[820px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
@@ -381,6 +447,7 @@ export default async function PicksPage({
                 </tbody>
               </table>
             </div>
+            </>
           )}
           <p className="mt-3 text-[11px] text-text-mute">
             진행중 픽은 매일 16:30 종가로 평가 — 목표·손절 도달 시 자동 확정되며, &quot;(예정)&quot;은 종가 확정 배치 전 상태입니다.

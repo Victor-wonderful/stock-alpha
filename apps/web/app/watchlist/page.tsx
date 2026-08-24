@@ -56,7 +56,63 @@ export default function WatchlistPage() {
 
         {/* 워치리스트 테이블 (예시) */}
         <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
-          <div className="overflow-x-auto">
+          {/* ── 폰 (768 미만) — 종목 한 줄이 카드 한 장 ──
+              열이 7개다. 표로 두면 AI 판정·시그널이 스크롤 뒤로 숨는데, 관심 종목 화면은
+              «내가 담아 둔 것이 지금 어떤 상태인가»를 훑는 곳이라 그게 핵심이다. */}
+          <div className="md:hidden">
+            {PREVIEW.map((r) => (
+              <article key={`m-${r.symbol}`} className="border-b border-border-soft py-3.5 last:border-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-3 text-[12px] font-bold text-text-dim">
+                      {r.name.slice(0, 1)}
+                    </span>
+                    <div className="min-w-0">
+                      <Link href={`/stocks/${r.symbol}`} className="block text-[15px] font-bold text-text">
+                        {r.name}
+                      </Link>
+                      <SymbolCode symbol={r.symbol} className="text-[12px] text-text-mute" />
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="tnum text-[15px] font-bold text-text">{r.price}원</p>
+                    <p className={`tnum text-[12.5px] font-semibold ${r.up ? "text-good" : "text-bad"}`}>
+                      {r.chg}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-[999px] px-2 py-0.5 text-[11.5px] font-bold ${
+                      r.rating === "매수"
+                        ? "bg-accent text-text-on-accent"
+                        : r.rating === "중립"
+                          ? "bg-surface-3 text-text-dim"
+                          : "border border-border text-text-mute"
+                    }`}
+                  >
+                    {r.rating}
+                  </span>
+                  <span className="tnum text-[13px] font-bold text-text">{r.score}점</span>
+                  {r.setup && (
+                    <span className="rounded-[999px] bg-surface-3 px-2 py-0.5 text-[11.5px] font-semibold text-text-dim">
+                      {r.setup}
+                    </span>
+                  )}
+                  {r.badge && (
+                    <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[11.5px] font-bold text-accent">
+                      {r.badge}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[13px]">
+                    {r.bell ? "🔔" : <span className="opacity-30">🔕</span>}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
