@@ -71,12 +71,25 @@ export default async function ExpertHomePage() {
         { label: "전체", value: `${notes.length}` },
       ]}
     >
-      <Link
-        href="/expert/write"
-        className="inline-flex items-center gap-1.5 rounded-[9px] bg-accent px-4 py-2.5 text-[13.5px] font-semibold text-on-navy transition-colors hover:bg-accent-2"
-      >
-        <Plus size={15} strokeWidth={2.5} aria-hidden />새 추천 쓰기
-      </Link>
+      <div className="flex flex-wrap items-center gap-3">
+        <Link
+          href="/expert/write"
+          className="inline-flex items-center gap-1.5 rounded-[9px] bg-accent px-4 py-2.5 text-[13.5px] font-semibold text-on-navy transition-colors hover:bg-accent-2"
+        >
+          <Plus size={15} strokeWidth={2.5} aria-hidden />새 추천 쓰기
+        </Link>
+        {/* 필명은 이 코너에서 근거의 단위다 — 카드에 보이는 이름이므로 글쓴이가 직접 정한다. */}
+        <Link
+          href="/expert/profile"
+          className="text-[12.5px] text-text-mute transition-colors hover:text-accent"
+        >
+          필명 · 소개 고치기
+        </Link>
+        <span className="text-[12px] text-text-mute">
+          지금 필명 <span className="font-semibold text-text-dim">{expert.name}</span>
+          {expert.headline && <span className="ml-1.5">· {expert.headline}</span>}
+        </span>
+      </div>
 
       {notes.length === 0 ? (
         <p className="mt-6 rounded-[12px] border border-dashed border-border-strong bg-surface p-8 text-center text-[13px] text-text-mute">

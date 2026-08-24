@@ -43,8 +43,12 @@ def load_env(path: pathlib.Path) -> dict[str, str]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--email", help="전문가로 등록할 로그인 계정(auth.users 의 이메일)")
-    ap.add_argument("--name", help="화면에 보이는 이름")
-    ap.add_argument("--handle", help="URL·언급용 짧은 식별자(기본: 이메일 앞부분)")
+    ap.add_argument("--name", help="화면에 보이는 이름 = 필명(본명일 필요 없다)")
+    ap.add_argument(
+        "--handle",
+        help="공개 아이디(영문 소문자·숫자·하이픈). 익명 키로도 읽히는 값이라 "
+        "이메일에서 따오지 않는다 — 생략하면 물어보지 않고 막는다.",
+    )
     ap.add_argument("--headline", default=None, help='한 줄 소개 (예: "방산·조선 15년")')
     args = ap.parse_args()
 
@@ -70,7 +74,17 @@ def main() -> int:
             if not args.name:
                 print("--name 이 필요합니다.")
                 return 1
-            handle = args.handle or args.email.split("@")[0]
+            handle = args.handle
+            if not handle:
+                # 첫 등록 때 이메일 앞부분을 넣었다가 그대로 공개됐다(2026-08-24).
+                # 공개 값이므로 사람이 고른 것만 받는다.
+                print("--handle 이 필요합니다 (공개 아이디, 예: --handle namsan)")
+                return 1
+            import re
+
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,19}", handle):
+                print("--handle 은 영문 소문자·숫자·하이픈 2~20자여야 합니다.")
+                return 1
             with conn.cursor() as cur:
                 cur.execute("select id from auth.users where email = %s", (args.email,))
                 row = cur.fetchone()
