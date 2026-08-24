@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, UserPen } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
 import { SymbolCode } from "@/components/SymbolCode";
@@ -71,25 +71,52 @@ export default async function ExpertHomePage() {
         { label: "전체", value: `${notes.length}` },
       ]}
     >
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href="/expert/write"
-          className="inline-flex items-center gap-1.5 rounded-[9px] bg-accent px-4 py-2.5 text-[13.5px] font-semibold text-on-navy transition-colors hover:bg-accent-2"
+      {/* ── 프로필 ──
+          여기가 «필명을 어디서 정하나»의 답이다. 처음에는 회색 글씨 링크 한 줄이었는데
+          찾을 수가 없었다(2026-08-24 Victor — "프로필 입력하는 것은 어디에서 하는건가?").
+          이 코너에서 이름은 장식이 아니라 **근거의 단위**라, 글 목록보다 위에 카드로 둔다. */}
+      <section className="flex flex-wrap items-center gap-4 rounded-[12px] border border-border bg-surface p-4">
+        <span
+          aria-hidden
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface-3 text-[15px] font-bold text-text-dim"
         >
-          <Plus size={15} strokeWidth={2.5} aria-hidden />새 추천 쓰기
-        </Link>
-        {/* 필명은 이 코너에서 근거의 단위다 — 카드에 보이는 이름이므로 글쓴이가 직접 정한다. */}
-        <Link
-          href="/expert/profile"
-          className="text-[12.5px] text-text-mute transition-colors hover:text-accent"
-        >
-          필명 · 소개 고치기
-        </Link>
-        <span className="text-[12px] text-text-mute">
-          지금 필명 <span className="font-semibold text-text-dim">{expert.name}</span>
-          {expert.headline && <span className="ml-1.5">· {expert.headline}</span>}
+          {expert.name.slice(0, 1)}
         </span>
-      </div>
+        <div className="min-w-0">
+          <p className="text-[15px] font-bold text-text">{expert.name}</p>
+          <p className="mt-0.5 text-[12px] text-text-mute">
+            {expert.headline ?? "한 줄 소개 없음"}
+            <span className="mx-1.5 opacity-40">·</span>
+            <span className="font-mono">{expert.handle}</span>
+          </p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2.5">
+          <Link
+            href="/expert/profile"
+            className="inline-flex items-center gap-1.5 rounded-[9px] border border-border-strong px-3.5 py-2 text-[12.5px] font-semibold text-text-dim transition-colors hover:text-text"
+          >
+            <UserPen size={14} strokeWidth={2} aria-hidden />
+            필명 · 소개
+          </Link>
+          <Link
+            href="/expert/write"
+            className="inline-flex items-center gap-1.5 rounded-[9px] bg-accent px-4 py-2.5 text-[13.5px] font-semibold text-on-navy transition-colors hover:bg-accent-2"
+          >
+            <Plus size={15} strokeWidth={2.5} aria-hidden />새 추천 쓰기
+          </Link>
+        </div>
+      </section>
+
+      {/* 소개가 비어 있으면 한 번 짚는다 — 카드에서 이 사람에 대해 알 수 있는 건
+          이름과 이 한 줄뿐이다. 잔소리가 되지 않게 «비어 있을 때만» 나온다. */}
+      {!expert.headline && (
+        <p className="mt-2.5 text-[12px] text-text-mute">
+          한 줄 소개가 비어 있습니다. 읽는 사람이 이 추천에 대해 아는 것은 «누가 말했나»뿐입니다 —{" "}
+          <Link href="/expert/profile" className="text-accent hover:underline">
+            지금 적기
+          </Link>
+        </p>
+      )}
 
       {notes.length === 0 ? (
         <p className="mt-6 rounded-[12px] border border-dashed border-border-strong bg-surface p-8 text-center text-[13px] text-text-mute">

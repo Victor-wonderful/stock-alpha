@@ -58,13 +58,24 @@ export default async function ExpertWritePage({
         </span>
       }
     >
-      <Link
-        href="/expert"
-        className="inline-flex items-center gap-1.5 text-[12.5px] text-text-mute transition-colors hover:text-accent"
-      >
-        <ArrowLeft size={14} strokeWidth={2} aria-hidden />
-        내 추천
-      </Link>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Link
+          href="/expert"
+          className="inline-flex items-center gap-1.5 text-[12.5px] text-text-mute transition-colors hover:text-accent"
+        >
+          <ArrowLeft size={14} strokeWidth={2} aria-hidden />
+          내 추천
+        </Link>
+        {/* 이 글에 붙을 이름을 여기서도 바꿀 수 있어야 한다 — 쓰다가 «이 필명으로
+            나가는 게 맞나» 싶을 때 목록까지 되돌아가게 하지 않는다. */}
+        <span className="text-[12px] text-text-mute">
+          이 글은 <span className="font-semibold text-text-dim">{expert.name}</span> 이름으로
+          나갑니다{" "}
+          <Link href="/expert/profile" className="text-accent hover:underline">
+            필명 고치기
+          </Link>
+        </span>
+      </div>
 
       {error && (
         <p className="mt-4 max-w-[720px] rounded-[10px] border border-bad/30 bg-bad-soft px-4 py-3 text-[13px] text-bad">
