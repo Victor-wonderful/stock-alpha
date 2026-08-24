@@ -48,12 +48,21 @@ export default async function PicksPage({
   const filter = sp.status && FILTERS.includes(sp.status as (typeof FILTERS)[number])
     ? sp.status
     : "전체";
+  // ── 규칙 세대 ──
+  // 2026-08-22 에 진입·축·청산 규칙을 한꺼번에 바꿨다. 그 이전 픽(horizon 없음)은
+  // **지금 쓰지 않는 규칙의 성적**인데, 한 표에 섞어 놓으면 그것이 이 제품의 성적표로
+  // 읽힌다. 실제로 49건 중 43건이 옛 규칙이라, 요약 숫자는 사실상 전부 옛 규칙 것이었다
+  // (2026-08-25 Victor 확정 — 지금 규칙이 앞, 옛 규칙은 접어서 보관).
+  const legacyView = sp.gen === "legacy";
 
   const [history, resim] = await Promise.all([
     getPickHistory(500),
     getResimHorizonStats(),
   ]);
-  const all = history.data;
+  // 기간(horizon)이 있으면 지금 규칙이다 — 그 축이 규칙 교체와 함께 들어왔다.
+  const current = history.data.filter((r) => r.horizon);
+  const legacy = history.data.filter((r) => !r.horizon);
+  const all = legacyView ? legacy : current;
   const rows = filter === "전체" ? all : all.filter((r) => r.status === filter);
 
   // 요약 집계 — 전체 발행 기준 (필터와 무관)
@@ -64,6 +73,18 @@ export default async function PicksPage({
   // 이것들을 분모에 넣으면 손절률이 실제보다 낮아 보인다.
   const traded = all.filter((r) => !NON_TRADE_PICK_STATUSES.has(r.status));
   const pending = all.filter((r) => r.status === "진입 대기");
+  // ── 승률 ──
+  // «수익으로 끝난 거래 / 끝난 거래»이고, **규칙 교체 정리는 모수에서 뺀다**
+  // (2026-08-25 Victor 확정). 그 13건은 매매 결과가 아니라 우리가 규칙을 바꿔서
+  // 그날 종가로 강제로 닫은 것이라, 우연히 작게 끝난 값이 승률을 부풀린다.
+  //
+  // 목표 도달률로 재지 않는 이유: 규칙이 «목표는 파는 트리거가 아니라 본전스톱 전환»
+  // 으로 바뀌어(0037) 목표 도달이라는 상태 자체가 거의 나오지 않는다.
+  const decided = all.filter(
+    (r) => r.closed && r.return_pct != null && r.status !== "규칙 교체 정리",
+  );
+  const wins = decided.filter((r) => (r.return_pct ?? 0) > 0);
+  const winRate = decided.length > 0 ? wins.length / decided.length : null;
   const closedTarget = all.filter((r) => r.status === "목표 도달");
   const closedStop = all.filter((r) => r.status === "손절");
   const inProgress = all.filter((r) => r.status === "진행중");
@@ -100,6 +121,35 @@ export default async function PicksPage({
       ]}
     >
       <div className="space-y-4">
+        {/* ── 어느 규칙의 성적인가 ──
+            이 화면에서 가장 먼저 말해야 하는 것이다. 숫자를 먼저 보여 주고 나중에
+            «사실 옛 규칙입니다»라고 적으면, 읽는 사람은 이미 그 숫자를 기억한다. */}
+        {legacyView ? (
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-[12px] border border-warn/30 bg-warn-soft px-4 py-3 text-[12px] leading-relaxed text-text-dim">
+            <span className="font-bold text-warn">
+              지금 쓰지 않는 규칙의 기록입니다
+            </span>
+            <span>
+              — 2026년 8월 22일에 진입·축·청산 규칙을 한꺼번에 바꿨습니다. 아래 {legacy.length}건은
+              그 이전에 옛 규칙으로 발행한 것이라, 지금 발행되는 픽의 성적이 아닙니다.
+            </span>
+            <Link href="/picks" className="font-semibold text-accent hover:underline">
+              지금 규칙 보기 →
+            </Link>
+          </div>
+        ) : (
+          current.length > 0 &&
+          decided.length === 0 && (
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-[12px] border border-border bg-surface px-4 py-3 text-[12px] leading-relaxed text-text-dim">
+              <span className="font-bold text-text">아직 끝난 거래가 없습니다</span>
+              <span>
+                — 지금 규칙은 8월 22일부터입니다. 발행 {current.length}건이 아직 보유 중이거나
+                진입을 기다리고 있어, 승률과 평균 손익은 첫 청산이 나온 뒤에 채워집니다.
+              </span>
+            </div>
+          )
+        )}
+
         {/* 요약 스탯 */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
@@ -112,9 +162,14 @@ export default async function PicksPage({
               color: "text-text",
             },
             {
-              label: "목표 달성",
-              value: `${closedTarget.length}건${traded.length ? ` (${Math.round((closedTarget.length / traded.length) * 100)}%)` : ""}`,
-              sub: avg(closedTarget) != null ? `평균 ${fmtPct(avg(closedTarget))}` : undefined,
+              // 분모는 «끝난 거래»이고 규칙 교체 정리는 뺀다 — 위 decided 주석 참조.
+              label: "승률",
+              value:
+                winRate == null ? "—" : `${(winRate * 100).toFixed(1)}%`,
+              sub:
+                decided.length === 0
+                  ? "끝난 거래가 아직 없습니다"
+                  : `수익 ${wins.length} / 끝난 거래 ${decided.length}건 · 목표 도달 ${closedTarget.length}`,
               color: "text-good",
             },
             {
@@ -206,12 +261,9 @@ export default async function PicksPage({
                   </div>
                 );
               })}
-              {all.filter((r) => !r.horizon).length > 0 && (
-                <div className="px-4 py-3 text-[11px] text-text-mute">
-                  기간 도입(2026-08-22) 전 발행 {all.filter((r) => !r.horizon).length}건은
-                  기간 구분이 없어 위 집계에서 빠집니다 — 전체 통계에는 포함됩니다.
-                </div>
-              )}
+              {/* 예전에는 여기서 «옛 픽 N건이 위 집계에서 빠진다»고 알렸다. 이제 그
+                  픽들은 이 화면에 아예 없다(옛 규칙 기록으로 분리) — 없는 것을
+                  «빠졌다»고 적으면 어디에 있는지 찾게 만든다. */}
             </div>
           </div>
         )}
@@ -310,7 +362,15 @@ export default async function PicksPage({
           {FILTERS.map((f) => (
             <Link
               key={f}
-              href={f === "전체" ? "/picks" : `/picks?status=${encodeURIComponent(f)}`}
+              // 옛 규칙 기록을 보다가 상태를 누르면 그 안에서 걸러져야 한다 —
+              // gen 을 떨어뜨리면 지금 규칙 화면으로 튕긴다.
+              href={(() => {
+                const p = new URLSearchParams();
+                if (legacyView) p.set("gen", "legacy");
+                if (f !== "전체") p.set("status", f);
+                const qs = p.toString();
+                return qs ? `/picks?${qs}` : "/picks";
+              })()}
               className={`rounded-[999px] border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                 filter === f
                   ? "border-accent bg-accent text-text-on-accent"
@@ -454,6 +514,61 @@ export default async function PicksPage({
             같은 종목의 연속 재선정은 <span className="text-text-dim">하나의 포지션</span>으로 합산합니다(진행중·종결 공통, &quot;N일 선정&quot;) — 청산 후 다시 픽되면 별개 거래. 손익·손절률 중복집계 방지.
           </p>
         </section>
+
+        {/* ── 옛 규칙 기록 ──
+            지우지 않는다. 「틀린 것도 남긴다」가 이 제품의 약속이고, 43건은 실제로
+            사고판 기록이다. 다만 **지금 규칙의 성적표 안에 섞지 않는다** — 섞으면
+            지금 발행되는 픽의 성적으로 읽힌다(2026-08-25).
+            숫자를 여기서 미리 보여 주는 이유: 「보기」를 눌러야만 알 수 있으면 그것도
+            감추는 것이다. 크기만 접고 사실은 접지 않는다. */}
+        {!legacyView && legacy.length > 0 && (
+          <section className="rounded-[12px] border border-dashed border-border-strong bg-surface-2 px-5 py-4">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              <h2 className="text-[13px] font-bold text-text">
+                옛 규칙 기록 {legacy.length}건
+              </h2>
+              <span className="text-[11.5px] text-text-mute">
+                2026년 8월 22일 규칙 교체 이전 · 지금 성적에 넣지 않습니다
+              </span>
+            </div>
+            {(() => {
+              const done = legacy.filter(
+                (r) => r.closed && r.return_pct != null && r.status !== "규칙 교체 정리",
+              );
+              const won = done.filter((r) => (r.return_pct ?? 0) > 0);
+              const mean =
+                done.length > 0
+                  ? done.reduce((a, r) => a + (r.return_pct ?? 0), 0) / done.length
+                  : null;
+              return (
+                <p className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px]">
+                  <span className="tnum text-text-dim">
+                    끝난 거래 {done.length}건
+                  </span>
+                  <span className="tnum text-text-dim">
+                    승률{" "}
+                    {done.length > 0
+                      ? `${((won.length / done.length) * 100).toFixed(1)}%`
+                      : "—"}
+                  </span>
+                  <span
+                    className={`tnum font-semibold ${
+                      mean == null ? "text-text-mute" : mean >= 0 ? "text-good" : "text-bad"
+                    }`}
+                  >
+                    평균 {mean == null ? "—" : fmtPct(mean)}
+                  </span>
+                  <Link
+                    href="/picks?gen=legacy"
+                    className="ml-auto font-semibold text-accent hover:underline"
+                  >
+                    옛 규칙 기록 보기 →
+                  </Link>
+                </p>
+              );
+            })()}
+          </section>
+        )}
       </div>
     </AppShell>
   );
