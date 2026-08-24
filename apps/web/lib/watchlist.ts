@@ -1,6 +1,8 @@
 import { createClient as createUserClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
-import { getLatestPricesBySymbols } from "@/lib/data";
+import { getLatestPricesBySymbols, getTradingCalendar } from "@/lib/data";
+import { horizonSpec } from "@/lib/holding";
+import { tradingDayLabel } from "@/lib/format";
 
 /**
  * 관심 종목 — 회원이 담아 두는 것.
@@ -28,8 +30,36 @@ export interface WatchItem {
   rating: string | null;
   ratingAsOf: string | null;
   score: number | null;
-  /** 지금 발행 중인 픽에 들어 있나(진입 대기·보유 중) */
-  inPick: boolean;
+  /**
+   * 지금 발행 중인 픽 — 있으면 그 «매매 계획»이 통째로 실린다.
+   *
+   * 2026-08-25 Victor 확정: 「내 픽 추적」이라는 새 화면을 만들지 않고, 관심 종목
+   * 줄에 계획을 붙인다. 새 개념(«담기»)을 하나 더 만들지 않고도 «내가 지켜보는
+   * 종목의 계획이 지금 어디쯤인가»는 답할 수 있다 — 그리고 아무도 안 누르면
+   * 비어 있는 화면이 하나 더 생기는 일도 없다.
+   */
+  pick: WatchPick | null;
+}
+
+export interface WatchPick {
+  asOf: string;
+  /** pending = 다음 거래일 시가 진입 예정 · open = 보유 중 */
+  status: string;
+  horizon: string | null;
+  entry: number | null;
+  /** 본전 도달로 손절이 올라갔으면 진입가가 손절이다(trail 규칙, 0037) */
+  stop: number | null;
+  /** 본전 도달가 — 여기 닿으면 손절이 진입가로 올라간다. 파는 자리가 아니다 */
+  target: number | null;
+  tp1Hit: boolean;
+  /** 청산 예정일 라벨 — 휴장일 표가 그 구간을 못 덮으면 null */
+  exitLabel: string | null;
+  /** 현재가에서 손절까지 (음수 = 아래로 그만큼 남음) */
+  toStopPct: number | null;
+  /** 현재가에서 본전 도달까지 */
+  toTargetPct: number | null;
+  /** 진입가 대비 — pending 이면 «아직 안 산» 상태라 null */
+  fromEntryPct: number | null;
 }
 
 /** 담은 종목의 instrument_id 목록 — 화면이 아니라 판정용(☆ 버튼)이 쓴다. */
@@ -99,7 +129,7 @@ export async function getMyWatchlist(): Promise<WatchItem[]> {
     const ids = items.map((x) => x.instrumentId);
     const symbols = items.map((x) => x.symbol);
 
-    const [prices, reportsRes, picksRes] = await Promise.all([
+    const [prices, reportsRes, picksRes, cal] = await Promise.all([
       getLatestPricesBySymbols(symbols),
       // 최근 분석 — 종목당 최신 1건만 필요하지만 PostgREST 에 «그룹별 최신»이 없다.
       // 종목 수 × 몇 건이면 충분하므로 넉넉히 받아 메모리에서 첫 건만 취한다.
@@ -112,14 +142,19 @@ export async function getMyWatchlist(): Promise<WatchItem[]> {
         .order("as_of", { ascending: false })
         .limit(Math.min(ids.length * 6, 900)),
       // 지금 살아 있는 픽 — 진입 대기(pending)와 보유 중(open) 둘 다 «내 관심 종목이
-      // 지금 픽에 올라 있다»는 뜻이다.
+      // 지금 픽에 올라 있다»는 뜻이다. 레벨까지 같이 받아 계획을 그린다.
       pub
         .from("recommendations")
-        .select("instrument_id")
+        .select(
+          "instrument_id,as_of,status,horizon,entry_price,stop_loss,target_price,tp1_hit",
+        )
         .eq("basket_type", "daily_focus")
         .in("status", ["pending", "open"])
         .in("instrument_id", ids)
+        .order("as_of", { ascending: false })
         .limit(200),
+      // 청산 예정일 — 휴장일을 한 번만 읽고 메모리에서 센다.
+      getTradingCalendar(),
     ]);
 
     const latestReport = new Map<
@@ -136,15 +171,18 @@ export async function getMyWatchlist(): Promise<WatchItem[]> {
       });
     }
 
-    const inPick = new Set(
-      ((picksRes.data ?? []) as { instrument_id: number }[]).map((r) =>
-        Number(r.instrument_id),
-      ),
-    );
+    // 같은 종목에 픽이 여러 건이면 최신 하나만 쓴다(정렬이 최신순이라 첫 건).
+    const pickByIid = new Map<number, Record<string, unknown>>();
+    for (const r of (picksRes.data ?? []) as Record<string, unknown>[]) {
+      const iid = Number(r.instrument_id);
+      if (!pickByIid.has(iid)) pickByIid.set(iid, r);
+    }
 
     return items.map((x) => {
       const p = prices.get(x.symbol);
       const rep = latestReport.get(x.instrumentId);
+      const raw = pickByIid.get(x.instrumentId);
+      const pick = raw ? buildPick(raw, p?.close ?? null, cal) : null;
       return {
         symbol: x.symbol,
         name: x.name,
@@ -155,10 +193,49 @@ export async function getMyWatchlist(): Promise<WatchItem[]> {
         rating: rep?.rating ?? null,
         ratingAsOf: rep?.as_of ?? null,
         score: rep?.score ?? null,
-        inPick: inPick.has(x.instrumentId),
+        pick,
       };
     });
   } catch {
     return [];
   }
+}
+
+/** 픽 한 건을 «계획»으로 옮긴다 — 화면이 계산하지 않게 여기서 다 낸다. */
+function buildPick(
+  r: Record<string, unknown>,
+  last: number | null,
+  cal: { nth: (from: string, n: number) => string | null },
+): WatchPick {
+  const asOf = String(r.as_of);
+  const entry = (r.entry_price as number) ?? null;
+  const tp1Hit = Boolean(r.tp1_hit);
+  // 본전 도달 뒤에는 손절이 진입가다 — 규칙이 «목표=파는 트리거»가 아니라
+  // «본전스톱 전환»이기 때문이다(0037). 옛 stop_loss 를 그대로 그리면 이미 올라간
+  // 손절선을 아래에 그려 «아직 여유 있다»고 읽힌다.
+  const stop = (tp1Hit ? entry : ((r.stop_loss as number) ?? null)) ?? null;
+  const target = (r.target_price as number) ?? null;
+  const horizon = (r.horizon as string) ?? null;
+
+  const bars = horizonSpec(horizon)?.bars;
+  // 발행일 다음 거래일이 진입일(1거래일째)이라, 발행일에서 기간만큼 세면 마지막 날이다.
+  const exitIso = bars ? cal.nth(asOf, bars) : null;
+
+  const pct = (from: number | null, to: number | null) =>
+    from != null && from > 0 && to != null ? to / from - 1 : null;
+
+  return {
+    asOf,
+    status: String(r.status),
+    horizon,
+    entry,
+    stop,
+    target,
+    tp1Hit,
+    exitLabel: exitIso ? tradingDayLabel(exitIso) : null,
+    toStopPct: pct(last, stop),
+    toTargetPct: pct(last, target),
+    // 아직 안 산 픽에 «진입가 대비»를 적으면 산 것처럼 읽힌다.
+    fromEntryPct: String(r.status) === "open" ? pct(entry, last) : null,
+  };
 }

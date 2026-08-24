@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { Search, ShieldCheck, Star } from "lucide-react";
 
@@ -5,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { AssetTabs } from "@/components/AssetTabs";
 import { SymbolCode } from "@/components/SymbolCode";
 import { WatchButton } from "@/components/WatchButton";
-import { getMyWatchlist, type WatchItem } from "@/lib/watchlist";
+import { getMyWatchlist, type WatchItem, type WatchPick } from "@/lib/watchlist";
 import { fmtPct, tradingDayLabel } from "@/lib/format";
 
 /**
@@ -45,7 +46,7 @@ const RATING_STYLE: Record<string, string> = {
 
 export default async function WatchlistPage() {
   const items = await getMyWatchlist();
-  const inPick = items.filter((r) => r.inPick).length;
+  const inPick = items.filter((r) => r.pick).length;
   const rated = items.filter((r) => r.rating === "매수").length;
 
   return (
@@ -97,7 +98,8 @@ export default async function WatchlistPage() {
               </thead>
               <tbody>
                 {items.map((r) => (
-                  <tr key={r.symbol} className="border-b border-border-soft last:border-0">
+                  <Fragment key={r.symbol}>
+                  <tr className={r.pick ? "" : "border-b border-border-soft last:border-0"}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Link
@@ -107,9 +109,9 @@ export default async function WatchlistPage() {
                           {r.name}
                         </Link>
                         <SymbolCode symbol={r.symbol} className="text-[10.5px] text-text-mute" />
-                        {r.inPick && (
+                        {r.pick && (
                           <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[10.5px] font-semibold text-accent">
-                            오늘의 픽
+                            {r.pick.status === "open" ? "픽 보유 중" : "픽 진입 대기"}
                           </span>
                         )}
                       </div>
@@ -138,6 +140,14 @@ export default async function WatchlistPage() {
                       <WatchButton symbol={r.symbol} watched signedIn size="sm" />
                     </td>
                   </tr>
+                  {r.pick && (
+                    <tr className="border-b border-border-soft last:border-0">
+                      <td colSpan={6} className="px-4 pb-3.5">
+                        <PickPlan pick={r.pick} last={r.last} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -179,15 +189,20 @@ export default async function WatchlistPage() {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Rating item={r} />
-                  {r.inPick && (
+                  {r.pick && (
                     <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">
-                      오늘의 픽
+                      {r.pick.status === "open" ? "픽 보유 중" : "픽 진입 대기"}
                     </span>
                   )}
                   <span className="ml-auto">
                     <WatchButton symbol={r.symbol} watched signedIn size="sm" />
                   </span>
                 </div>
+                {r.pick && (
+                  <div className="mt-3">
+                    <PickPlan pick={r.pick} last={r.last} />
+                  </div>
+                )}
               </article>
             ))}
           </div>
@@ -200,6 +215,87 @@ export default async function WatchlistPage() {
         </>
       )}
     </AppShell>
+  );
+}
+
+/**
+ * 픽 계획 — 관심 종목 줄에 붙는 «지금 어디쯤인가».
+ *
+ * 2026-08-25 Victor 확정: 「내 픽 추적」이라는 새 화면을 만들지 않고 여기에 붙인다.
+ * 새 개념(«픽 담기»)을 하나 더 만들지 않고도 답할 수 있고, 아무도 안 누르면 비어
+ * 있는 화면이 하나 더 생기는 일도 없다.
+ *
+ * 막대는 **손절선과 본전 도달선 사이에서 현재가의 위치**다. 수익률 막대가 아니다 —
+ * 이 규칙에서 중요한 것은 «얼마 벌었나»가 아니라 «어느 선에 가까운가»이기 때문이다.
+ * 본전 도달선에 닿으면 손절이 진입가로 올라가고(파는 자리가 아니다), 손절선에 닿으면
+ * 전량 정리다.
+ */
+function PickPlan({ pick: p, last }: { pick: WatchPick; last: number | null }) {
+  const pending = p.status !== "open";
+  // 손절 → 본전 사이에서 현재가가 몇 %쯤인가. 범위 밖이면 끝에 붙인다.
+  const pos =
+    last != null && p.stop != null && p.target != null && p.target > p.stop
+      ? Math.min(100, Math.max(0, ((last - p.stop) / (p.target - p.stop)) * 100))
+      : null;
+
+  return (
+    <div className="rounded-[10px] bg-surface-2 px-4 py-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[11.5px] text-text-mute">
+        <span className="font-semibold text-text-dim">
+          {pending ? "다음 거래일 시가 진입 예정" : "픽 계획"}
+        </span>
+        {p.tp1Hit && (
+          <span className="rounded-[999px] bg-good-soft px-2 py-0.5 font-semibold text-good">
+            본전 도달 — 손절이 진입가로
+          </span>
+        )}
+        {p.fromEntryPct != null && (
+          <span
+            className={`tnum font-semibold ${p.fromEntryPct >= 0 ? "text-good" : "text-bad"}`}
+          >
+            진입가 대비 {fmtPct(p.fromEntryPct)}
+          </span>
+        )}
+        <span className="ml-auto">{p.asOf} 발행</span>
+      </div>
+
+      {pos != null && (
+        <div className="relative mt-3 h-1.5 rounded-[999px] bg-surface-3">
+          <div
+            className={`absolute inset-y-0 left-0 rounded-[999px] ${
+              pos < 25 ? "bg-bad" : pos > 70 ? "bg-good" : "bg-accent"
+            }`}
+            style={{ width: `${pos}%` }}
+          />
+          {/* 현재가 표시선 — 색만으로 위치를 읽게 하지 않는다 */}
+          <span
+            className="absolute top-[-4px] h-[14px] w-[2px] bg-text"
+            style={{ left: `calc(${pos}% - 1px)` }}
+            aria-hidden
+          />
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[11.5px]">
+        <span className="tnum text-bad">
+          손절 {p.stop != null ? p.stop.toLocaleString() : "—"}
+          {p.toStopPct != null && ` (${fmtPct(p.toStopPct)})`}
+        </span>
+        <span className="tnum text-text-mute">
+          {last != null ? `지금 ${last.toLocaleString()}` : "시세 없음"}
+        </span>
+        <span className="tnum text-good">
+          본전 {p.target != null ? p.target.toLocaleString() : "—"}
+          {p.toTargetPct != null && ` (${fmtPct(p.toTargetPct)})`}
+        </span>
+      </div>
+
+      <p className="mt-2 text-[11px] text-text-mute">
+        진입 {p.entry != null ? `${p.entry.toLocaleString()}원` : "—"}
+        {p.exitLabel ? ` · ${p.exitLabel} 청산 예정` : ""}
+        {" · 이 계획은 엔진이 낸 것이고, 실제 매매 여부는 기록하지 않습니다"}
+      </p>
+    </div>
   );
 }
 
