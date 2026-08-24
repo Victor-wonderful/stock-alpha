@@ -569,7 +569,82 @@ export default async function ScreenerPage({
               </span>
             )}
           </div>
-          <div className="overflow-x-auto">
+          {/* ── 폰 (768 미만) — 시그널 하나가 카드 한 장 ──
+              열이 12개다. 표로 두면 진입가부터가 스크롤 뒤로 숨는데, 이 화면은 «지금 살
+              만한가»를 훑는 곳이라 레벨과 판정이 먼저 보여야 한다. 스파크바·1주당 리스크는
+              카드에서 뺐다 — 좁은 화면에서 다 넣으면 어느 것도 안 읽힌다. */}
+          <div className="md:hidden">
+            {visible.map((s) => {
+              const slPct =
+                s.stop_loss != null && s.entry_price
+                  ? (s.stop_loss - s.entry_price) / s.entry_price
+                  : null;
+              const tpPct =
+                s.tp1 != null && s.entry_price ? (s.tp1 - s.entry_price) / s.entry_price : null;
+              return (
+                <article key={`m-${s.id}`} className="border-b border-border px-4 py-3.5 last:border-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent-soft text-[12px] font-bold text-accent">
+                        {initials(s.name)}
+                      </span>
+                      <div className="min-w-0">
+                        <Link href={`/stocks/${s.symbol}`} className="block text-[15px] font-bold text-text">
+                          {s.name}
+                        </Link>
+                        <SymbolCode symbol={s.symbol} className="text-[12px] text-text-mute" />
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[11.5px] text-text-mute">현재가</p>
+                      <p className="mono text-[15px] font-bold text-text">
+                        {priceMap.get(s.symbol) ? fmtPrice(priceMap.get(s.symbol)!.close) : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-text-mute">
+                    <span>
+                      {s.setup
+                        ? TRADE_SETUP_LABELS[s.setup as keyof typeof TRADE_SETUP_LABELS] ?? s.setup
+                        : "셋업 미상"}
+                    </span>
+                    <span className="opacity-40">·</span>
+                    <span>{horizonLabel(s.horizon)}</span>
+                    <span className="opacity-40">·</span>
+                    <span className="tnum">합성알파 {fmtNum(s.strength, 2)}</span>
+                  </p>
+
+                  <dl className="mono mt-2.5 flex flex-wrap gap-x-4 gap-y-1 rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px]">
+                    <span>
+                      <dt className="inline text-text-mute">진입 </dt>
+                      <dd className="inline font-semibold text-text">{fmtPrice(s.entry_price)}</dd>
+                    </span>
+                    <span>
+                      <dt className="inline text-text-mute">손절 </dt>
+                      <dd className="inline font-semibold text-bad">
+                        {fmtPrice(s.stop_loss)}
+                        {slPct != null && <span className="ml-1 font-normal">{fmtPct(slPct)}</span>}
+                      </dd>
+                    </span>
+                    <span>
+                      <dt className="inline text-text-mute">본전 </dt>
+                      <dd className="inline font-semibold text-good">
+                        {fmtPrice(s.tp1)}
+                        {tpPct != null && <span className="ml-1 font-normal">{fmtPct(tpPct)}</span>}
+                      </dd>
+                    </span>
+                  </dl>
+
+                  <div className="mt-2">
+                    <AiJudge signal={s} />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-2">
