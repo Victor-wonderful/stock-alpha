@@ -60,7 +60,131 @@ export function OpenPicksTable({
 
   return (
     <div className="overflow-hidden rounded-[12px] border border-border bg-surface">
-      <div className="overflow-x-auto">
+      {/* ── 폰 (768 미만) — 종목당 카드 ──
+          열이 8개다. 폰에서 표로 두면 손절가·본전 도달가가 가로 스크롤 뒤로 숨는데,
+          그 둘이 «지금 팔아야 하나»를 판단하는 값이다(2026-08-24 Victor 의 폰 화면).
+          홈의 「오늘의 픽」과 같은 규칙이다 — 두 표는 같은 것을 다른 시점에서 본다. */}
+      <div className="md:hidden">
+        {picks.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <p className="text-[13px] font-semibold text-text">아직 보유 중인 픽이 없습니다</p>
+            <p className="mt-1 text-[12px] text-text-mute">
+              {pendingCount > 0
+                ? `오늘의 픽 ${pendingCount}건이 ${planDay ?? "다음 거래일"} 시가에 체결되면 여기에 줄이 생깁니다.`
+                : "픽이 체결되면 여기에 줄이 생깁니다."}
+            </p>
+          </div>
+        ) : (
+          picks.map((p) => {
+            const spec = horizonSpec(p.horizon);
+            const setupLabel = p.setup
+              ? TRADE_SETUP_LABELS[p.setup as keyof typeof TRADE_SETUP_LABELS] ?? p.setup
+              : null;
+            const near = p.toStopPct != null && p.toStopPct >= -0.03;
+            return (
+              <article
+                key={p.symbol}
+                className="border-b border-border-soft px-4 py-4 last:border-0"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <Link
+                        href={`/stocks/${p.symbol}`}
+                        className="text-[16px] font-bold text-text"
+                      >
+                        {p.name}
+                      </Link>
+                      <SymbolCode symbol={p.symbol} className="text-[12px] text-text-mute" />
+                      {p.tp1Hit && (
+                        <span className="rounded-[4px] bg-pass-soft px-1.5 py-0.5 text-[11px] font-semibold text-pass">
+                          본전스톱
+                        </span>
+                      )}
+                      {near && !p.tp1Hit && (
+                        <span className="rounded-[4px] bg-bad-soft px-1.5 py-0.5 text-[11px] font-semibold text-bad">
+                          손절 코앞
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[12px] text-text-mute">
+                      {spec ? `${spec.label} · ${spec.bars}거래일` : "기간 미지정"}
+                      {setupLabel && ` · ${setupLabel}`}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-[11.5px] text-text-mute">현재 손익</p>
+                    <p
+                      className={`tnum text-[17px] font-bold ${
+                        p.returnPct == null
+                          ? "text-text-mute"
+                          : p.returnPct >= 0
+                            ? "text-good"
+                            : "text-bad"
+                      }`}
+                    >
+                      {p.returnPct != null ? fmtPct(p.returnPct) : "—"}
+                    </p>
+                    <p className="tnum text-[12px] text-text-mute">
+                      {p.last != null ? `현재가 ${won(p.last)}` : "현재가 —"}
+                    </p>
+                  </div>
+                </div>
+
+                <dl className="mt-3 divide-y divide-border-soft rounded-[10px] bg-surface-2 px-3">
+                  {[
+                    {
+                      k: "진입가",
+                      v: p.entry,
+                      note: `${p.asOf.slice(5).replace("-", "/")} 발행`,
+                      cls: "text-text-dim",
+                    },
+                    {
+                      k: "손절가",
+                      v: p.stop,
+                      note: stopSub(p.toStopPct),
+                      cls: "text-bad",
+                    },
+                    {
+                      k: "본전 도달가",
+                      v: p.target,
+                      note: p.tp1Hit
+                        ? "도달 — 손절이 본전"
+                        : p.toTargetPct != null
+                          ? `${fmtPct(p.toTargetPct)} 남음`
+                          : "닿으면 손절이 본전으로",
+                      cls: "text-good",
+                    },
+                  ].map((f) => (
+                    <div key={f.k} className="flex items-baseline gap-3 py-2.5">
+                      <dt className="w-[74px] shrink-0 text-[12.5px] text-text-mute">{f.k}</dt>
+                      <dd className={`tnum text-[15px] font-semibold ${f.cls}`}>
+                        {f.v != null ? won(f.v) : "—"}
+                      </dd>
+                      <dd className="ml-auto text-right text-[12px] leading-[1.5] text-text-mute">
+                        {f.note}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <p className="tnum mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-text-dim">
+                  <span>
+                    청산 {exitDays?.get(p.symbol) ?? (spec ? `${spec.bars}거래일째` : "—")}
+                  </span>
+                  <span className="text-text-mute">·</span>
+                  <span>
+                    보유 {p.heldDays}일
+                    {spec && <span className="text-text-mute"> / 상한 {spec.bars}거래일</span>}
+                  </span>
+                </p>
+              </article>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[760px] text-[12.5px]">
           <thead>
             <tr className="border-b border-border bg-surface-2 text-[11px] text-text-mute">
@@ -209,7 +333,7 @@ export function OpenPicksTable({
       </div>
 
       {picks.length > 0 && (
-        <p className="border-t border-border-soft px-4 py-2.5 text-[11px] text-text-mute">
+        <p className="border-t border-border-soft px-4 py-2.5 text-[12px] text-text-mute">
           손절까지가 0에 가까울수록 코앞입니다 · 본전 도달가에 닿으면 손절이 진입가로
           올라가 그 뒤로는 손해 구간이 사라집니다
         </p>
