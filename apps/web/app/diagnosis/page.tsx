@@ -7,6 +7,9 @@ import { DiagnosisForm } from "@/components/DiagnosisForm";
 import { Panel } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { getPortfolioDiagnosis, type HoldingInput } from "@/lib/data";
+import { addManyToWatchlist } from "@/app/watchlist/actions";
+import { createClient as createUserClient } from "@/lib/supabase/server";
+import { getWatchedSymbols } from "@/lib/watchlist";
 import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -183,6 +186,18 @@ export default async function DiagnosisPage({
   const items = parseHoldings(sp.h);
   const diag = items.length > 0 ? await getPortfolioDiagnosis(items) : null;
 
+  // ── 진단과 관심 목록을 잇는다(2026-08-25 Victor: "리스크 진단에서 진단한 종목은
+  // 보유·관심에 안 쌓이나?") ──
+  // 안 쌓였다. 두 화면이 같은 「내 자산」 탭 안에 나란히 있으면서 서로를 몰랐다.
+  // 진단 입력은 **여전히 저장하지 않는다**(머리의 약속 그대로) — 대신 담는 길을 준다.
+  // 저장과 «담기»는 다르다: 저장은 우리가 몰래 하는 것이고, 담기는 사용자가 누르는 것이다.
+  const [{ data: { user } }, watched] = await Promise.all([
+    (await createUserClient()).auth.getUser(),
+    getWatchedSymbols(),
+  ]);
+  const diagnosed = (diag?.holdings ?? []).map((h) => h.symbol);
+  const notYetWatched = diagnosed.filter((sym) => !watched.has(sym));
+
   const grade = diag ? computeGrade(diag) : null;
   const actions = diag ? buildActions(diag) : [];
 
@@ -197,6 +212,38 @@ export default async function DiagnosisPage({
       }
     >
       <AssetTabs />
+
+      {/* 진단한 종목을 관심에 담는 길. 이미 전부 담겨 있으면 버튼을 내리고 그 사실을
+          적는다 — 눌러도 아무 일 없는 버튼을 두지 않는다. */}
+      {diagnosed.length > 0 && user && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-border bg-surface px-4 py-3">
+          {notYetWatched.length > 0 ? (
+            <>
+              <span className="text-[12.5px] text-text-dim">
+                진단한 {diagnosed.length}종목 중{" "}
+                <b className="font-semibold text-text">{notYetWatched.length}종목</b>이 아직
+                관심 목록에 없습니다.
+              </span>
+              <form action={addManyToWatchlist.bind(null, notYetWatched)} className="ml-auto">
+                <button
+                  type="submit"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-[9px] bg-accent px-4 text-[12.5px] font-semibold text-text-on-accent transition-colors hover:bg-accent-2"
+                >
+                  관심 목록에 담기
+                </button>
+              </form>
+            </>
+          ) : (
+            <span className="text-[12.5px] text-text-dim">
+              진단한 {diagnosed.length}종목은 모두 관심 목록에 있습니다.{" "}
+              <Link href="/watchlist" className="font-semibold text-accent hover:underline">
+                보유·관심 보기 →
+              </Link>
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="space-y-4">
         {/* ── 1행: 종목 입력(좌 560) + 진단 결과(우) — 시안 b5YzG ── */}
         <div className="grid items-stretch gap-4 lg:grid-cols-[560px_minmax(0,1fr)]">
