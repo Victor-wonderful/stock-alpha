@@ -116,6 +116,11 @@ export default async function HomePage() {
       getLatestReportDay(),
     ]);
 
+  // 전문가 카드의 「진입가 대비」에 쓸 현재가 — 위 묶음이 끝난 뒤에야 종목을 알 수 있다.
+  const expertPrices = await getLatestPricesBySymbols(
+    expertNotes.notes.map((n) => n.symbol).filter((x): x is string => !!x),
+  );
+
   const picks = recs.data;
   // 기준일은 «그날 분석»이 기준이다 — 픽의 as_of 를 먼저 보면 픽이 없는 날 하루
   // 전으로 밀려, 홈은 8/21 플랜인데 오늘의 픽은 8/24 플랜이 되는 어긋남이 생긴다.
@@ -407,7 +412,11 @@ export default async function HomePage() {
             글이 하나도 없으면 섹션이 스스로 «아직 없습니다»를 말한다 — 자리를 지워
             버리면 첫 글이 올라온 날 화면 구조가 통째로 바뀐다. */}
         <div className="mt-12">
-          <ExpertNotes notes={expertNotes.notes} failed={expertNotes.failed} />
+          <ExpertNotes
+            notes={expertNotes.notes}
+            prices={expertPrices}
+            failed={expertNotes.failed}
+          />
         </div>
 
         {/* ── 밴드 3 · 읽을 것 ──

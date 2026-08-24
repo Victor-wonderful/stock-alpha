@@ -6,6 +6,7 @@ import {
   getMorningBriefs,
   getBlogPosts,
   getExpertNotes,
+  getLatestPricesBySymbols,
   pickBlogPosts,
 } from "@/lib/data";
 import { WeeklyBriefs, MacroSection, BlogPosts } from "@/components/HomeSections";
@@ -66,8 +67,18 @@ export default async function InsightsPage() {
   // 통째로 먹으면, 매일 갱신되는 브리프가 스크롤 아래로 밀린다. 첫 글이 올라오는
   // 순간 자동으로 맨 위로 돌아온다 — 코너를 지우는 것이 아니라 순서만 양보한다.
   const expertFirst = expert.notes.length > 0;
+  // 카드에 「진입가 대비」를 적으려면 기준이 되는 현재가가 있어야 한다. 종목당 한 번씩
+  // 묻지 않고 한 번에 받아온다.
+  const expertPrices = await getLatestPricesBySymbols(
+    expert.notes.map((n) => n.symbol).filter((s): s is string => !!s),
+  );
   const expertSection = (
-    <ExpertNotes notes={expert.notes} failed={expert.failed} moreHref={null} />
+    <ExpertNotes
+      notes={expert.notes}
+      prices={expertPrices}
+      failed={expert.failed}
+      moreHref={null}
+    />
   );
 
   return (
