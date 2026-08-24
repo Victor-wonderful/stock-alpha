@@ -23,6 +23,7 @@ import {
   getOpenPicks,
   getRecommendations,
   getExpertNotes,
+  getLatestReportDay,
   getReports,
   getTopNews,
   getWeeklyReports,
@@ -90,7 +91,7 @@ export default async function HomePage() {
   //    그때는 홈을 로그인 뒤로 감추지 않는다 — 홈은 공개 화면이다(Victor, 2026-08-22).
   const [
     quotes, recs, brief, marketState, openPicks, weekly, blogPosts, reports, cal, topNews,
-    expertNotes,
+    expertNotes, basisDay,
   ] = await Promise.all([
       getMarketQuotes(),
       getRecommendations(),
@@ -111,12 +112,21 @@ export default async function HomePage() {
       getTopNews(6),
       // 전문가 추천 — 사람이 고른 종목. 엔진이 건드리지 않는 콘텐츠라 조회만 한다.
       getExpertNotes(4),
+      // 분석 기준일 — 홈이 «오늘»을 정하는 값. 왜 리포트 날짜인지는 lib/data 주석 참조.
+      getLatestReportDay(),
     ]);
 
   const picks = recs.data;
   // 기준일은 «그날 분석»이 기준이다 — 픽의 as_of 를 먼저 보면 픽이 없는 날 하루
   // 전으로 밀려, 홈은 8/21 플랜인데 오늘의 픽은 8/24 플랜이 되는 어긋남이 생긴다.
-  const asOf = brief.data?.as_of ?? picks[0]?.as_of ?? null;
+  //
+  // 그렇다고 모닝 브리프의 as_of 를 쓰면 안 된다(2026-08-24 사고). 모닝 배치는 평일
+  // 08:30 에 «오늘 날짜»로 브리프를 찍는데, 그 시각엔 그날 봉도 그날 픽도 없다 —
+  // 그러면 여기서 오늘 픽이 0 건으로 걸러져 「오늘의 픽」 화면과 홈이 서로 다른 말을
+  // 한다(그 화면은 리포트 날짜를 쓴다). 실제로 8/21 오리온 1건이 홈에서만 사라졌고,
+  // 그 자리를 메우려고 만든 «시가 진입 예정 N건» 안내까지 같이 죽었다(pendingCount 가
+  // todayPicks 에서 나온다). 두 화면이 같은 소스를 보게 리포트 날짜를 1순위로 둔다.
+  const asOf = basisDay ?? picks[0]?.as_of ?? brief.data?.as_of ?? null;
   // 1순위는 DB 휴장일 표(market_calendar) — 공휴일까지 반영해 날짜를 확정한다.
   // 표가 그 구간을 아직 못 덮으면 추정(주말만 건너뜀)으로 물러서고, 그것도 미심쩍으면
   // 날짜를 단정하지 않는다. 틀린 날짜보다 «다음 거래일»이 정직하다(오늘의 픽과 동일).
