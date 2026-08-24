@@ -2748,6 +2748,34 @@ function mapReportRow(row: Record<string, unknown>): ReportListItem {
   };
 }
 
+// 분석 기준일 — «엔진이 마지막으로 종목을 분석한 날». 화면들이 «오늘»을 정하는 단일 기준이다.
+//
+// 2026-08-24 사고: 홈이 이 값을 모닝 브리프의 as_of 에서 가져왔는데, 모닝 배치는 평일
+// 08:30 에 돌면서 브리프에 «오늘 날짜»를 찍는다(engine/reports/morning.py). 그 시각엔
+// 그날 봉도 그날 픽도 없다 — 내용은 전 거래일 종가 이야기인데 라벨만 오늘이다. 홈은 그
+// 날짜로 픽을 걸러 «발행 없음»을 띄웠고, 같은 픽을 「오늘의 픽」 화면은 정상 표시했다.
+// 두 화면이 매 평일 08:30~19:40 내내 다른 말을 했다.
+//
+// 그래서 기준은 «브리프가 언제 쓰였나»가 아니라 «분석이 어느 날짜까지 됐나»여야 한다.
+// 리포트 발행일이 그 값이고, 「오늘의 픽」(/focus)이 이미 이걸 쓴다. 거래 부적합 리포트도
+// «그날 분석했다»는 증거이므로 포함한다(목록에서만 뺀다).
+export async function getLatestReportDay(): Promise<string | null> {
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("reports")
+      .select("as_of")
+      .eq("status", "published")
+      .eq("report_type", "indepth")
+      .order("as_of", { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) return null;
+    return (data[0] as Record<string, unknown>).as_of as string;
+  } catch {
+    return null;
+  }
+}
+
 export async function getReports(
   limit = 30,
   opts: { includeUnfit?: boolean } = {},
