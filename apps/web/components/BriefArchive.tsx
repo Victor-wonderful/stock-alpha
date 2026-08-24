@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import type { MorningBriefListItem } from "@/lib/data";
+import type { BlogPost, MorningBriefListItem } from "@/lib/data";
+import { BlogPosts } from "@/components/HomeSections";
 import { regimeName } from "@/components/RegimeHeader";
 import { SectionHead } from "@/components/SectionHead";
 
@@ -79,24 +80,37 @@ export function BriefRows({ items }: { items: MorningBriefListItem[] }) {
   );
 }
 
-/** 인사이트 페이지에 세우는 섹션. `moreHref` 가 있으면 전체 목록으로 보낸다. */
+/**
+ * 인사이트 페이지에 세우는 섹션.
+ *
+ * 2026-08-24 부터 엔진이 이 브리프를 **블로그 글로도 발행한다**(engine/daily).
+ * 글이 있으면 글이 이긴다 — 이 저장소의 다른 섹션(주간 브리핑·매크로)과 같은 규칙이다.
+ * 글로 읽는 편이 낫고, 블로그 쪽에는 본문(시황 문단·조건부 실측·지표 표)이 다 있다.
+ *
+ * 글이 없을 때만 표 형태 목록으로 되돌아간다 — 블로그가 안 떠 있어도 이 자리가
+ * 비지 않아야 한다.
+ */
 export function BriefArchive({
   items,
+  posts = [],
   moreHref,
 }: {
   items: MorningBriefListItem[];
+  /** 블로그의 engine/daily 글. 있으면 이쪽을 그린다. */
+  posts?: BlogPost[];
   moreHref?: string | null;
 }) {
-  if (items.length === 0) return null;
+  const hasPosts = posts.length > 0;
+  if (!hasPosts && items.length === 0) return null;
   return (
     <section className="mt-12">
       <SectionHead
         title="매일 브리프"
         sub="장이 끝난 뒤 그날을 기록합니다. 전망이 아니라 끝난 장의 숫자와, 과거 같은 날들이 어떻게 됐는지입니다."
         href={moreHref ?? undefined}
-        linkLabel="지난 브리프 전체"
+        linkLabel={hasPosts ? "지난 브리프" : "지난 브리프 전체"}
       />
-      <BriefRows items={items} />
+      {hasPosts ? <BlogPosts posts={posts} /> : <BriefRows items={items} />}
     </section>
   );
 }

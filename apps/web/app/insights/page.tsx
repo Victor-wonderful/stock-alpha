@@ -9,6 +9,7 @@ import {
   getExpertNotes,
   getLatestPricesBySymbols,
   pickBlogPosts,
+  pickBlogPostsWithEngine,
 } from "@/lib/data";
 import {
   WeeklyBriefs,
@@ -60,12 +61,16 @@ export default async function InsightsPage() {
     getExpertNotes(24),
   ]);
 
-  const weeklyPosts = pickBlogPosts(blogPosts, "view", "weekly", 20);
+  // 사람 글이 먼저, 그 아래 엔진 글(2026-08-24 부터 배치가 매일 발행한다).
+  const weeklyPosts = pickBlogPostsWithEngine(blogPosts, "view", "weekly", "weekly", 20);
+  const analysisPosts = pickBlogPostsWithEngine(
+    blogPosts, "stocks", "analysis", "analysis", 20,
+  );
+  const dailyPosts = pickBlogPosts(blogPosts, "engine", "daily", 12);
   const macroPosts = pickBlogPosts(blogPosts, "view", "macro", 20);
-  const analysisPosts = pickBlogPosts(blogPosts, "stocks", "analysis", 20);
   // 위 두 섹션이 이미 가져간 글은 빼고 나머지를 모은다(같은 글을 두 번 보여주지 않는다).
   const taken = new Set(
-    [...weeklyPosts, ...macroPosts, ...analysisPosts].map((p) => p.url),
+    [...weeklyPosts, ...macroPosts, ...analysisPosts, ...dailyPosts].map((p) => p.url),
   );
   const otherPosts = blogPosts.filter((p) => !taken.has(p.url)).slice(0, 20);
 
@@ -118,6 +123,7 @@ export default async function InsightsPage() {
           {expertSection}
           <BriefArchive
             items={briefs.slice(0, BRIEF_PREVIEW)}
+            posts={dailyPosts}
             moreHref={briefs.length > BRIEF_PREVIEW ? "/insights/brief" : null}
           />
           <WeeklyBriefs posts={weeklyPosts} reports={weekly} moreHref={null} />

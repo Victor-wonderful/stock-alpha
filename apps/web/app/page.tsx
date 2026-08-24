@@ -29,6 +29,7 @@ import {
   getTopNews,
   getWeeklyReports,
   pickBlogPosts,
+  pickBlogPostsWithEngine,
 } from "@/lib/data";
 import {
   fmtPct,
@@ -219,8 +220,11 @@ export default async function HomePage() {
     }),
   );
   // 블로그 글이 있으면 그걸 쓰고, 없으면 엔진 산출물이 그 자리를 지킨다(컴포넌트가 판단).
-  const weeklyPosts = pickBlogPosts(blogPosts, "view", "weekly", 3);
-  const analysisPosts = pickBlogPosts(blogPosts, "stocks", "analysis", 3);
+  // 사람 글이 먼저, 그 아래 엔진 글 — 인사이트와 같은 규칙이다(2026-08-24).
+  const weeklyPosts = pickBlogPostsWithEngine(blogPosts, "view", "weekly", "weekly", 3);
+  const analysisPosts = pickBlogPostsWithEngine(
+    blogPosts, "stocks", "analysis", "analysis", 3,
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-bg">
