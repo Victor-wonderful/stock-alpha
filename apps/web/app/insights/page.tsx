@@ -45,8 +45,19 @@ export const metadata = {
   description: "매일 브리프와 주간 브리핑, 매크로. 전망이 아니라 측정한 것만 적습니다.",
 };
 
-/** 인사이트 본문에 세우는 브리프 수. 나머지는 /insights/brief 로 보낸다. */
-const BRIEF_PREVIEW = 12;
+/**
+ * 섹션마다 본문에 세우는 수 — **다섯**(2026-08-24 Victor: "각 섹션마다 5개로 하고
+ * 전체 보기는 따로 해라").
+ *
+ * 그전에는 섹션마다 12~20편을 늘어놓았다. 글이 쌓일수록 페이지가 아래로만 길어져
+ * **아래쪽 섹션이 화면 밖으로 밀렸다** — 매크로를 보려면 브리프 20행을 지나야 했다.
+ * 이 페이지는 «무엇이 있는지 훑는 자리»이고, 전부 읽는 자리는 섹션별 목록이다.
+ *
+ * 그래서 다섯을 넘기면 반드시 **갈 곳(moreHref)이 있어야 한다.** 자르기만 하고 링크를
+ * 안 주면 나머지가 다시 «없는 것»이 된다 — 매일 브리프에서 이미 겪은 일이다(48편이
+ * 쌓였는데 최신 1건만 읽히던 8/24 오전).
+ */
+const SECTION_PREVIEW = 5;
 
 export default async function InsightsPage() {
   const [weekly, macro, briefs, reports, blogPosts, expert] = await Promise.all([
@@ -72,7 +83,7 @@ export default async function InsightsPage() {
   const taken = new Set(
     [...weeklyPosts, ...macroPosts, ...analysisPosts, ...dailyPosts].map((p) => p.url),
   );
-  const otherPosts = blogPosts.filter((p) => !taken.has(p.url)).slice(0, 20);
+  const otherPosts = blogPosts.filter((p) => !taken.has(p.url));
 
   // 전문가 추천도 조건에 넣는다 — 엔진 산출물이 다 비어도 사람 글이 있으면 화면은
   // 비어 있지 않다(2026-08-23).
@@ -121,21 +132,58 @@ export default async function InsightsPage() {
         // (-mt-12 로 당겼더니 제목 위로 올라타 겹쳤다)
         <div className="[&>section:first-child]:mt-0">
           {expertSection}
+          {/* 전체 보기는 «자를 만큼 있을 때»만 건다. 3편뿐인데 「전체 보기」가 있으면
+              눌러 봐야 같은 3편이고, 그건 링크가 아니라 함정이다. */}
           <BriefArchive
-            items={briefs.slice(0, BRIEF_PREVIEW)}
-            posts={dailyPosts}
-            moreHref={briefs.length > BRIEF_PREVIEW ? "/insights/brief" : null}
+            items={briefs.slice(0, SECTION_PREVIEW)}
+            posts={dailyPosts.slice(0, SECTION_PREVIEW)}
+            moreHref={
+              briefs.length > SECTION_PREVIEW || dailyPosts.length > SECTION_PREVIEW
+                ? "/insights/brief"
+                : null
+            }
           />
-          <WeeklyBriefs posts={weeklyPosts} reports={weekly} moreHref={null} />
-          <RecentReports posts={analysisPosts} reports={reports.data} />
-          <MacroSection posts={macroPosts} indicators={macro} moreHref={null} />
+          <WeeklyBriefs
+            posts={weeklyPosts.slice(0, SECTION_PREVIEW)}
+            reports={weekly.slice(0, SECTION_PREVIEW)}
+            moreHref={
+              weeklyPosts.length > SECTION_PREVIEW || weekly.length > SECTION_PREVIEW
+                ? "/insights/weekly"
+                : null
+            }
+          />
+          {/* 기업 분석의 전체 목록은 이미 있다 — 8개 메뉴의 「분석」(/reports). 같은
+              목록을 인사이트 밑에 또 만들지 않는다. */}
+          <RecentReports
+            posts={analysisPosts.slice(0, SECTION_PREVIEW)}
+            reports={reports.data.slice(0, SECTION_PREVIEW)}
+            moreHref="/reports"
+            moreLabel="분석 전체"
+          />
+          {/* 매크로만 «자를 만큼 있을 때» 규칙에서 뺀다. 이 섹션은 글이 있으면 글이
+              이겨서 **지표가 통째로 사라진다** — 그러면 인사이트 어디에도 금리·환율
+              값이 없다. /insights/macro 는 지표와 글을 같이 세우므로, 섹션이 안
+              보여주는 것이 언제나 거기 있다. 그래서 지표가 있으면 항상 링크한다. */}
+          <MacroSection
+            posts={macroPosts.slice(0, SECTION_PREVIEW)}
+            indicators={macro.slice(0, SECTION_PREVIEW)}
+            moreHref={macro.length > 0 ? "/insights/macro" : null}
+          />
+          {/* 「블로그에서」도 같은 규칙을 받는다 — Victor 가 이름을 대지는 않았지만
+              같은 화면에서 같은 이유로 길어지는 섹션이다. 갈 곳은 블로그 자신이다. */}
           {otherPosts.length > 0 && (
             <section className="mt-12">
               <SectionHead
                 title="블로그에서"
                 sub="VECTA 블로그에 쓴 글입니다. 판단은 사람이, 수치는 엔진이 냅니다."
+                href={
+                  otherPosts.length > SECTION_PREVIEW
+                    ? otherPosts[0].url.replace(/\/[^/]+\/[^/]+$/, "")
+                    : undefined
+                }
+                linkLabel="블로그"
               />
-              <BlogPosts posts={otherPosts} />
+              <BlogPosts posts={otherPosts.slice(0, SECTION_PREVIEW)} />
             </section>
           )}
         </div>
