@@ -170,6 +170,8 @@ export interface ReportListItem {
   report_type: string;
   symbol: string | null;
   name: string | null;
+  /** 거래소 — KOSPI | KOSDAQ 등. 「분석」 화면의 시장 칩이 쓴다(2026-08-25). */
+  exchange: string | null;
   title: string;
   as_of: string;
   rating: string | null;

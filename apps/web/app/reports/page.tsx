@@ -9,6 +9,7 @@ import {
   countUnfitButPublishable,
   countUnfitReports,
   getPickHistory,
+  getReportDays,
   getReports,
   getLatestPricesBySymbols,
 } from "@/lib/data";
@@ -52,71 +53,94 @@ export default async function ReportsPage({
   const activeMarket = sp.market ?? null; // KOSPI | KOSDAQ
   const search = sp.q ?? ""; // 종목 검색(이름·코드)
 
-  const FETCH_LIMIT = 400; // 일 발행 상한 100 × 며칠치 — 한도 도달 시 마지막(부분) 그룹은 버림
+  // ── 날짜가 곧 페이지다(2026-08-25) ──
+  // 예전에는 한 번에 400건을 긁어 3일치를 한 장에 쌓았다. 실제로는 42개 발행일 ×
+  // 하루 100건이라 **나머지 39일은 화면에서 갈 길이 없었다.** 게다가 판정 칩의 숫자는
+  // 최신일 기준인데 목록은 3일치여서, 「매수 27」을 누르면 100건 넘게 나왔다.
+  //
+  // 하루치만 본다. 그러면 목록 길이가 발행일 수와 무관하게 일정하고, 칩의 숫자가
+  // 화면에 보이는 것과 정확히 같아진다.
+  const days = await getReportDays();
+  const requested = sp.date ?? null;
+  // 없는 날짜를 주소로 받으면 최신으로 되돌린다 — 빈 화면 대신 무언가를 보여준다.
+  const day =
+    requested && days.some((d) => d.asOf === requested)
+      ? requested
+      : (days[0]?.asOf ?? null);
+  const dayIndex = days.findIndex((d) => d.asOf === day);
+  // 목록은 최신이 위라, «이전 발행일»은 배열의 뒤쪽이다.
+  const prevDay = dayIndex >= 0 ? (days[dayIndex + 1]?.asOf ?? null) : null;
+  const nextDay = dayIndex > 0 ? days[dayIndex - 1].asOf : null;
+
   const [{ data: fetched }, { data: history }] = await Promise.all([
-    getReports(FETCH_LIMIT, { includeUnfit: includeUnfit || ratingFilter === "거래 부적합" }),
+    // 하루 상한이 100건이라 200이면 넉넉하다. 날짜를 못 정했으면(발행 0건) 조회하지 않는다.
+    day
+      ? getReports(200, {
+          day,
+          includeUnfit: includeUnfit || ratingFilter === "거래 부적합",
+        })
+      : Promise.resolve({ data: [], isSample: false }),
     getPickHistory(300),
   ]);
 
-  // 조회 한도에 걸렸으면 가장 오래된 날짜 그룹이 중간에 잘렸을 수 있다 —
-  // 부분 그룹을 건수가 맞는 양 표시하느니 그 날짜 전체를 숨긴다(정직성).
-  let reports = fetched;
-  if (fetched.length === FETCH_LIMIT) {
-    const oldestDay = fetched[fetched.length - 1]?.as_of;
-    reports = fetched.filter((r) => r.as_of !== oldestDay);
-  }
-
+  const reports = fetched;
   const pickKeys = new Set(history.map((h) => `${h.as_of}:${h.symbol}`));
-  const latestDay = reports[0]?.as_of ?? null;
+  const latestDay = days[0]?.asOf ?? null;
 
-  // 필터 칩 카운트 (최신 발행일 기준)
-  const today = reports.filter((r) => r.as_of === latestDay);
+  // ── 칩 카운트 ──
+  // 보고 있는 날짜 기준이고, **시장 칩과 검색어를 반영한다.** 예전에는 판정 칩이
+  // 필터와 무관한 수를 적고 있어서, KOSDAQ 을 고른 뒤에도 「매수 27」이 그대로였다.
+  const inMarket = (r: (typeof reports)[number]) =>
+    !activeMarket || r.exchange === activeMarket;
+  const q = search.toLowerCase();
+  const inSearch = (r: (typeof reports)[number]) =>
+    !search ||
+    (r.name ?? "").toLowerCase().includes(q) ||
+    (r.symbol ?? "").includes(q);
+  const base = reports.filter((r) => inMarket(r) && inSearch(r));
   const counts = {
-    전체: today.length,
-    매수: today.filter((r) => r.rating === "매수").length,
-    중립: today.filter((r) => r.rating === "중립").length,
-    관망: today.filter((r) => r.rating === "관망").length,
+    전체: base.length,
+    매수: base.filter((r) => r.rating === "매수").length,
+    중립: base.filter((r) => r.rating === "중립").length,
+    관망: base.filter((r) => r.rating === "관망").length,
   };
   // ⚠️ 기본 보기에서는 부적합을 조회하지 않으므로 받아온 배열로는 0 이 나온다.
   // «몇 개를 숨겼는지»는 숨기는 쪽이 말해야 한다 — 따로 센다.
   const unfitCount = includeUnfit
-    ? reports.filter((r) => r.as_of === latestDay && r.rating === "거래 부적합").length
-    : await countUnfitReports(latestDay);
+    ? reports.filter((r) => r.rating === "거래 부적합").length
+    : await countUnfitReports(day);
   // 숨긴 것 중 «지금 기준으로는 발행 대상»인 수. 판정이 리포트를 만든 날 기준이라
   // 게이트가 바뀐 뒤로 어긋난다 — 목록이 살 수 있는 종목을 가리고 있을 수 있다.
-  const unfitPublishable = await countUnfitButPublishable(latestDay, PUBLISH_HORIZONS);
+  const unfitPublishable = await countUnfitButPublishable(day, PUBLISH_HORIZONS);
 
-  // 필터 적용
-  let filtered = reports;
+  // ── 필터 적용 ──
+  // 시장 칩은 여태 **눌러도 아무 일도 안 했다**(2026-08-25 발견). 목록 데이터에
+  // exchange 가 없어서 필터를 걸 수가 없었고, 칩은 활성 표시만 바뀌었다. 이제
+  // getReports 가 instruments.exchange 를 같이 받아온다.
+  let filtered = base;
   if (ratingFilter) filtered = filtered.filter((r) => r.rating === ratingFilter);
-  if (search) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(
-      (r) => (r.name ?? "").toLowerCase().includes(q) || (r.symbol ?? "").includes(q),
-    );
-  }
-  // 거래소 필터 — 현재 ReportListItem 에 exchange 없음. symbol prefix 휴리스틱.
-  // 실데이터에서는 instruments.exchange 가 있지만 리스트 뷰에는 미포함 — UI 칩만 노출
-
-  // 날짜별 그룹 → 그룹 내 점수순
-  const groups = new Map<string, typeof filtered>();
-  for (const r of filtered) {
-    const g = groups.get(r.as_of) ?? [];
-    g.push(r);
-    groups.set(r.as_of, g);
-  }
-  for (const g of groups.values()) g.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+  // 그날 점수순 — 날짜가 하나이므로 그룹을 나눌 필요가 없다.
+  const rows = [...filtered].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 
   // 현재가 — 렌더되는 종목 전부를 벌크 1회로 가져온다.
   const priceMap = await getLatestPricesBySymbols(
-    filtered.map((r) => r.symbol).filter((s): s is string => !!s),
+    rows.map((r) => r.symbol).filter((s): s is string => !!s),
   );
 
+  /**
+   * 칩·날짜 링크의 주소. **보고 있는 조건을 잃지 않는 것**이 이 함수가 하는 일이다 —
+   * 8/19 를 보다가 KOSDAQ 을 누르면 8/19 의 KOSDAQ 이어야지 최신일로 튕기면 안 된다.
+   * 판정(rating)은 일부러 안 싣는다: 다른 축을 바꾸면 판정은 「전체」로 돌아간다.
+   */
   const buildHref = (key: string, val: string | null) => {
     const p = new URLSearchParams();
     if (activeMarket && key !== "market") p.set("market", activeMarket);
-    if (includeUnfit) p.set("all", "1");
+    // 지금 바꾸는 축은 이월하지 않는다 — 그러지 않으면 「숨기기」를 눌러도 all=1 이
+    // 그대로 따라붙어 토글이 한 방향으로만 움직인다.
+    if (includeUnfit && key !== "all") p.set("all", "1");
     if (search) p.set("q", search);
+    // 최신일은 주소에 싣지 않는다 — /reports 가 언제나 «가장 최근 분석»이어야 한다.
+    if (day && day !== latestDay && key !== "date") p.set("date", day);
     if (val) p.set(key, val);
     const qs = p.toString();
     return qs ? `/reports?${qs}` : "/reports";
@@ -127,7 +151,9 @@ export default async function ReportsPage({
       // 메뉴 이름과 맞춘다 — 「분석」(2026-08-22). «종목»은 대상이지 화면이 하는 일이
       // 아니다. 여기서 하는 일은 종목을 고르는 게 아니라 «판단을 읽는» 것이다.
       title="분석"
-      asOf={latestDay ? `${tradingDayLabel(latestDay)} 기준` : null}
+      // 최신일이 아니라 **보고 있는 날짜**를 적는다. 8/19 를 열어 놓고 머리에 8/24 가
+      // 적혀 있으면 화면이 자기 자신과 다른 말을 한다.
+      asOf={day ? `${tradingDayLabel(day)} 기준` : null}
       subtitle="종목별 판단을 읽는 곳입니다. 검색하거나 목록에서 누르면 종목 상세(5축·알파존·리포트)로 갑니다."
       stats={[
         // 「오늘의 픽」의 「분석 179」와 같은 수를 말해야 한다 — 같은 날 같은 대상인데
@@ -144,6 +170,8 @@ export default async function ReportsPage({
         {ratingFilter && <input type="hidden" name="rating" value={ratingFilter} />}
         {activeMarket && <input type="hidden" name="market" value={activeMarket} />}
         {includeUnfit && <input type="hidden" name="all" value="1" />}
+        {/* 검색해도 보던 날짜를 잃지 않는다 */}
+        {day && day !== latestDay && <input type="hidden" name="date" value={day} />}
         <div className="flex items-center gap-3 rounded-[12px] border border-border bg-surface px-5 py-4 focus-within:border-accent">
           <Search className="h-5 w-5 shrink-0 text-text-mute" />
           <input
@@ -218,7 +246,7 @@ export default async function ReportsPage({
 
         {/* 거래 부적합 토글 */}
         <Link
-          href={includeUnfit ? "/reports" : "/reports?all=1"}
+          href={buildHref("all", includeUnfit ? null : "1")}
           className={`rounded-[8px] px-2.5 py-1 text-xs font-medium transition-colors ${
             includeUnfit
               ? "bg-bad-soft text-bad ring-1 ring-bad/30"
@@ -244,17 +272,18 @@ export default async function ReportsPage({
             — 「거래 부적합」은 리포트를 만든 날의 게이트로 찍힌 값이라 그 뒤 게이트가
             바뀌면 어긋납니다. 실제로 「오늘의 픽」에 오른 종목이 여기 들어 있습니다.
           </span>
-          <Link href="/reports?all=1" className="font-semibold text-accent hover:underline">
+          <Link href={buildHref("all", "1")} className="font-semibold text-accent hover:underline">
             숨긴 것까지 보기 →
           </Link>
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState message="조건에 맞는 리포트가 없습니다." />
       ) : (
         <div className="space-y-6">
-          {[...groups.entries()].map(([asOf, rows]) => {
+          {(() => {
+            const asOf = day!;
             const pickCount = rows.filter((r) => pickKeys.has(`${r.as_of}:${r.symbol}`)).length;
             const isLatest = asOf === latestDay;
             const { date, weekday } = fmtDateHeader(asOf);
@@ -375,7 +404,41 @@ export default async function ReportsPage({
                 )}
               </section>
             );
-          })}
+          })()}
+
+          {/* 날짜 이동 — 이 목록의 «다음 페이지»다. 42개 발행일을 한 장에 쌓지 않고
+              하루씩 넘긴다(2026-08-25). 이전/다음이 없으면 버튼 자리를 비워 둔다 —
+              눌러도 아무 데도 안 가는 버튼을 두느니 없는 게 낫다. */}
+          <nav
+            className="flex items-center justify-between gap-3 border-t border-border pt-5"
+            aria-label="발행일 이동"
+          >
+            {prevDay ? (
+              <Link
+                href={buildHref("date", prevDay)}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-[9px] border border-border px-4 text-[12.5px] font-semibold text-text-dim transition-colors hover:border-border-strong hover:text-text"
+              >
+                ← {fmtDateHeader(prevDay).date}
+              </Link>
+            ) : (
+              <span className="text-[11.5px] text-text-mute">가장 오래된 발행일입니다</span>
+            )}
+
+            <span className="text-[11.5px] text-text-mute">
+              발행일 {dayIndex + 1} / {days.length}
+            </span>
+
+            {nextDay ? (
+              <Link
+                href={buildHref("date", nextDay)}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-[9px] border border-border px-4 text-[12.5px] font-semibold text-text-dim transition-colors hover:border-border-strong hover:text-text"
+              >
+                {fmtDateHeader(nextDay).date} →
+              </Link>
+            ) : (
+              <span className="text-[11.5px] text-text-mute">최신 발행일입니다</span>
+            )}
+          </nav>
 
           <p className="text-center text-[11px] text-text-mute">
             유사투자자문업자의 불특정 다수 대상 투자 참고 정보 · 투자 판단의 책임은 투자자 본인에게 있습니다
