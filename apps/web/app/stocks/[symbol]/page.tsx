@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { SymbolCode } from "@/components/SymbolCode";
+import { WatchButton } from "@/components/WatchButton";
 import { SignalTable } from "@/components/SignalTable";
 import { FactorBars } from "@/components/FactorBars";
 import { AlphaZoneChart } from "@/components/AlphaZoneChart";
@@ -18,6 +19,8 @@ import {
   getValuation,
 } from "@/lib/data";
 import { computeSnowflake } from "@/lib/snowflake";
+import { createClient as createUserClient } from "@/lib/supabase/server";
+import { isWatched } from "@/lib/watchlist";
 import { SnowflakePanel } from "@/components/SnowflakePanel";
 import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
 import type { UTCTimestamp } from "lightweight-charts";
@@ -72,6 +75,13 @@ export default async function StockDetailPage({
     : null;
   const riskStale = riskAgeDays != null && riskAgeDays > RISK_STALE_DAYS;
 
+  // 관심 종목 — 이 화면이 «담는» 자리다. 목록(/watchlist)은 담긴 것을 보는 자리이고,
+  // 담는 행동은 종목을 보고 있을 때 일어난다(2026-08-25).
+  const [{ data: { user } }, watched] = await Promise.all([
+    (await createUserClient()).auth.getUser(),
+    isWatched(symbol),
+  ]);
+
   // ③ 스노우플레이크 5축 — 이미 로드한 밸류·팩터·수급·리스크를 0~100 점수화.
   const snow = computeSnowflake({
     val: val.data,
@@ -92,6 +102,9 @@ export default async function StockDetailPage({
         </>
       }
       badge={anySample ? <SampleBadge /> : undefined}
+      headerExtra={
+        <WatchButton symbol={inst.data.symbol} watched={watched} signedIn={!!user} />
+      }
     >
       {/* 가격 헤더 */}
       <div className="mb-4 flex flex-wrap items-end gap-x-8 gap-y-2">

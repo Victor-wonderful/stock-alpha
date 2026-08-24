@@ -1,181 +1,240 @@
 import Link from "next/link";
-import { SymbolCode } from "@/components/SymbolCode";
+import { Search, Star } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
 import { AssetTabs } from "@/components/AssetTabs";
+import { SymbolCode } from "@/components/SymbolCode";
+import { WatchButton } from "@/components/WatchButton";
+import { getMyWatchlist, type WatchItem } from "@/lib/watchlist";
+import { fmtPct, tradingDayLabel } from "@/lib/format";
 
-// 워치리스트 — 회원 전용(watchlists 테이블 · RLS: 본인만 조회).
-// 로그인/CRUD 백엔드 연결 전까지는 V3 레이아웃 미리보기(예시 데이터)로 제공.
-const PREVIEW = [
-  { name: "SK스퀘어", symbol: "402340", price: "157,400", chg: "+2.1%", up: true, rating: "매수", score: 72, setup: "52주 신고가", bell: true, badge: "오늘의 픽" },
-  { name: "SK하이닉스", symbol: "000660", price: "301,500", chg: "+0.8%", up: true, rating: "매수", score: 78, setup: "주도주 추세", bell: true, badge: null },
-  { name: "삼성전자", symbol: "005930", price: "84,300", chg: "-1.2%", up: false, rating: "중립", score: 64, setup: null, bell: true, badge: "판정 상향" },
-  { name: "신세계", symbol: "004170", price: "172,900", chg: "-0.4%", up: false, rating: "중립", score: 61, setup: "눌림목", bell: false, badge: null },
-  { name: "NAVER", symbol: "035420", price: "178,200", chg: "-1.8%", up: false, rating: "관망", score: 44, setup: null, bell: false, badge: null },
-];
+/**
+ * 관심 종목 — **진짜 데이터**(2026-08-25).
+ *
+ * 이 화면은 그때까지 예시였다. 회원 전용으로 잠가 놓고(8/24) 로그인해서 들어가면
+ * SK스퀘어·삼성전자 같은 **남의 종목 다섯 개가 가짜로** 들어 있었고, 머리에는
+ * 「로그인 기능 준비 중 — 아래는 예시 화면」이라 적혀 있었다. FAQ 에는 「회원이 되면
+ * 내 자산이 열립니다」라고 적어 두었으니, 화면이 거짓말을 하는 상태였다.
+ *
+ * 표(watchlists)와 정책은 진작 있었다(0005·0006) — 붙이지 않았을 뿐이다.
+ *
+ * ## 이 화면이 답하는 질문
+ *
+ * «내가 담아 둔 것이 지금 어떤 상태인가». 그래서 종목마다 시세·최근 판정·픽 여부를
+ * 한 줄에 놓는다. 담은 순서(최근이 위)가 기본이다 — 정렬을 고르게 하지 않는 이유는
+ * 아직 몇 종목뿐이기 때문이고, 늘어나면 그때 붙인다.
+ *
+ * ## 「오늘의 변화」를 넣지 않았다
+ *
+ * 예시 화면에는 「판정 변경: 관망 → 중립」 같은 줄이 있었다. 그걸 진짜로 만들려면
+ * 어제 판정과 오늘 판정을 종목마다 비교해야 하는데, 지금 구조로는 종목당 조회가
+ * 하나씩 더 붙는다. **없는 것을 예시로 그리지 않는다**는 원칙에 따라, 만들 때까지
+ * 자리를 비워 둔다.
+ */
+export const metadata = {
+  title: "내 자산 — VECTA Stock",
+  description: "담아 둔 종목의 판정·시세를 한곳에서 봅니다.",
+};
 
-export default function WatchlistPage() {
+const RATING_STYLE: Record<string, string> = {
+  매수: "bg-accent text-text-on-accent",
+  중립: "bg-surface-3 text-text-dim",
+  관망: "border border-border text-text-mute",
+  "거래 부적합": "bg-bad-soft text-bad",
+};
+
+export default async function WatchlistPage() {
+  const items = await getMyWatchlist();
+  const inPick = items.filter((r) => r.inPick).length;
+  const rated = items.filter((r) => r.rating === "매수").length;
+
   return (
     <AppShell
       title="내 자산"
-      subtitle="관심 종목의 판정·시그널·픽 변화를 한곳에서 — 변화가 있던 종목이 위로 올라옵니다."
+      subtitle="담아 둔 종목의 시세와 가장 최근 판정입니다. 종목명을 누르면 상세로 갑니다."
       stats={[
-        { label: "관심 종목", value: `${PREVIEW.length}` },
-        { label: "오늘 변화", value: `${PREVIEW.filter((r) => r.badge).length}`, tone: "accent" as const },
-        { label: "알림 켠 종목", value: `${PREVIEW.filter((r) => r.bell).length}` },
+        { label: "관심 종목", value: `${items.length}` },
+        { label: "매수 판정", value: `${rated}` },
+        { label: "픽에 오름", value: `${inPick}`, tone: "accent" as const },
       ]}
-      // 네이비 머리 위 — 밝은 바탕 + 어두운 글자로 뒤집어야 읽힌다.
-      badge={
-        <span className="rounded-[999px] bg-warn-on-navy px-3 py-1 text-[11px] font-semibold text-navy">
-          로그인 기능 준비 중 — 아래는 예시 화면
-        </span>
-      }
     >
       <AssetTabs />
-      <div className="space-y-4">
-        {/* 오늘의 변화 (예시) */}
-        <section className="rounded-[12px] border border-accent/50 bg-surface px-5 py-4">
-          <div className="mb-3 flex items-center gap-2">
-            <h2 className="text-sm font-bold text-text">오늘의 변화</h2>
-            <span className="text-[10px] text-text-mute">16:30 일일 배치 기준 · 예시</span>
-          </div>
-          <div className="space-y-2">
-            {[
-              { icon: "★", tone: "text-accent", nm: "SK스퀘어", desc: "오늘의 픽 1위로 선정 — 52주 신고가 셋업" },
-              { icon: "⚡", tone: "text-good", nm: "SK하이닉스", desc: "신규 시그널 발생 — 주도주 추세 (중기)" },
-              { icon: "↕", tone: "text-warn", nm: "삼성전자", desc: "판정 변경: 관망 → 중립 — 업황 회복 신호 반영" },
-            ].map((c) => (
-              <div key={c.nm} className="flex items-center gap-3 rounded-[12px] bg-surface-2 px-3.5 py-2.5">
-                <span className={`text-sm ${c.tone}`}>{c.icon}</span>
-                <span className="text-[13px] font-bold text-text">{c.nm}</span>
-                <span className="text-xs text-text-dim">{c.desc}</span>
-              </div>
-            ))}
-          </div>
-        </section>
 
-        {/* 워치리스트 테이블 (예시) */}
-        <section className="rounded-[12px] border border-border bg-surface px-5 py-4">
-          {/* ── 폰 (768 미만) — 종목 한 줄이 카드 한 장 ──
-              열이 7개다. 표로 두면 AI 판정·시그널이 스크롤 뒤로 숨는데, 관심 종목 화면은
-              «내가 담아 둔 것이 지금 어떤 상태인가»를 훑는 곳이라 그게 핵심이다. */}
-          <div className="md:hidden">
-            {PREVIEW.map((r) => (
-              <article key={`m-${r.symbol}`} className="border-b border-border-soft py-3.5 last:border-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-3 text-[12px] font-bold text-text-dim">
-                      {r.name.slice(0, 1)}
-                    </span>
-                    <div className="min-w-0">
-                      <Link href={`/stocks/${r.symbol}`} className="block text-[15px] font-bold text-text">
-                        {r.name}
-                      </Link>
-                      <SymbolCode symbol={r.symbol} className="text-[12px] text-text-mute" />
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="tnum text-[15px] font-bold text-text">{r.price}원</p>
-                    <p className={`tnum text-[12.5px] font-semibold ${r.up ? "text-good" : "text-bad"}`}>
-                      {r.chg}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-[999px] px-2 py-0.5 text-[11.5px] font-bold ${
-                      r.rating === "매수"
-                        ? "bg-accent text-text-on-accent"
-                        : r.rating === "중립"
-                          ? "bg-surface-3 text-text-dim"
-                          : "border border-border text-text-mute"
-                    }`}
-                  >
-                    {r.rating}
-                  </span>
-                  <span className="tnum text-[13px] font-bold text-text">{r.score}점</span>
-                  {r.setup && (
-                    <span className="rounded-[999px] bg-surface-3 px-2 py-0.5 text-[11.5px] font-semibold text-text-dim">
-                      {r.setup}
-                    </span>
-                  )}
-                  {r.badge && (
-                    <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[11.5px] font-bold text-accent">
-                      {r.badge}
-                    </span>
-                  )}
-                  <span className="ml-auto text-[13px]">
-                    {r.bell ? "🔔" : <span className="opacity-30">🔕</span>}
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[860px] text-sm">
+      {items.length === 0 ? (
+        <EmptyWatchlist />
+      ) : (
+        <>
+          {/* 데스크톱 — 표 */}
+          <div className="hidden overflow-hidden rounded-[12px] border border-border bg-surface md:block">
+            <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
-                  <th className="py-2 pl-1 text-left font-medium">종목</th>
-                  <th className="px-3 py-2 text-right font-medium">현재가</th>
-                  <th className="px-3 py-2 text-right font-medium">등락률</th>
-                  <th className="px-3 py-2 text-center font-medium">AI 판정 · 점수</th>
-                  <th className="px-3 py-2 text-left font-medium">활성 시그널</th>
-                  <th className="px-3 py-2 text-center font-medium">알림</th>
-                  <th className="px-3 py-2 text-right font-medium">메모</th>
+                <tr className="border-b border-border text-[11.5px] text-text-mute">
+                  <th className="px-4 py-2.5 text-left font-medium">종목</th>
+                  <th className="px-4 py-2.5 text-right font-medium">현재가</th>
+                  <th className="px-4 py-2.5 text-right font-medium">전일 대비</th>
+                  <th className="px-4 py-2.5 text-left font-medium">판정</th>
+                  <th className="px-4 py-2.5 text-right font-medium">담은 날</th>
+                  <th className="px-4 py-2.5 text-right font-medium sr-only">빼기</th>
                 </tr>
               </thead>
               <tbody>
-                {PREVIEW.map((r) => (
-                  <tr key={r.symbol} className="border-b border-border/50 last:border-0 hover:bg-surface-2">
-                    <td className="py-2.5 pl-1">
-                      <span className="mr-2 inline-grid h-6 w-6 place-items-center rounded-full bg-surface-3 align-middle text-[9px] font-bold text-text-dim">
-                        {r.name.slice(0, 1)}
-                      </span>
-                      <Link href={`/stocks/${r.symbol}`} className="font-medium text-text hover:text-accent">
-                        {r.name}
-                      </Link>
-                      <SymbolCode symbol={r.symbol} className="ml-2 text-2xs text-text-mute" />
+                {items.map((r) => (
+                  <tr key={r.symbol} className="border-b border-border-soft last:border-0">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/stocks/${r.symbol}`}
+                          className="font-bold text-text hover:text-accent hover:underline"
+                        >
+                          {r.name}
+                        </Link>
+                        <SymbolCode symbol={r.symbol} className="text-[10.5px] text-text-mute" />
+                        {r.inPick && (
+                          <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[10.5px] font-semibold text-accent">
+                            오늘의 픽
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="tnum px-3 py-2.5 text-right text-text">{r.price}원</td>
-                    <td className={`tnum px-3 py-2.5 text-right font-semibold ${r.up ? "text-good" : "text-bad"}`}>{r.chg}</td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span
-                        className={`mr-1.5 rounded-[999px] px-2 py-0.5 text-[10px] font-bold ${
-                          r.rating === "매수"
-                            ? "bg-accent text-text-on-accent"
-                            : r.rating === "중립"
-                              ? "bg-surface-3 text-text-dim"
-                              : "border border-border text-text-mute"
-                        }`}
-                      >
-                        {r.rating}
-                      </span>
-                      <span className="tnum text-[13px] font-bold text-text">{r.score}점</span>
+                    <td className="tnum px-4 py-3 text-right font-semibold text-text">
+                      {r.last != null ? `${r.last.toLocaleString()}원` : "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-left">
-                      {r.setup ? (
-                        <span className="rounded-[999px] bg-surface-3 px-2 py-0.5 text-[10px] font-semibold text-text-dim">{r.setup}</span>
-                      ) : (
-                        <span className="text-2xs text-text-mute">—</span>
-                      )}
+                    <td
+                      className={`tnum px-4 py-3 text-right font-semibold ${
+                        r.changePct == null
+                          ? "text-text-mute"
+                          : r.changePct >= 0
+                            ? "text-good"
+                            : "text-bad"
+                      }`}
+                    >
+                      {r.changePct != null ? fmtPct(r.changePct) : "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-center">{r.bell ? "🔔" : <span className="opacity-30">🔕</span>}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      {r.badge && (
-                        <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">{r.badge}</span>
-                      )}
+                    <td className="px-4 py-3">
+                      <Rating item={r} />
+                    </td>
+                    <td className="tnum px-4 py-3 text-right text-[11.5px] text-text-mute">
+                      {r.addedAt.slice(0, 10)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <WatchButton symbol={r.symbol} watched signedIn size="sm" />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="mt-3 text-[11px] text-text-mute">
-            워치리스트는 회원 전용 데이터 — 본인만 조회 가능(RLS) · 알림 ON 종목은 시그널·판정 변경 시 발송(준비 중)
+
+          {/* 폰 — 카드. 표로 두면 판정이 스크롤 뒤로 숨는데, 이 화면의 핵심이 그것이다. */}
+          <div className="space-y-2 md:hidden">
+            {items.map((r) => (
+              <article
+                key={`m-${r.symbol}`}
+                className="rounded-[12px] border border-border bg-surface px-4 py-3.5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/stocks/${r.symbol}`}
+                      className="block text-[15px] font-bold text-text"
+                    >
+                      {r.name}
+                    </Link>
+                    <SymbolCode symbol={r.symbol} className="text-[12px] text-text-mute" />
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="tnum text-[15px] font-bold text-text">
+                      {r.last != null ? `${r.last.toLocaleString()}원` : "—"}
+                    </p>
+                    <p
+                      className={`tnum text-[12.5px] font-semibold ${
+                        r.changePct == null
+                          ? "text-text-mute"
+                          : r.changePct >= 0
+                            ? "text-good"
+                            : "text-bad"
+                      }`}
+                    >
+                      {r.changePct != null ? fmtPct(r.changePct) : "—"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Rating item={r} />
+                  {r.inPick && (
+                    <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">
+                      오늘의 픽
+                    </span>
+                  )}
+                  <span className="ml-auto">
+                    <WatchButton symbol={r.symbol} watched signedIn size="sm" />
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <p className="mt-4 text-[11.5px] leading-relaxed text-text-mute">
+            시세는 마지막 거래일 종가입니다(장중 실시간 아님). 판정은 그 종목의 가장
+            최근 분석이며, 날짜가 종목마다 다를 수 있습니다 — 분석이 매일 전 종목을
+            도는 것은 아닙니다.
           </p>
-        </section>
-      </div>
+        </>
+      )}
     </AppShell>
+  );
+}
+
+function Rating({ item: r }: { item: WatchItem }) {
+  if (!r.rating) {
+    return <span className="text-[12px] text-text-mute">분석 없음</span>;
+  }
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span
+        className={`rounded-[999px] px-2 py-0.5 text-[11.5px] font-bold ${
+          RATING_STYLE[r.rating] ?? "bg-surface-3 text-text-dim"
+        }`}
+      >
+        {r.rating}
+      </span>
+      {r.score != null && (
+        <span className="tnum text-[11.5px] text-text-mute">{r.score}점</span>
+      )}
+      {r.ratingAsOf && (
+        <span className="text-[11px] text-text-mute">
+          {tradingDayLabel(r.ratingAsOf)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** 빈 상태 — «없다»로 끝내지 않고 담으러 갈 곳을 준다. */
+function EmptyWatchlist() {
+  return (
+    <div className="rounded-[12px] border border-dashed border-border-strong bg-surface px-6 py-12 text-center">
+      <Star className="mx-auto h-7 w-7 text-text-mute" aria-hidden />
+      <p className="mt-3 text-[15px] font-bold text-text">아직 담은 종목이 없습니다</p>
+      <p className="mx-auto mt-1.5 max-w-[46ch] text-[13px] leading-relaxed text-text-dim">
+        종목 화면의 <b className="font-semibold text-text">☆ 관심</b> 을 누르면 여기에
+        쌓입니다. 담아 두면 시세와 판정 변화를 한곳에서 볼 수 있습니다.
+      </p>
+      <div className="mt-6 flex flex-wrap justify-center gap-2.5">
+        <Link
+          href="/reports"
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-[9px] bg-accent px-5 text-[13.5px] font-semibold text-text-on-accent transition-colors hover:bg-accent-2"
+        >
+          <Search className="h-4 w-4" aria-hidden />
+          종목 찾아보기
+        </Link>
+        <Link
+          href="/focus"
+          className="inline-flex min-h-10 items-center rounded-[9px] border border-border px-5 text-[13.5px] font-semibold text-text-dim transition-colors hover:text-text"
+        >
+          오늘의 픽 보기
+        </Link>
+      </div>
+    </div>
   );
 }
