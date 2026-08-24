@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { LogIn, PenLine, User } from "lucide-react";
+import { LogIn, PenLine, ShieldCheck, User } from "lucide-react";
 
 import { signOut } from "@/app/login/actions";
 import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/admin";
 import { getMyExpert } from "@/lib/expert";
 import { getMyProfile } from "@/lib/account";
 
@@ -52,7 +53,12 @@ export async function AuthMenu() {
   }
 
   // 전문가로 등록된 사람에게만 「추천 쓰기」가 보인다. 남에게 보여 봐야 눌러도 막힌다.
-  const [expert, profile] = await Promise.all([getMyExpert(), getMyProfile()]);
+  // 「관리」도 같다 — 운영자가 아니면 그 주소가 있다는 것조차 알릴 이유가 없다(404).
+  const [expert, profile, admin] = await Promise.all([
+    getMyExpert(),
+    getMyProfile(),
+    isAdmin(),
+  ]);
   // 부르는 순서: 전문가 필명 → 가입 때 정한 닉네임.
   // 이메일은 쓰지 않는다 — 개인정보를 굳이 머리에 띄울 이유가 없다(예전엔 앞부분을 썼다).
   // 닉네임은 가입 때 필수라, 여기까지 내려오는 건 트리거 전에 만들어진 옛 계정뿐이다.
@@ -60,6 +66,15 @@ export async function AuthMenu() {
 
   return (
     <div className="flex items-center gap-1.5 sm:gap-2">
+      {admin && (
+        <Link
+          href="/admin/experts"
+          className="hidden h-11 items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3.5 text-[12.5px] font-semibold text-text-dim transition-colors hover:text-text sm:flex"
+        >
+          <ShieldCheck className="h-4 w-4" aria-hidden />
+          관리
+        </Link>
+      )}
       {expert && (
         <Link
           href="/expert"
