@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { JoinBand } from "@/components/JoinBand";
 import { VectaLogo } from "@/components/VectaLogo";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * 전역 푸터.
@@ -46,19 +48,31 @@ const NAV: { group: string; items: { href: string; label: string }[] }[] = [
 ];
 
 /**
- * showNav — 비로그인 랜딩에서는 끈다(2026-08-24). 여기 걸린 링크 아홉 개가 전부
- * 회원 전용이라, 켜 두면 처음 온 사람이 무엇을 눌러도 로그인 화면으로 튕긴다.
- * 법적 고지와 약관·방침 링크는 어느 쪽이든 남는다 — 가입 전에 읽을 자리다.
+ * 세션을 읽는 이유는 하나 — **가입 안내(JoinBand)를 로그인한 사람에게 보이지 않기**
+ * 위해서다(2026-08-24). 루트 레이아웃에 있는 컴포넌트라 이 판정 한 번이 전 화면을
+ * 덮는다. 판정은 서버에서 하고, «어느 화면인가»만 JoinBand 가 본다.
+ *
+ * 아래 메뉴는 비로그인에게도 그대로 둔다. 전부 회원 전용 화면이지만 눌러도 벽이 아니라
+ * 로그인 화면으로 가고 **로그인하면 그 화면으로 돌아온다**(middleware 의 next 파라미터).
+ * 「여기에 이런 게 있다」를 보여주는 편이 목록을 감추는 것보다 낫다.
  */
-export function Footer({ showNav = true }: { showNav?: boolean } = {}) {
+export async function Footer() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <footer className="mt-16 border-t border-border bg-surface">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-10 sm:px-7">
-        <div
-          className={
-            showNav ? "grid gap-8 md:grid-cols-[1.6fr_2fr]" : "grid gap-8"
-          }
-        >
+        {/* 가입 안내 — 로그인 안 한 사람에게만. 푸터 맨 위라 본문을 밀지 않는다. */}
+        {!user && (
+          <div className="mb-8">
+            <JoinBand />
+          </div>
+        )}
+
+        <div className="grid gap-8 md:grid-cols-[1.6fr_2fr]">
           {/* 브랜드 + 한 줄 정체성 */}
           <div>
             <VectaLogo className="flex items-center gap-2" />
@@ -69,7 +83,6 @@ export function Footer({ showNav = true }: { showNav?: boolean } = {}) {
           </div>
 
           {/* 메뉴 — GNB 가 8개를 다 못 담아 「더보기」로 접는 것들까지 여기서 펼친다 */}
-          {showNav && (
           <nav className="grid grid-cols-2 gap-6 sm:grid-cols-3" aria-label="푸터 메뉴">
             {NAV.map((col) => (
               <div key={col.group}>
@@ -89,7 +102,6 @@ export function Footer({ showNav = true }: { showNav?: boolean } = {}) {
               </div>
             ))}
           </nav>
-          )}
         </div>
 
         {/* ── 법적 고지 ──
