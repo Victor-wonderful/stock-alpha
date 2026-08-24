@@ -43,7 +43,52 @@ export function SectorTable({
   const foldAt = !foldable || open ? -1 : edge - 1;
 
   return (
-    <div className="mt-4 overflow-x-auto">
+    <div className="mt-4">
+      {/* ── 폰 (768 미만) — 섹터 한 줄이 두 줄짜리 항목으로 ──
+          열은 4개뿐이라 표가 크게 넓지는 않지만(560px), 390px 에서는 여전히 밀어야 한다.
+          섹터가 20개라 카드 상자를 20개 쌓으면 화면이 끝없이 길어지므로, 카드 대신
+          **두 줄 항목**으로 접는다 — 첫 줄은 이름과 모멘텀, 둘째 줄은 나머지. */}
+      <div className="md:hidden">
+        {shown.map(({ s }) => {
+          const sigCount = signalCountBySector[s.sector] ?? 0;
+          const bar = Math.round((Math.abs(s.momentum) / maxMom) * 100);
+          return (
+            <div key={`m-${s.sector}`} className="border-b border-border/50 py-2.5 last:border-0">
+              <div className="flex items-center gap-3">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text">
+                  {s.sector}
+                </span>
+                <span
+                  className={`tnum shrink-0 text-[13px] font-semibold ${
+                    s.momentum >= 0 ? "text-good" : "text-bad"
+                  }`}
+                >
+                  {s.momentum > 0 ? "+" : ""}
+                  {fmtNum(s.momentum, 2)}
+                </span>
+                <div className="relative h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-3">
+                  <div
+                    className={`h-1.5 rounded-full ${s.momentum >= 0 ? "bg-good" : "bg-bad"}`}
+                    style={{ width: `${bar}%` }}
+                  />
+                </div>
+              </div>
+              <p className="tnum mt-1 flex flex-wrap gap-x-3 text-[12px] text-text-mute">
+                <span>
+                  수급 5일{" "}
+                  <span className={s.flow >= 0 ? "text-good" : "text-bad"}>
+                    {s.flow >= 0 ? "+" : ""}
+                    {s.flow.toLocaleString()}억
+                  </span>
+                </span>
+                <span>오늘 시그널 {sigCount > 0 ? `${sigCount}건` : "없음"}</span>
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[560px] text-xs">
         <thead>
           <tr className="border-b border-border">
@@ -104,6 +149,7 @@ export function SectorTable({
           })}
         </tbody>
       </table>
+      </div>
 
       {foldable && (
         <button

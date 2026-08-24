@@ -306,7 +306,46 @@ export default async function StockDetailPage({
       {/* 수급 · 리스크 */}
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Panel title="수급 · 투자자별 순매수" className="lg:col-span-2">
-          <div className="overflow-x-auto">
+          {/* ── 폰 (768 미만) — 하루가 두 줄짜리 항목으로 ──
+              열 5개(일자·기관·외국인·개인·공매도)를 390px 에 넣으면 공매도가 잘린다.
+              날짜를 머리에 두고 셋을 아래 한 줄로 편다 — 표보다 세로로 길어지지만
+              «누가 샀나»가 한눈에 들어온다. */}
+          <div className="md:hidden">
+            {flows.data.map((f) => (
+              <div key={`m-${f.date}`} className="border-b border-border/50 py-2.5 last:border-0">
+                <p className="mono text-[12px] text-text-dim">{f.date}</p>
+                <p className="mono mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[12.5px]">
+                  {[
+                    { k: "기관", v: f.inst_net },
+                    { k: "외국인", v: f.foreign_net },
+                    { k: "개인", v: f.retail_net },
+                  ].map((x) => (
+                    <span key={x.k}>
+                      <span className="text-text-mute">{x.k} </span>
+                      <span
+                        className={
+                          x.v == null
+                            ? "text-text-mute"
+                            : x.v >= 0
+                              ? "font-semibold text-bull"
+                              : "font-semibold text-bear"
+                        }
+                      >
+                        {x.v == null
+                          ? "—"
+                          : `${x.v >= 0 ? "+" : ""}${x.v.toLocaleString()}`}
+                      </span>
+                    </span>
+                  ))}
+                  <span className="text-text-mute">
+                    공매도 {f.short_volume != null ? f.short_volume.toLocaleString() : "—"}
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[520px] text-sm">
               <thead>
                 <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">

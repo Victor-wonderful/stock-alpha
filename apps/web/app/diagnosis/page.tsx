@@ -314,7 +314,99 @@ export default async function DiagnosisPage({
 
             {/* 종목별 진단 */}
             <Panel title="종목별 진단">
-              <div className="overflow-x-auto">
+              {/* ── 폰 (768 미만) — 보유 종목 하나가 카드 한 장 ──
+                  열이 9개다. 표로 두면 판정·주의가 스크롤 뒤로 숨는데, 이 화면은
+                  «내 조합에 문제가 있나»를 보는 곳이라 경고가 가장 먼저 보여야 한다. */}
+              <div className="md:hidden">
+                {diag.holdings.map((h) => (
+                  <article
+                    key={`m-${h.symbol}`}
+                    className="border-b border-border-soft py-3.5 last:border-0"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link href={`/stocks/${h.symbol}`} className="text-[15px] font-bold text-text">
+                          {h.name}
+                        </Link>
+                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
+                          <SymbolCode symbol={h.symbol} className="text-[12px] text-text-mute" />
+                          <span className="tnum text-[12px] text-text-mute">
+                            비중 {(h.weight * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="mono text-[15px] font-bold text-text">{fmtPrice(h.last_close)}</p>
+                        {h.change_pct != null && (
+                          <p
+                            className={`tnum text-[12.5px] font-semibold ${
+                              h.change_pct >= 0 ? "text-bull" : "text-bear"
+                            }`}
+                          >
+                            {fmtPct(h.change_pct)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                      {h.rating ? (
+                        h.report_id ? (
+                          <Link href={`/reports/${h.report_id}`}>
+                            <Badge variant={ratingVariant(h.rating)} size="md">
+                              {h.rating}
+                            </Badge>
+                          </Link>
+                        ) : (
+                          <Badge variant={ratingVariant(h.rating)} size="md">
+                            {h.rating}
+                          </Badge>
+                        )
+                      ) : (
+                        <span className="text-[12px] text-text-mute">분석 없음</span>
+                      )}
+                      <span className="tnum text-[12.5px] text-text-dim">
+                        {h.score != null ? `${h.score}점` : "—"}
+                      </span>
+                    </div>
+
+                    <dl className="mono mt-2 flex flex-wrap gap-x-4 gap-y-1 rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px]">
+                      <span>
+                        <dt className="inline text-text-mute">합성알파 </dt>
+                        <dd
+                          className={`inline font-semibold ${
+                            (h.composite_alpha ?? 0) >= 0 ? "text-bull" : "text-bear"
+                          }`}
+                        >
+                          {fmtNum(h.composite_alpha, 2)}
+                        </dd>
+                      </span>
+                      <span>
+                        <dt className="inline text-text-mute">DCF </dt>
+                        <dd
+                          className={`inline font-semibold ${
+                            (h.upside_pct ?? 0) >= 0 ? "text-bull" : "text-bear"
+                          }`}
+                        >
+                          {h.upside_pct != null ? `${h.upside_pct.toFixed(1)}%` : "—"}
+                        </dd>
+                      </span>
+                      <span>
+                        <dt className="inline text-text-mute">베타 </dt>
+                        <dd className="inline font-semibold text-text-dim">{fmtNum(h.beta, 2)}</dd>
+                      </span>
+                    </dl>
+
+                    {h.warnings.length > 0 && (
+                      <p className="mt-2 text-[12px] leading-[1.6] text-warn">
+                        {h.warnings.join(" · ")}
+                      </p>
+                    )}
+                  </article>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
