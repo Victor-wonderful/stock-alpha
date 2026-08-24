@@ -16,25 +16,43 @@ import { SectionHead } from "@/components/SectionHead";
  */
 export function ExpertNotes({
   notes,
+  failed = false,
   moreHref = "/insights",
 }: {
   notes: ExpertNote[];
+  /** 조회 자체가 실패했나 — «아직 글이 없다»와 다른 말이다(2026-08-24).
+   *  이 코너는 0040 마이그레이션이 운영 DB 에 적용되기 전까지 표가 없었는데,
+   *  화면은 그동안 "아직 올라온 추천이 없습니다"라고 했다. 준비 중인 것과
+   *  못 읽는 것을 같은 문장으로 말하면, 진짜 고장 났을 때 아무도 모른다. */
+  failed?: boolean;
   moreHref?: string | null;
 }) {
   return (
     <section>
       <SectionHead
         title="전문가 추천"
+        sub="사람이 고른 종목입니다. 엔진의 「오늘의 픽」과 달리 손절가가 없고, 성과를 추적하지 않습니다."
         href={moreHref ?? undefined}
         linkLabel="전체 보기"
       />
 
       {notes.length === 0 ? (
         <div className="mt-6 rounded-[12px] border border-dashed border-border-strong bg-surface px-5 py-8 text-center">
-          <p className="text-[13px] font-semibold text-text">아직 올라온 추천이 없습니다</p>
-          <p className="mt-1 text-[12px] text-text-mute">
-            참여 전문가의 추천이 등록되면 여기에 쌓입니다.
-          </p>
+          {failed ? (
+            <>
+              <p className="text-[13px] font-semibold text-text">추천을 불러오지 못했습니다</p>
+              <p className="mt-1 text-[12px] text-text-mute">
+                글이 없는 것이 아니라 지금 읽어 오지 못한 것입니다. 잠시 뒤 다시 열어 주세요.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-[13px] font-semibold text-text">아직 올라온 추천이 없습니다</p>
+              <p className="mt-1 text-[12px] text-text-mute">
+                참여 전문가의 추천이 등록되면 여기에 쌓입니다.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2">

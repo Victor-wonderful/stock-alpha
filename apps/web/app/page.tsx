@@ -407,7 +407,7 @@ export default async function HomePage() {
             글이 하나도 없으면 섹션이 스스로 «아직 없습니다»를 말한다 — 자리를 지워
             버리면 첫 글이 올라온 날 화면 구조가 통째로 바뀐다. */}
         <div className="mt-12">
-          <ExpertNotes notes={expertNotes} />
+          <ExpertNotes notes={expertNotes.notes} failed={expertNotes.failed} />
         </div>
 
         {/* ── 밴드 3 · 읽을 것 ──
