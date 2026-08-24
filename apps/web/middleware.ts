@@ -20,11 +20,12 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
  *   /terms       이용약관 ─┐ 가입 **전에** 읽고 동의하는 문서다. 잠그면 동의 자체가
  *   /privacy     개인정보처리방침 ─┘ 성립하지 않는다(법적 요건).
  *   /auth        메일 인증 콜백 등 — 로그인 과정 자체라 로그인을 요구할 수 없다
+ *   /faq         «가입하면 뭐가 열리나» — 가입 전에 읽는 화면이라 잠글 수 없다
  *
  * 블로그(vecta-blog)는 별도 사이트라 이 목록과 무관하게 공개다. 지금은 그쪽이
  * 유일한 외부 유입 경로다.
  */
-const PUBLIC_PATHS = ["/", "/login", "/terms", "/privacy", "/auth"];
+const PUBLIC_PATHS = ["/", "/login", "/faq", "/terms", "/privacy", "/auth"];
 
 /**
  * 화면이 아니라 «파일»인 주소들 — 게이트 밖이다.
