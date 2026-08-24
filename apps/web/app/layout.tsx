@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { BackToTop } from "@/components/BackToTop";
 import { BottomNav } from "@/components/BottomNav";
 import { Footer } from "@/components/Footer";
 
@@ -43,6 +44,9 @@ export default function RootLayout({
         {/* 모바일 주 네비게이션 — md 이상에서는 스스로 숨는다(상단 GNB 가 담당).
             본문 하단 여백은 globals.css 의 body padding 이 맡는다. */}
         <BottomNav />
+        {/* 맨 위로 — 긴 목록이 많은 앱이다(분석 100행·성과 표·인사이트 다섯 섹션).
+            바닥까지 내려간 뒤 머리로 돌아갈 길이 없었다(2026-08-25 Victor). */}
+        <BackToTop />
       </body>
     </html>
   );
