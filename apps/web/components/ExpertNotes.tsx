@@ -43,7 +43,7 @@ export function ExpertNotes({
     <section>
       <SectionHead
         title="전문가 추천"
-        sub="사람이 고른 종목입니다. 엔진의 「오늘의 픽」과 달리 손절가가 없고, 성과를 추적하지 않습니다."
+        sub="사람이 고른 종목입니다. 진입가·손절가는 글쓴이가 직접 적은 것이고, 엔진의 「오늘의 픽」과 달리 백테스트 게이트를 거치지 않으며 성과를 추적하지 않습니다."
         href={moreHref ?? undefined}
         linkLabel="전체 보기"
       />
