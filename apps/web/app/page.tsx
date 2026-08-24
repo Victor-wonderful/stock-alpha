@@ -11,7 +11,7 @@ import { HomePicksTable } from "@/components/HomePicksTable";
 import { RecentReports, WeeklyBriefs } from "@/components/HomeSections";
 import { ExpertNotes } from "@/components/ExpertNotes";
 import { HomeTopNews } from "@/components/HomeTopNews";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/session";
 import {
   getBlogPosts,
   getLatestPricesBySymbols,
@@ -90,10 +90,7 @@ export default async function HomePage() {
   // 쓴다. 기본 CTA 는 「검증 성적표」(/picks)인데 그건 회원 전용이라, 로그인 안 한
   // 사람에게는 눌러 봐야 로그인 화면으로 튕기는 버튼이 된다. 그 사람에게는 대신
   // 「무료로 시작하기」를 보여준다.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
 
   const [
     quotes, recs, brief, marketState, openPicks, weekly, blogPosts, reports, cal, topNews,

@@ -1,3 +1,4 @@
+import { getSessionUser } from "@/lib/session";
 import { createClient as createUserClient } from "@/lib/supabase/server";
 
 /**
@@ -17,11 +18,9 @@ export interface MyProfile {
 
 export async function getMyProfile(): Promise<MyProfile | null> {
   try {
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return null;
+    const supabase = await createUserClient();
     const { data } = await supabase
       .from("profiles")
       .select("display_name")

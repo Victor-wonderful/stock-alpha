@@ -5,6 +5,7 @@ import { signOut } from "@/app/login/actions";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import { getMyExpert } from "@/lib/expert";
+import { getSessionUser } from "@/lib/session";
 import { getMyProfile } from "@/lib/account";
 
 /**
@@ -19,10 +20,7 @@ import { getMyProfile } from "@/lib/account";
  * 받는다(클라이언트 컴포넌트에 서버 렌더 결과를 prop 으로 넘기는 방식).
  */
 export async function AuthMenu() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
 
   if (!user) {
     // 로그인과 **회원가입 둘 다** 머리에 둔다(2026-08-24 Victor: "로그인, 회원가입

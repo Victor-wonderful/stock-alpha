@@ -19,7 +19,7 @@ import {
   getValuation,
 } from "@/lib/data";
 import { computeSnowflake } from "@/lib/snowflake";
-import { createClient as createUserClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/session";
 import { isWatched } from "@/lib/watchlist";
 import { SnowflakePanel } from "@/components/SnowflakePanel";
 import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
@@ -77,10 +77,7 @@ export default async function StockDetailPage({
 
   // 관심 종목 — 이 화면이 «담는» 자리다. 목록(/watchlist)은 담긴 것을 보는 자리이고,
   // 담는 행동은 종목을 보고 있을 때 일어난다(2026-08-25).
-  const [{ data: { user } }, watched] = await Promise.all([
-    (await createUserClient()).auth.getUser(),
-    isWatched(symbol),
-  ]);
+  const [user, watched] = await Promise.all([getSessionUser(), isWatched(symbol)]);
 
   // ③ 스노우플레이크 5축 — 이미 로드한 밸류·팩터·수급·리스크를 0~100 점수화.
   const snow = computeSnowflake({

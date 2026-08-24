@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/session";
 import { signOut } from "../login/actions";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, Panel, Stat } from "@/components/ui";
@@ -11,10 +12,8 @@ import { TRADE_STYLE_LABELS, type Profile } from "@stock-alpha/db";
 // 60초 fetch 캐시가 담당한다(lib/supabase/public.ts).
 
 export default async function DashboardPage() {
+  const user = await getSessionUser();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 

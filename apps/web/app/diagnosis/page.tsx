@@ -8,7 +8,7 @@ import { Panel } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { getPortfolioDiagnosis, type HoldingInput } from "@/lib/data";
 import { addManyToWatchlist } from "@/app/watchlist/actions";
-import { createClient as createUserClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/session";
 import { getWatchedSymbols } from "@/lib/watchlist";
 import { fmtNum, fmtPct, fmtPrice } from "@/lib/format";
 
@@ -191,10 +191,7 @@ export default async function DiagnosisPage({
   // 안 쌓였다. 두 화면이 같은 「내 자산」 탭 안에 나란히 있으면서 서로를 몰랐다.
   // 진단 입력은 **여전히 저장하지 않는다**(머리의 약속 그대로) — 대신 담는 길을 준다.
   // 저장과 «담기»는 다르다: 저장은 우리가 몰래 하는 것이고, 담기는 사용자가 누르는 것이다.
-  const [{ data: { user } }, watched] = await Promise.all([
-    (await createUserClient()).auth.getUser(),
-    getWatchedSymbols(),
-  ]);
+  const [user, watched] = await Promise.all([getSessionUser(), getWatchedSymbols()]);
   const diagnosed = (diag?.holdings ?? []).map((h) => h.symbol);
   const notYetWatched = diagnosed.filter((sym) => !watched.has(sym));
 

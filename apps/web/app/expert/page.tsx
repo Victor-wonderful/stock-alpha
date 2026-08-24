@@ -6,6 +6,7 @@ import { SymbolCode } from "@/components/SymbolCode";
 import { getMyExpert, getMyExpertNotes } from "@/lib/expert";
 import { setPublished } from "@/app/expert/actions";
 import { createClient as createUserClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/session";
 import { fmtPrice } from "@/lib/format";
 
 /**
@@ -21,10 +22,7 @@ export default async function ExpertHomePage() {
 
   if (!expert) {
     // 로그인은 했는데 전문가가 아닌 경우와, 아예 로그인 안 한 경우를 가른다.
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     return (
       <AppShell title="전문가 코너" subtitle="사람이 고른 종목을 싣는 곳입니다.">
         <div className="max-w-[560px] rounded-[12px] border border-border bg-surface p-6">

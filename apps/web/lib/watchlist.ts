@@ -1,4 +1,5 @@
 import { createClient as createUserClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/session";
 import { createPublicClient } from "@/lib/supabase/public";
 import { getLatestPricesBySymbols, getTradingCalendar } from "@/lib/data";
 import { horizonSpec } from "@/lib/holding";
@@ -65,11 +66,9 @@ export interface WatchPick {
 /** 담은 종목의 instrument_id 목록 — 화면이 아니라 판정용(☆ 버튼)이 쓴다. */
 export async function getWatchedSymbols(): Promise<Set<string>> {
   try {
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return new Set();
+    const supabase = await createUserClient();
     const { data } = await supabase
       .from("watchlists")
       .select("instruments(symbol)")
@@ -98,11 +97,9 @@ export async function isWatched(symbol: string): Promise<boolean> {
  */
 export async function getMyWatchlist(): Promise<WatchItem[]> {
   try {
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return [];
+    const supabase = await createUserClient();
 
     const { data } = await supabase
       .from("watchlists")

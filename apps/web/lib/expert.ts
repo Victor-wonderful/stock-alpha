@@ -1,3 +1,4 @@
+import { getSessionUser } from "@/lib/session";
 import { createClient as createUserClient } from "@/lib/supabase/server";
 
 /**
@@ -22,11 +23,9 @@ export interface MyExpert {
 /** 지금 로그인한 사람이 전문가로 등록돼 있나. 아니면 null — 작성 화면이 스스로 막는다. */
 export async function getMyExpert(): Promise<MyExpert | null> {
   try {
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return null;
+    const supabase = await createUserClient();
     const { data } = await supabase
       .from("experts")
       .select("id,handle,name,headline,bio")
