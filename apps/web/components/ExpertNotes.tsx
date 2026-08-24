@@ -63,6 +63,15 @@ export function ExpertNotes({
               <p className="mt-1 text-[12px] text-text-mute">
                 참여 전문가의 추천이 등록되면 여기에 쌓입니다.
               </p>
+              {/* 비어 있는 코너에 «들어오는 길»을 둔다. 글이 0편일 때 이 자리를 보는
+                  사람은 대개 «여긴 뭐 하는 코너지»가 궁금한 사람이고, 그중 일부가
+                  쓰는 쪽이 될 사람이다(2026-08-24). */}
+              <Link
+                href="/expert/apply"
+                className="mt-4 inline-flex min-h-9 items-center rounded-[9px] border border-border px-4 text-[12.5px] font-semibold text-text-dim transition-colors hover:text-accent"
+              >
+                전문가로 참여하기
+              </Link>
             </>
           )}
         </div>
