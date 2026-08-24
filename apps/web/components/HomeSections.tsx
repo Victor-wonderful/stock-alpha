@@ -57,7 +57,7 @@ export function BlogPosts({ posts }: { posts: BlogPost[] }) {
 /** 엔진 주간 브리핑 행 — 블로그 글이 없을 때 이 자리를 채운다.
  *  제목은 그 주 측정값에서 규칙으로 뽑은 것이라 전부 과거형·실측이다.
  *  우측 메타는 읽는 시간이 아니라 그 주 시장 수익률 — 기계 요약에 "8분"은 거짓말이다. */
-function WeeklyReportRows({ items }: { items: WeeklyReport[] }) {
+export function WeeklyReportRows({ items }: { items: WeeklyReport[] }) {
   return (
     <ul className="mt-6 overflow-hidden rounded-[12px] border border-border bg-surface">
       {items.map((w, i) => (
@@ -152,7 +152,7 @@ function daysAgo(iso: string | null | undefined): number | null {
 const STALE_DAYS = 3;
 
 /** 매크로 지표 행 — 글이 아직 없을 때 이 자리를 채운다. 행 형태는 글과 똑같다. */
-function MacroRows({ items }: { items: MacroSeriesView[] }) {
+export function MacroRows({ items }: { items: MacroSeriesView[] }) {
   return (
     <ul className="mt-6 overflow-hidden rounded-[12px] border border-border bg-surface">
       {items.map((m, i) => {
@@ -364,18 +364,30 @@ function ReportRows({ items }: { items: ReportListItem[] }) {
 export function RecentReports({
   posts,
   reports,
+  // 기본은 예전대로 «글이 있으면 블로그 목록, 없으면 /reports». 인사이트처럼 갈 곳을
+  // 정해 두고 싶은 화면은 여기에 넣는다(2026-08-24: 섹션마다 5개 + 전체 보기).
+  moreHref,
+  moreLabel,
 }: {
   posts: BlogPost[];
   reports: ReportListItem[];
+  moreHref?: string | null;
+  moreLabel?: string;
 }) {
   const hasPosts = posts.length > 0;
   if (!hasPosts && reports.length === 0) return null;
+  const href =
+    moreHref !== undefined
+      ? moreHref ?? undefined
+      : hasPosts
+        ? sectionHref(posts)
+        : "/reports";
   return (
     <section className="mt-12">
       <SectionHead
         title="최근 기업 분석"
-        href={hasPosts ? sectionHref(posts) : "/reports"}
-        linkLabel={hasPosts ? "전체 보기" : "분석 전체"}
+        href={href}
+        linkLabel={moreLabel ?? (hasPosts ? "전체 보기" : "분석 전체")}
       />
       {hasPosts ? <BlogPosts posts={posts} /> : <ReportRows items={reports} />}
     </section>
