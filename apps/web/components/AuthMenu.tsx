@@ -36,7 +36,8 @@ export async function AuthMenu() {
 
   // 전문가로 등록된 사람에게만 「추천 쓰기」가 보인다. 남에게 보여 봐야 눌러도 막힌다.
   const expert = await getMyExpert();
-  const label = user.email?.split("@")[0] ?? "내 계정";
+  // 전문가는 필명으로 부른다 — 이 사람이 사이트에서 불리는 이름이 그것이다.
+  const label = expert?.name ?? user.email?.split("@")[0] ?? "내 계정";
 
   return (
     <div className="flex items-center gap-1.5 sm:gap-2">

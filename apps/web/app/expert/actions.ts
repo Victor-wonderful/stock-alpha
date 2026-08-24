@@ -132,3 +132,53 @@ export async function setPublished(formData: FormData) {
   revalidatePath("/");
   redirect("/expert");
 }
+
+/**
+ * 필명·소개 고치기.
+ *
+ * 2026-08-24 Victor: "글쓴이 전문가 추천인 필명이 있어야 하는 거 아닌가?" — 맞다.
+ * 이 코너의 카드는 «누가 말했나»가 근거의 전부라 이름이 곧 신뢰의 단위다. 그 이름을
+ * 운영자가 대신 정해 주는 건 이상하고, 본명을 강제할 이유도 없다.
+ *
+ * `handle` 은 익명 키로도 읽히는 **공개 값**이다. 그래서 이메일에서 따오지 않는다
+ * (실제로 첫 등록 때 이메일 앞부분이 들어갔다). 사람이 직접 고른다.
+ */
+export async function saveProfile(formData: FormData) {
+  const expert = await getMyExpert();
+  if (!expert) redirect("/expert");
+
+  const name = String(formData.get("name") ?? "").trim();
+  const handle = String(formData.get("handle") ?? "").trim().toLowerCase();
+  const headline = String(formData.get("headline") ?? "").trim() || null;
+  const bio = String(formData.get("bio") ?? "").trim() || null;
+
+  const fail = (msg: string): never =>
+    redirect(`/expert/profile?error=${encodeURIComponent(msg)}`);
+
+  if (!name) fail("필명을 적어 주세요. 카드에 이 이름이 보입니다.");
+  if (name.length > 20) fail("필명은 20자 이내로 정해 주세요.");
+  // 주소에 들어가는 값이라 좁게 받는다. 대문자·공백·한글을 허용하면 링크가 깨진다.
+  if (!/^[a-z0-9][a-z0-9-]{1,19}$/.test(handle)) {
+    fail("공개 아이디는 영문 소문자·숫자·하이픈만, 2~20자로 정해 주세요.");
+  }
+  if (headline && headline.length > 40) fail("한 줄 소개는 40자 이내로 적어 주세요.");
+
+  const supabase = await createUserClient();
+  const { error } = await supabase
+    .from("experts")
+    .update({ name, handle, headline, bio })
+    .eq("id", expert.id);
+
+  if (error) {
+    fail(
+      error.code === "23505"
+        ? "이미 쓰이고 있는 공개 아이디입니다. 다른 것으로 정해 주세요."
+        : `저장하지 못했습니다 — ${error.message}`,
+    );
+  }
+
+  revalidatePath("/expert");
+  revalidatePath("/insights");
+  revalidatePath("/", "layout");
+  redirect("/expert");
+}

@@ -11,9 +11,12 @@ import { createClient as createUserClient } from "@/lib/supabase/server";
 
 export interface MyExpert {
   id: number;
+  /** 공개 아이디 — 주소·언급에 쓰인다. 익명 키로도 읽히는 값이라 이메일에서 따오지 않는다. */
   handle: string;
+  /** 화면에 보이는 이름 = **필명**. 본명일 필요가 없다(2026-08-24 Victor). */
   name: string;
   headline: string | null;
+  bio: string | null;
 }
 
 /** 지금 로그인한 사람이 전문가로 등록돼 있나. 아니면 null — 작성 화면이 스스로 막는다. */
@@ -26,7 +29,7 @@ export async function getMyExpert(): Promise<MyExpert | null> {
     if (!user) return null;
     const { data } = await supabase
       .from("experts")
-      .select("id,handle,name,headline")
+      .select("id,handle,name,headline,bio")
       .eq("user_id", user.id)
       .maybeSingle();
     if (!data) return null;
@@ -35,6 +38,7 @@ export async function getMyExpert(): Promise<MyExpert | null> {
       handle: String(data.handle),
       name: String(data.name),
       headline: (data.headline as string) ?? null,
+      bio: (data.bio as string) ?? null,
     };
   } catch {
     return null;
