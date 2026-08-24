@@ -1566,7 +1566,15 @@ export interface ExpertNote {
   asOf: string;
   stance: "buy" | "watch";
   summary: string;
+  body: string | null;
   tags: string[];
+  /** 가격 레벨 — «산다»면 진입가·손절가가 반드시 있다(0041 의 check 제약).
+   *  목표가는 선택이다. 레벨이 없으면 읽는 사람이 실행할 수 없고, 손절 없이 산다. */
+  entryPrice: number | null;
+  targetPrice: number | null;
+  stopLoss: number | null;
+  /** 며칠 | 몇 주 | 몇 달 — 엔진의 단기·중기·장기(5·10·20일)와 다른 축이다. */
+  horizonNote: string | null;
 }
 
 /** 전문가 추천 — 사람이 고른 종목. **추적하지 않는다**.
@@ -1595,7 +1603,7 @@ export async function getExpertNotes(limit = 6): Promise<ExpertNotesLoad> {
     const { data, error } = await supabase
       .from("expert_notes")
       .select(
-        "id,as_of,stance,summary,tags,experts(name,headline,avatar_url,active),instruments(symbol,name)",
+        "id,as_of,stance,summary,body,tags,entry_price,target_price,stop_loss,horizon_note,experts(name,headline,avatar_url,active),instruments(symbol,name)",
       )
       .eq("published", true)
       .order("as_of", { ascending: false })
@@ -1607,7 +1615,12 @@ export async function getExpertNotes(limit = 6): Promise<ExpertNotesLoad> {
       as_of: string;
       stance: string;
       summary: string;
+      body: string | null;
       tags: string[] | null;
+      entry_price: number | null;
+      target_price: number | null;
+      stop_loss: number | null;
+      horizon_note: string | null;
       experts: { name: string; headline: string | null; avatar_url: string | null; active: boolean } | null;
       instruments: { symbol: string; name: string } | null;
     }[];
@@ -1624,7 +1637,19 @@ export async function getExpertNotes(limit = 6): Promise<ExpertNotesLoad> {
         asOf: r.as_of,
         stance: (r.stance === "buy" ? "buy" : "watch") as ExpertNote["stance"],
         summary: r.summary,
+        body: r.body ?? null,
         tags: r.tags ?? [],
+        entry_price: r.entry_price,
+        target_price: r.target_price,
+        stop_loss: r.stop_loss,
+        horizon_note: r.horizon_note,
+      }))
+      .map(({ entry_price, target_price, stop_loss, horizon_note, ...rest }) => ({
+        ...rest,
+        entryPrice: entry_price == null ? null : Number(entry_price),
+        targetPrice: target_price == null ? null : Number(target_price),
+        stopLoss: stop_loss == null ? null : Number(stop_loss),
+        horizonNote: horizon_note,
       }));
     return { notes, failed: false };
   } catch {
