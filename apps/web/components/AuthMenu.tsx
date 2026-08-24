@@ -4,6 +4,7 @@ import { LogIn, PenLine, User } from "lucide-react";
 import { signOut } from "@/app/login/actions";
 import { createClient } from "@/lib/supabase/server";
 import { getMyExpert } from "@/lib/expert";
+import { getMyProfile } from "@/lib/account";
 
 /**
  * 머리 우측의 계정 자리.
@@ -35,9 +36,11 @@ export async function AuthMenu() {
   }
 
   // 전문가로 등록된 사람에게만 「추천 쓰기」가 보인다. 남에게 보여 봐야 눌러도 막힌다.
-  const expert = await getMyExpert();
-  // 전문가는 필명으로 부른다 — 이 사람이 사이트에서 불리는 이름이 그것이다.
-  const label = expert?.name ?? user.email?.split("@")[0] ?? "내 계정";
+  const [expert, profile] = await Promise.all([getMyExpert(), getMyProfile()]);
+  // 부르는 순서: 전문가 필명 → 가입 때 정한 닉네임 → 아이디.
+  // 이메일은 쓰지 않는다 — 개인정보를 굳이 머리에 띄울 이유가 없다(예전엔 앞부분을 썼다).
+  const label =
+    expert?.name ?? profile?.displayName ?? profile?.username ?? "내 계정";
 
   return (
     <div className="flex items-center gap-1.5 sm:gap-2">
@@ -52,7 +55,6 @@ export async function AuthMenu() {
       )}
       <Link
         href="/watchlist"
-        title={user.email ?? undefined}
         className="flex h-11 items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 text-[12.5px] font-semibold text-text-dim transition-colors hover:text-text"
       >
         <User className="h-4 w-4" aria-hidden />
