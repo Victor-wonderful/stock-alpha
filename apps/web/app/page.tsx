@@ -11,6 +11,8 @@ import { HomePicksTable } from "@/components/HomePicksTable";
 import { RecentReports, WeeklyBriefs } from "@/components/HomeSections";
 import { ExpertNotes } from "@/components/ExpertNotes";
 import { HomeTopNews } from "@/components/HomeTopNews";
+import { Landing } from "@/components/Landing";
+import { createClient } from "@/lib/supabase/server";
 import {
   getBlogPosts,
   getLatestPricesBySymbols,
@@ -24,6 +26,7 @@ import {
   getOpenPicks,
   getRecommendations,
   getExpertNotes,
+  getLandingStats,
   getLatestReportDay,
   getReports,
   getTopNews,
@@ -80,17 +83,47 @@ const STATE_CHIP: Record<string, string> = {
 };
 
 export default async function HomePage() {
-  // 세션을 보지 않는다. 예전엔 여기서 auth.getUser() 를 불러 «로그인이면 히어로를
-  // 숨긴다»를 했는데, 로그인·회원가입으로 가는 길이 UI 에 없다 — GNB 프로필 버튼은
-  // title="로그인 준비 중" 인 껍데기이고, /login 을 링크하는 건 아무도 안 쓰는
-  // components/Nav.tsx 뿐이다(2026-08-22 확인).
+  // ── 로그인 여부로 화면이 갈린다(2026-08-24 Victor 확정) ──
+  // 홈을 뺀 전 화면이 회원 전용이 됐다(middleware.ts 의 공개 목록). 그런데 이 홈은
+  // 다른 화면들의 요약본이라 오늘의 픽 표·리포트·뉴스가 이미 다 깔려 있다 — 그대로
+  // 두면 잠금이 아무 의미가 없다. 그래서 같은 `/` 가 두 얼굴을 갖는다.
   //
-  // 그래서 실제로는 «가입할 수 없는데 숨김 분기만 있는» 상태였고, 그 분기에 걸리는
-  // 사람은 옛 세션 쿠키를 가진 Victor 하나였다. 그에게만 히어로가 안 보이고 화면
-  // 아래 절반이 비었다. 분기를 지우면 요청 하나(세션 왕복)도 같이 준다.
+  //   비로그인  components/Landing — 여기가 뭐 하는 곳인지 + 오늘의 «건수»만
+  //   로그인    아래 그대로 — 오늘 무슨 일이 있었나
   //
-  // ⚠️ 인증을 제대로 붙일 때 «로그인 사용자에게 히어로를 어떻게 할지»를 다시 정한다.
-  //    그때는 홈을 로그인 뒤로 감추지 않는다 — 홈은 공개 화면이다(Victor, 2026-08-22).
+  // 아래의 무거운 조회(왕복 12회 + 후속 4회)는 이 분기 뒤에 있다. 처음 온 사람이
+  // 볼 일 없는 픽·리포트·뉴스를 긁어 오지 않는다.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    const [landingStats, landingQuotes, landingPosts] = await Promise.all([
+      getLandingStats(),
+      getMarketQuotes(),
+      getBlogPosts(),
+    ]);
+    return (
+      <Landing
+        stats={landingStats}
+        ticker={landingQuotes.data.map((q) => ({
+          id: `${q.id}`,
+          label: q.label,
+          value: q.value,
+          unit: q.unit,
+          change: q.changePct,
+          isPct: true,
+        }))}
+        // 카테고리를 가리지 않고 최신 3건 — 랜딩의 이 자리는 «읽을 것이 있다»를
+        // 보이는 자리이지 주제별 진열대가 아니다(그건 로그인 뒤 인사이트가 맡는다).
+        posts={[...landingPosts]
+          .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+          .slice(0, 3)}
+      />
+    );
+  }
+
   const [
     quotes, recs, brief, marketState, openPicks, weekly, blogPosts, reports, cal, topNews,
     expertNotes, basisDay,

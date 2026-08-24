@@ -25,6 +25,40 @@ export const metadata = {
   description: "VECTA Stock 계정으로 로그인하거나 새로 가입합니다.",
 };
 
+/**
+ * 어디서 튕겨 왔는지 — 로그인 화면이 그 이름을 말해 준다(2026-08-24).
+ *
+ * 홈을 뺀 전 화면이 회원 전용이 되면서, 이 화면에 오는 사람 대부분은 «로그인하러»가
+ * 아니라 **뭔가를 보려다가** 온다. 그때 화면이 «다시 오셨네요»만 말하면 자기가 왜
+ * 여기 있는지 모른다. 가려던 곳의 이름을 대면 로그인은 목적이 아니라 통과 절차가 된다.
+ *
+ * 이름은 8개 메뉴(components/GNB)의 라벨과 같은 말을 쓴다 — 두 곳이 갈라지면
+ * 「오늘의 픽을 보려면」이라 해 놓고 정작 메뉴엔 그 이름이 없는 일이 생긴다.
+ */
+const WALL_LABEL: [prefix: string, label: string][] = [
+  ["/focus", "오늘의 픽"],
+  ["/alpha-zone", "오늘의 픽"],
+  ["/screener", "스크리너"],
+  ["/reports", "종목 분석"],
+  ["/stocks", "종목 분석"],
+  ["/market", "시장"],
+  ["/insights", "인사이트"],
+  ["/picks", "성과 기록"],
+  ["/watchlist", "내 자산"],
+  ["/diagnosis", "리스크 진단"],
+  ["/alerts", "알림"],
+  ["/portfolio", "포트폴리오"],
+  ["/strategies", "전략"],
+  ["/expert", "추천 작성"],
+  ["/dashboard", "대시보드"],
+];
+
+function wallLabel(next: string | undefined): string | null {
+  if (!next || !next.startsWith("/")) return null;
+  const hit = WALL_LABEL.find(([prefix]) => next === prefix || next.startsWith(prefix + "/") || next.startsWith(prefix + "?"));
+  return hit ? hit[1] : null;
+}
+
 const FIELD =
   "mt-1.5 w-full rounded-[9px] border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-accent";
 
@@ -43,6 +77,8 @@ export default async function LoginPage({
   if (user) redirect(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
 
   const isSignup = mode === "signup";
+  // 벽에 부딪혀 온 사람인가 — 그렇다면 가려던 화면의 이름을 말해 준다.
+  const from = wallLabel(next);
   const nextValue = next ?? null;
   const doSignIn = signIn.bind(null, nextValue);
   const doSignUp = signUp.bind(null, nextValue);
@@ -63,9 +99,12 @@ export default async function LoginPage({
       <h1 className="mt-7 text-[22px] font-bold leading-[1.3] tracking-[-0.4px] text-text">
         {isSignup ? "VECTA 계정 만들기" : "다시 오셨네요"}
       </h1>
+      {/* ⚠️ 예전 문구: "픽과 분석은 로그인 없이도 볼 수 있습니다" — 2026-08-24 부터
+          사실이 아니다(홈을 뺀 전 화면이 회원 전용). 화면이 거짓말을 하고 있었다. */}
       <p className="mt-1.5 text-[13px] leading-[1.7] text-text-mute">
-        관심 종목·리스크 진단·알림은 계정이 있어야 저장됩니다. 픽과 분석은 로그인 없이도
-        볼 수 있습니다.
+        {from
+          ? `「${from}」은 회원에게만 보입니다. 로그인하면 보시던 화면으로 돌아갑니다.`
+          : "가입은 무료입니다. 오늘의 픽·종목 분석·성과 기록이 계정 하나로 전부 열립니다."}
       </p>
 
       {/* 탭 — 두 버튼을 나란히 두면 지금 무엇을 하는 화면인지가 사라진다. */}
@@ -285,7 +324,8 @@ export default async function LoginPage({
         href="/"
         className="mt-5 self-start text-[12.5px] text-text-mute transition-colors hover:text-accent"
       >
-        ← 로그인 없이 둘러보기
+        {/* 예전 문구는 「로그인 없이 둘러보기」였는데 둘러볼 곳이 홈 하나뿐이 됐다 */}
+        ← 첫 화면으로
       </Link>
     </main>
   );

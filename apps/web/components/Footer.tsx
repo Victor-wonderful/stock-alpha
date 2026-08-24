@@ -45,11 +45,20 @@ const NAV: { group: string; items: { href: string; label: string }[] }[] = [
   },
 ];
 
-export function Footer() {
+/**
+ * showNav — 비로그인 랜딩에서는 끈다(2026-08-24). 여기 걸린 링크 아홉 개가 전부
+ * 회원 전용이라, 켜 두면 처음 온 사람이 무엇을 눌러도 로그인 화면으로 튕긴다.
+ * 법적 고지와 약관·방침 링크는 어느 쪽이든 남는다 — 가입 전에 읽을 자리다.
+ */
+export function Footer({ showNav = true }: { showNav?: boolean } = {}) {
   return (
     <footer className="mt-16 border-t border-border bg-surface">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-10 sm:px-7">
-        <div className="grid gap-8 md:grid-cols-[1.6fr_2fr]">
+        <div
+          className={
+            showNav ? "grid gap-8 md:grid-cols-[1.6fr_2fr]" : "grid gap-8"
+          }
+        >
           {/* 브랜드 + 한 줄 정체성 */}
           <div>
             <VectaLogo className="flex items-center gap-2" />
@@ -60,6 +69,7 @@ export function Footer() {
           </div>
 
           {/* 메뉴 — GNB 가 8개를 다 못 담아 「더보기」로 접는 것들까지 여기서 펼친다 */}
+          {showNav && (
           <nav className="grid grid-cols-2 gap-6 sm:grid-cols-3" aria-label="푸터 메뉴">
             {NAV.map((col) => (
               <div key={col.group}>
@@ -79,6 +89,7 @@ export function Footer() {
               </div>
             ))}
           </nav>
+          )}
         </div>
 
         {/* ── 법적 고지 ──
