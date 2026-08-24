@@ -4,6 +4,9 @@
 전일 16:30 발행분이 그대로 유효. 08:30 배치: FRED 갱신 → 레짐 → 본 브리프 1건.
 하루 1건 — 같은 날 재실행 시 기존 건 삭제 후 재발행(NULL instrument_id 는
 유니크 인덱스 충돌 매칭이 안 되므로 delete-insert).
+
+as_of 는 «브리프를 언제 썼나»가 아니라 «분석이 어느 날짜까지 됐나»다 — 08:30 에
+쓴 브리프의 내용은 전 거래일 종가이므로 as_of 도 그 날이다(basis_day 주석 참조).
 """
 from __future__ import annotations
 
@@ -63,9 +66,48 @@ def _macro_summary() -> list[dict]:
     return out
 
 
+def basis_day() -> str:
+    """분석 기준일 — «봉이 마지막으로 쌓인 거래일». 달력의 오늘이 아니다.
+
+    2026-08-24 사고: 여기서 kst_today() 를 쓰는 바람에 08:30 모닝 배치가 «오늘
+    날짜»로 브리프를 찍었다. 그 시각엔 그날 봉이 없어 내용은 전 거래일 종가 이야기
+    (시장 폭·픽·레짐 전부)인데 라벨만 오늘이었다. 홈은 그 날짜로 픽을 걸러
+    «발행 없음»을 띄웠고, 시장 페이지는 8/21 숫자에 «8월 24일 기준»을 달았다.
+
+    EOD 배치는 as_of 를 명시해 넘기므로(reports/daily.py) 이 함수를 타지 않는다 —
+    이건 as_of 없이 도는 모닝 배치의 기준일이다. 일일 배치의 신선도 가드가 쓰는
+    바로 그 market_latest 를 쓴다(engine.freshness). 미래 날짜 봉이 하나라도 섞이면
+    기준일이 앞서 나가므로 오늘로 자른다.
+    """
+    today = kst_today().isoformat()
+    try:
+        from engine import db_direct, freshness
+        if db_direct.available():
+            latest = freshness.assess_dates(
+                db_direct.latest_bar_date_by_iid(), today
+            )["market_latest"]
+            if latest:
+                return min(str(latest), today)
+    except Exception as e:  # noqa: BLE001 — 기준일 하나 때문에 브리프를 죽이지 않는다
+        log.warning("reports.morning.basis_day_failed", error=str(e)[:140])
+    # 직접 PG 가 없는 환경(웹 호스팅 등) 폴백 — 마지막으로 «분석이 된» 날.
+    # 웹 화면들이 기준일로 쓰는 값과 같은 것이다(lib/data.getLatestReportDay).
+    try:
+        rows = (
+            get_client().table("reports").select("as_of")
+            .eq("report_type", "indepth").eq("status", "published")
+            .lte("as_of", today).order("as_of", desc=True).limit(1).execute()
+        ).data or []
+        if rows:
+            return str(rows[0]["as_of"])
+    except Exception as e:  # noqa: BLE001
+        log.warning("reports.morning.basis_day_fallback_failed", error=str(e)[:140])
+    return today
+
+
 def build_context(as_of: str | None = None) -> dict:
     client = get_client()
-    today = as_of or kst_today().isoformat()
+    today = as_of or basis_day()
     regime = (
         client.table("market_regime").select("*")
         .lte("date", today)
