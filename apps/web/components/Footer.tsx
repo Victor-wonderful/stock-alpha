@@ -113,6 +113,15 @@ export function Footer() {
             >
               자주 묻는 질문
             </Link>
+            {/* 전문가 참여 — 신청할 곳이 FAQ 안의 링크 하나뿐이었다(2026-08-24 Victor:
+                "전문가 참여는 어디에서 하나?"). 푸터는 모든 화면 아래에 있어, 어느
+                화면을 보다 마음이 생기든 스크롤 끝에 길이 있다. */}
+            <Link
+              href="/expert/apply"
+              className="text-[11.5px] font-semibold text-text-dim transition-colors hover:text-accent"
+            >
+              전문가 참여
+            </Link>
             <Link
               href="/terms"
               className="text-[11.5px] font-semibold text-text-dim transition-colors hover:text-accent"
