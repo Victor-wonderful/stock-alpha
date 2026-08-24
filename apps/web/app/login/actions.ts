@@ -50,17 +50,40 @@ export async function signIn(next: string | null, formData: FormData) {
   redirect(to);
 }
 
+/** 연락처 — 숫자와 구분자만 받는다. 국내 번호를 전제하되 형식을 좁게 강요하지 않는다. */
+function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (digits.length < 9 || digits.length > 11) return null;
+  return digits;
+}
+
 export async function signUp(next: string | null, formData: FormData) {
   const to = safeNext(next);
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const nickname = String(formData.get("nickname") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const agreed = formData.get("agree") === "on";
+
+  if (!nickname) fail(to, "닉네임을 입력해 주세요.", "signup");
+  if (nickname.length > 20) fail(to, "닉네임은 20자 이내로 정해 주세요.", "signup");
   if (!email || !password) fail(to, "이메일과 비밀번호를 모두 입력해 주세요.", "signup");
   if (password.length < 8) {
     fail(to, "비밀번호는 8자 이상으로 정해 주세요.", "signup");
   }
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) fail(to, "연락처를 숫자 9~11자리로 입력해 주세요. (예: 010-1234-5678)", "signup");
+  // 개인정보를 받는 이상 동의 없이 저장하지 않는다. 체크박스가 장식이 되면 안 된다.
+  if (!agreed) fail(to, "개인정보 수집·이용에 동의해야 가입할 수 있습니다.", "signup");
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  // 닉네임·연락처를 **가입 메타데이터**로 넘긴다. 이메일 확인을 쓰는 프로젝트에서는
+  // 가입 직후 세션이 없어 profiles 에 직접 못 쓴다 — DB 트리거가 옮긴다(0043).
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { nickname, phone } },
+  });
   if (error) {
     const msg = /already registered|already exists/i.test(error.message)
       ? "이미 가입된 이메일입니다. 로그인해 주세요."

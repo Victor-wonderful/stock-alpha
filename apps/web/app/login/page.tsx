@@ -98,11 +98,62 @@ export default async function LoginPage({
       {error && (
         <div className="mt-5 flex gap-2.5 rounded-[10px] border border-bad/30 bg-bad-soft px-4 py-3">
           <TriangleAlert size={16} className="mt-0.5 shrink-0 text-bad" aria-hidden />
-          <p className="text-[13px] leading-[1.7] text-text">{error}</p>
+          <p className="text-[13px] leading-[1.7] text-text">
+            {error}
+            {isSignup && (
+              <span className="mt-1 block text-text-mute">
+                입력하신 값은 주소창에 남기지 않습니다 — 번거롭더라도 다시 적어 주세요.
+              </span>
+            )}
+          </p>
         </div>
       )}
 
       <form action={isSignup ? doSignUp : doSignIn} className="mt-5 space-y-4">
+        {/* 가입에만 있는 두 칸 — 순서는 Victor 가 정한 대로(닉네임 · 연락처 · 이메일 ·
+            비밀번호). 로그인은 이메일·비밀번호 둘이면 된다. */}
+        {isSignup && (
+          <>
+            <div>
+              <label
+                className="block text-[13px] font-semibold text-text"
+                htmlFor="nickname"
+              >
+                닉네임{" "}
+                <span className="font-normal text-text-mute">
+                  화면에 보이는 이름 · 20자 이내
+                </span>
+              </label>
+              <input
+                id="nickname"
+                name="nickname"
+                type="text"
+                required
+                maxLength={20}
+                placeholder="남산자산"
+                className={FIELD}
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] font-semibold text-text" htmlFor="phone">
+                연락처
+              </label>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                required
+                placeholder="010-1234-5678"
+                className={FIELD}
+              />
+              <p className="mt-1.5 text-[11.5px] leading-[1.6] text-text-mute">
+                본인 확인과 중요 공지에만 씁니다. 광고 전화는 하지 않습니다.
+              </p>
+            </div>
+          </>
+        )}
         <div>
           <label className="block text-[13px] font-semibold text-text" htmlFor="email">
             이메일
@@ -132,6 +183,25 @@ export default async function LoginPage({
             className={FIELD}
           />
         </div>
+
+        {/* 개인정보를 받는 이상 동의 없이 저장하지 않는다. 무엇을 왜 받는지 이 자리에
+            적는다 — 링크 뒤에 숨기면 아무도 읽지 않는다. */}
+        {isSignup && (
+          <label className="flex gap-2.5 rounded-[10px] border border-border bg-surface-2 px-3.5 py-3">
+            <input
+              type="checkbox"
+              name="agree"
+              required
+              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+            />
+            <span className="text-[12px] leading-[1.7] text-text-dim">
+              <span className="font-semibold text-text">개인정보 수집·이용에 동의합니다</span>
+              <br />
+              닉네임·연락처·이메일을 받습니다. 본인 확인과 중요 공지에 쓰고, 탈퇴하면
+              지웁니다. 제3자에게 넘기지 않습니다.
+            </span>
+          </label>
+        )}
 
         <button
           type="submit"
