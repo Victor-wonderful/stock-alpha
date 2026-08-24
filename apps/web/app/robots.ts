@@ -18,8 +18,9 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: "*",
-      // 공개 목록(middleware.ts PUBLIC_PATHS)과 같은 다섯 곳
-      allow: ["/$", "/login", "/terms", "/privacy"],
+      // 공개 목록(middleware.ts PUBLIC_PATHS)과 같은 곳. FAQ 는 검색에서 들어오는
+      // 사람이 «여기가 뭐 하는 곳인지» 읽을 수 있는 유일한 화면이라 특히 열어 둔다.
+      allow: ["/$", "/login", "/faq", "/terms", "/privacy"],
       // 나머지 전부 — 크롤러가 받아 가 봐야 로그인 화면이다
       disallow: "/",
     },

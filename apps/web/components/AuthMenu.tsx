@@ -24,14 +24,30 @@ export async function AuthMenu() {
   } = await supabase.auth.getUser();
 
   if (!user) {
+    // 로그인과 **회원가입 둘 다** 머리에 둔다(2026-08-24 Victor: "로그인, 회원가입
+    // 이건 상단에 해놔야지"). 예전엔 로그인 하나뿐이었다 — 홈을 뺀 전 화면이 회원
+    // 전용인데 «계정을 만드는 길»이 첫 화면 어디에도 없었던 셈이다.
+    //
+    // 채운 쪽은 회원가입이다. 강조 예산은 «다음에 할 행동»에 쓴다 — 계정이 없는
+    // 사람에게 다음 행동은 가입이지 로그인이 아니다.
+    // 폰(375px)에서는 로그인의 글자를 접고 아이콘만 남긴다. 회원가입은 글자를
+    // 유지한다 — 아이콘만 둘이면 어느 쪽이 가입인지 알 수 없다.
     return (
-      <Link
-        href="/login"
-        className="flex h-11 items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3.5 text-[12.5px] font-semibold text-text-dim transition-colors hover:text-text sm:px-4"
-      >
-        <LogIn className="h-4 w-4" aria-hidden />
-        <span className="hidden sm:inline">로그인</span>
-      </Link>
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <Link
+          href="/login"
+          className="flex h-11 items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 text-[12.5px] font-semibold text-text-dim transition-colors hover:text-text sm:px-4"
+        >
+          <LogIn className="h-4 w-4" aria-hidden />
+          <span className="hidden sm:inline">로그인</span>
+        </Link>
+        <Link
+          href="/login?mode=signup"
+          className="flex h-11 items-center rounded-full bg-accent px-3.5 text-[12.5px] font-semibold text-text-on-accent transition-colors hover:bg-accent-2 sm:px-4"
+        >
+          회원가입
+        </Link>
+      </div>
     );
   }
 

@@ -1,8 +1,6 @@
 import Link from "next/link";
 
-import { JoinBand } from "@/components/JoinBand";
 import { VectaLogo } from "@/components/VectaLogo";
-import { createClient } from "@/lib/supabase/server";
 
 /**
  * 전역 푸터.
@@ -48,30 +46,15 @@ const NAV: { group: string; items: { href: string; label: string }[] }[] = [
 ];
 
 /**
- * 세션을 읽는 이유는 하나 — **가입 안내(JoinBand)를 로그인한 사람에게 보이지 않기**
- * 위해서다(2026-08-24). 루트 레이아웃에 있는 컴포넌트라 이 판정 한 번이 전 화면을
- * 덮는다. 판정은 서버에서 하고, «어느 화면인가»만 JoinBand 가 본다.
- *
- * 아래 메뉴는 비로그인에게도 그대로 둔다. 전부 회원 전용 화면이지만 눌러도 벽이 아니라
- * 로그인 화면으로 가고 **로그인하면 그 화면으로 돌아온다**(middleware 의 next 파라미터).
- * 「여기에 이런 게 있다」를 보여주는 편이 목록을 감추는 것보다 낫다.
+ * 푸터에는 **설명도 버튼도 두지 않는다**(2026-08-24). 잠깐 여기에 가입 안내 배너를
+ * 넣었다가 뺐다 — 로그인·회원가입 버튼은 머리(components/AuthMenu)에 상시로 있어야
+ * 하고, 「가입하면 뭐가 열리나」는 궁금한 사람이 읽으러 가는 화면(/faq)이 맡는다.
+ * 푸터가 하는 일은 예나 지금이나 둘이다: 어디에 무엇이 있는지, 그리고 법적 고지.
  */
-export async function Footer() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+export function Footer() {
   return (
     <footer className="mt-16 border-t border-border bg-surface">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-10 sm:px-7">
-        {/* 가입 안내 — 로그인 안 한 사람에게만. 푸터 맨 위라 본문을 밀지 않는다. */}
-        {!user && (
-          <div className="mb-8">
-            <JoinBand />
-          </div>
-        )}
-
         <div className="grid gap-8 md:grid-cols-[1.6fr_2fr]">
           {/* 브랜드 + 한 줄 정체성 */}
           <div>
@@ -124,6 +107,12 @@ export async function Footer() {
           {/* 약관·방침은 가입 화면에서만 닿을 수 있으면 안 된다 — 이미 가입한 사람이
               «내가 무엇에 동의했더라»를 찾을 자리가 여기다(2026-08-24). */}
           <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Link
+              href="/faq"
+              className="text-[11.5px] font-semibold text-text-dim transition-colors hover:text-accent"
+            >
+              자주 묻는 질문
+            </Link>
             <Link
               href="/terms"
               className="text-[11.5px] font-semibold text-text-dim transition-colors hover:text-accent"
