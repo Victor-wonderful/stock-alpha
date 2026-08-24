@@ -105,3 +105,92 @@ export async function getMyApplication(): Promise<ExpertApplication | null> {
     return null;
   }
 }
+
+// ── 회원 ──
+/**
+ * 운영자가 보는 회원 목록(0049 admin_members).
+ *
+ * profiles 정책은 «본인 행만»이라 여기서 직접 조회할 수 없다. 정책을 넓히지 않고
+ * **운영자인지 확인한 뒤에만 답하는 함수**를 부른다 — 그 판정은 DB 가 한다.
+ *
+ * 이메일·연락처가 실려 온다. 화면은 이것을 목록에 상시로 늘어놓지 않는다 — 행을
+ * 펼쳐야 보인다(개인정보를 한 화면에 늘어놓으면 캡처 한 장으로 전부 샌다).
+ */
+export interface Member {
+  id: string;
+  displayName: string | null;
+  email: string | null;
+  phone: string | null;
+  tier: string | null;
+  isAdmin: boolean;
+  emailConfirmed: boolean;
+  /** 전문가로 등록돼 있으면 그 필명 */
+  expertName: string | null;
+  termsAgreedAt: string | null;
+  agreedDocVersion: string | null;
+  createdAt: string;
+}
+
+function mapMember(r: Record<string, unknown>): Member {
+  return {
+    id: String(r.id),
+    displayName: (r.display_name as string) ?? null,
+    email: (r.email as string) ?? null,
+    phone: (r.phone as string) ?? null,
+    tier: (r.tier as string) ?? null,
+    isAdmin: Boolean(r.is_admin),
+    emailConfirmed: Boolean(r.email_confirmed),
+    expertName: (r.expert_name as string) ?? null,
+    termsAgreedAt: (r.terms_agreed_at as string) ?? null,
+    agreedDocVersion: (r.agreed_doc_version as string) ?? null,
+    createdAt: String(r.created_at),
+  };
+}
+
+export async function getMembers(
+  q: string | null = null,
+  limit = 200,
+): Promise<Member[]> {
+  try {
+    const supabase = await createUserClient();
+    const { data, error } = await supabase.rpc("admin_members", {
+      p_q: q && q.trim() ? q.trim() : null,
+      p_limit: limit,
+      p_offset: 0,
+    });
+    if (error || !data) throw error ?? new Error("empty");
+    return (data as Record<string, unknown>[]).map(mapMember);
+  } catch {
+    return [];
+  }
+}
+
+export interface AdminStats {
+  members: number;
+  membersToday: number;
+  members7d: number;
+  unconfirmed: number;
+  experts: number;
+  pendingApps: number;
+}
+
+/** 관리 홈의 숫자 — 화면이 세지 않고 DB 가 센다(두 곳이 갈리지 않게). */
+export async function getAdminStats(): Promise<AdminStats | null> {
+  try {
+    const supabase = await createUserClient();
+    const { data, error } = await supabase.rpc("admin_stats");
+    if (error || !data) throw error ?? new Error("empty");
+    const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown>;
+    if (!r) return null;
+    return {
+      members: Number(r.members ?? 0),
+      membersToday: Number(r.members_today ?? 0),
+      members7d: Number(r.members_7d ?? 0),
+      unconfirmed: Number(r.unconfirmed ?? 0),
+      experts: Number(r.experts ?? 0),
+      pendingApps: Number(r.pending_apps ?? 0),
+    };
+  } catch {
+    return null;
+  }
+}

@@ -68,7 +68,7 @@ export async function AuthMenu() {
     <div className="flex items-center gap-1.5 sm:gap-2">
       {admin && (
         <Link
-          href="/admin/experts"
+          href="/admin"
           className="hidden h-11 items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3.5 text-[12.5px] font-semibold text-text-dim transition-colors hover:text-text sm:flex"
         >
           <ShieldCheck className="h-4 w-4" aria-hidden />

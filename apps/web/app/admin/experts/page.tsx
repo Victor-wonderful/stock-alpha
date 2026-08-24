@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, TriangleAlert } from "lucide-react";
+import { ArrowLeft, CheckCircle2, TriangleAlert } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
 import { getExpertApplications, isAdmin, type ExpertApplication } from "@/lib/admin";
@@ -18,9 +19,11 @@ import { approveApplication, rejectApplication } from "./actions";
  * ⚠️ 이 화면의 판정은 감추기 위한 것이고, 실제 권한은 DB 가 지킨다(0047 정책 +
  * approve_expert_application 의 is_admin 검사).
  */
-export const metadata = {
-  title: "전문가 신청 — 관리",
-};
+/**
+ * ⚠️ metadata 를 내보내지 않는다. Next 는 notFound() 보다 **먼저** 제목을 정하므로,
+ * 「관리 — VECTA Stock」이라 적어 두면 404 를 받은 사람의 브라우저 탭에 그 제목이
+ * 그대로 뜬다 — 없는 척하기로 해 놓고 제목이 존재를 알려 주는 셈이다(2026-08-25).
+ */
 
 export default async function AdminExpertsPage({
   searchParams,
@@ -44,6 +47,14 @@ export default async function AdminExpertsPage({
       ]}
     >
       <div className="mx-auto w-full max-w-[820px]">
+        <Link
+          href="/admin"
+          className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] text-text-mute transition-colors hover:text-accent"
+        >
+          <ArrowLeft size={14} strokeWidth={2} aria-hidden />
+          관리
+        </Link>
+
         {done === "1" && (
           <div className="mb-5 flex gap-2.5 rounded-[10px] border border-good/30 bg-good-soft px-4 py-3">
             <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-good" aria-hidden />
