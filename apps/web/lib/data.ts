@@ -2891,6 +2891,7 @@ function mapReportRow(row: Record<string, unknown>): ReportListItem {
     report_type: row.report_type as string,
     symbol: (inst.symbol as string) ?? null,
     name: (inst.name as string) ?? null,
+    exchange: (inst.exchange as string) ?? null,
     title: row.title as string,
     as_of: row.as_of as string,
     rating: row.rating as string | null,
@@ -2931,20 +2932,24 @@ export async function getLatestReportDay(): Promise<string | null> {
 
 export async function getReports(
   limit = 30,
-  opts: { includeUnfit?: boolean } = {},
+  opts: { includeUnfit?: boolean; day?: string | null } = {},
 ): Promise<Loaded<ReportListItem[]>> {
   try {
     const supabase = createPublicClient();
     let q = supabase
       .from("reports")
       .select(
-        "id,report_type,title,as_of,rating,target_price,summary,model_version,score:payload->verdict->>score,instruments(symbol,name)",
+        "id,report_type,title,as_of,rating,target_price,summary,model_version,score:payload->verdict->>score,instruments(symbol,name,exchange)",
       )
       .eq("status", "published")
       .eq("report_type", "indepth") // 종목 분석만 — 마켓 브리프는 /focus 카드로
       .order("as_of", { ascending: false })
       .order("id", { ascending: false })
       .limit(limit);
+    // 하루치만 — 「분석」 화면이 쓴다. 날짜가 곧 페이지다(2026-08-25).
+    // 이걸 안 주면 한도(limit)만큼 여러 날이 섞여 오고, 마지막 날짜 그룹은 중간에
+    // 잘린 채로 온다. «100건 중 37건»을 그날 전부인 양 보여주게 된다.
+    if (opts.day) q = q.eq("as_of", opts.day);
     // '거래 부적합'은 목록 기본 제외 — 종목 상세에서만 경고로 노출.
     if (!opts.includeUnfit) q = q.neq("rating", "거래 부적합");
     const { data, error } = await q;
@@ -3281,3 +3286,39 @@ export async function getSparkForSymbol(
 }
 
 
+
+// ── 발행일 목록 ──
+/**
+ * 리포트가 나온 날들과 그날의 건수 — 「분석」 화면의 날짜 이동이 쓴다(2026-08-25).
+ *
+ * 왜 필요한가: 그 화면은 한 번에 400건을 긁어 3일치를 한 장에 쌓고 있었다. 실제로는
+ * **42개 발행일 × 하루 100건**이라, 나머지 39일은 화면에서 갈 길이 없었다 — 쌓여 있는데
+ * 못 읽는다는 점에서 매일 브리프가 겪은 것과 같은 문제다.
+ *
+ * 날짜가 곧 페이지다. 하루치만 보여주고 이전/다음으로 넘긴다. 그러면 목록 길이가
+ * 발행일 수와 무관하게 일정하고, 판정·시장 칩의 숫자가 **화면에 보이는 것과 정확히
+ * 일치한다**(예전에는 칩은 최신일 기준인데 목록은 3일치라 서로 어긋났다).
+ *
+ * DB 함수를 쓰는 이유(0048): PostgREST 에 distinct 가 없어 날짜만 받아 접으려면
+ * 4,200 행을 받아야 하는데 이 프로젝트의 REST 응답은 **1000행에서 잘린다**. 그러면
+ * 최근 10일만 나오고 나머지는 다시 «없는 것»이 된다.
+ */
+export interface ReportDay {
+  asOf: string;
+  /** 그날 발행 건수 — 거래 부적합 포함(그날 분석을 돌렸다는 증거다) */
+  count: number;
+}
+
+export async function getReportDays(limit = 120): Promise<ReportDay[]> {
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase.rpc("report_days", { p_limit: limit });
+    if (error || !data) throw error ?? new Error("empty");
+    return (data as { as_of: string; n: number }[]).map((r) => ({
+      asOf: String(r.as_of),
+      count: Number(r.n),
+    }));
+  } catch {
+    return [];
+  }
+}
