@@ -11,7 +11,6 @@ import { HomePicksTable } from "@/components/HomePicksTable";
 import { RecentReports, WeeklyBriefs } from "@/components/HomeSections";
 import { ExpertNotes } from "@/components/ExpertNotes";
 import { HomeTopNews } from "@/components/HomeTopNews";
-import { Landing } from "@/components/Landing";
 import { createClient } from "@/lib/supabase/server";
 import {
   getBlogPosts,
@@ -26,7 +25,6 @@ import {
   getOpenPicks,
   getRecommendations,
   getExpertNotes,
-  getLandingStats,
   getLatestReportDay,
   getReports,
   getTopNews,
@@ -83,46 +81,19 @@ const STATE_CHIP: Record<string, string> = {
 };
 
 export default async function HomePage() {
-  // ── 로그인 여부로 화면이 갈린다(2026-08-24 Victor 확정) ──
-  // 홈을 뺀 전 화면이 회원 전용이 됐다(middleware.ts 의 공개 목록). 그런데 이 홈은
-  // 다른 화면들의 요약본이라 오늘의 픽 표·리포트·뉴스가 이미 다 깔려 있다 — 그대로
-  // 두면 잠금이 아무 의미가 없다. 그래서 같은 `/` 가 두 얼굴을 갖는다.
+  // ── 홈은 로그인 없이도 홈이다(2026-08-24 Victor) ──
+  // 잠깐 «비로그인이면 소개 화면»으로 바꿨다가 되돌렸다. 소개 문구(무엇을 하는
+  // 곳인가 · 회원이 되면 보이는 것)는 **가입 화면이 할 말**이지 홈이 할 말이 아니다.
+  // 그 내용은 components/Landing 에 그대로 있고, 가입 화면 작업에서 붙인다.
   //
-  //   비로그인  components/Landing — 여기가 뭐 하는 곳인지 + 오늘의 «건수»만
-  //   로그인    아래 그대로 — 오늘 무슨 일이 있었나
-  //
-  // 아래의 무거운 조회(왕복 12회 + 후속 4회)는 이 분기 뒤에 있다. 처음 온 사람이
-  // 볼 일 없는 픽·리포트·뉴스를 긁어 오지 않는다.
+  // 그래서 세션은 화면을 가르는 데 쓰지 않는다. 딱 한 군데 — 히어로 버튼의 목적지에만
+  // 쓴다. 기본 CTA 는 「검증 성적표」(/picks)인데 그건 회원 전용이라, 로그인 안 한
+  // 사람에게는 눌러 봐야 로그인 화면으로 튕기는 버튼이 된다. 그 사람에게는 대신
+  // 「무료로 시작하기」를 보여준다.
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (!user) {
-    const [landingStats, landingQuotes, landingPosts] = await Promise.all([
-      getLandingStats(),
-      getMarketQuotes(),
-      getBlogPosts(),
-    ]);
-    return (
-      <Landing
-        stats={landingStats}
-        ticker={landingQuotes.data.map((q) => ({
-          id: `${q.id}`,
-          label: q.label,
-          value: q.value,
-          unit: q.unit,
-          change: q.changePct,
-          isPct: true,
-        }))}
-        // 카테고리를 가리지 않고 최신 3건 — 랜딩의 이 자리는 «읽을 것이 있다»를
-        // 보이는 자리이지 주제별 진열대가 아니다(그건 로그인 뒤 인사이트가 맡는다).
-        posts={[...landingPosts]
-          .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
-          .slice(0, 3)}
-      />
-    );
-  }
 
   const [
     quotes, recs, brief, marketState, openPicks, weekly, blogPosts, reports, cal, topNews,
@@ -277,7 +248,13 @@ export default async function HomePage() {
       />
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-10 pt-7 sm:px-7">
-        <HomeHero />
+        <HomeHero
+          cta={
+            user
+              ? { href: "/picks", label: "검증 성적표", labelTail: " 보기" }
+              : { href: "/login?mode=signup", label: "무료로 시작하기" }
+          }
+        />
 
         {/* ── 밴드 1 · 오늘 ──
             좌우 폭을 뒤집어 리듬을 만든다(2026-08-22 Victor). 전폭 블록을 일곱 번
