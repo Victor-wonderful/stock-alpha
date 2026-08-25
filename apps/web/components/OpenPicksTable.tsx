@@ -67,7 +67,7 @@ export function OpenPicksTable({
       <div className="md:hidden">
         {picks.length === 0 ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-[13px] font-semibold text-text">아직 보유 중인 픽이 없습니다</p>
+            <p className="text-[13px] font-semibold text-text">아직 진행중인 픽이 없습니다</p>
             <p className="mt-1 text-[12px] text-text-mute">
               {pendingCount > 0
                 ? `오늘의 픽 ${pendingCount}건이 ${planDay ?? "다음 거래일"} 시가에 체결되면 여기에 줄이 생깁니다.`
@@ -208,7 +208,7 @@ export function OpenPicksTable({
               <tr>
                 <td colSpan={HEADS.length} className="px-4 py-8 text-center">
                   <p className="text-[13px] font-semibold text-text">
-                    아직 보유 중인 픽이 없습니다
+                    아직 진행중인 픽이 없습니다
                   </p>
                   <p className="mt-1 text-[12px] text-text-mute">
                     {pendingCount > 0 ? (

@@ -30,7 +30,7 @@ export function OpenPicksSummary({ picks }: { picks: OpenPick[] }) {
     <section className="rounded-[14px] border border-border bg-surface px-5 py-5">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 className="text-[20px] font-bold leading-[1.3] tracking-[-0.4px] text-text">
-          {picks.length > 0 ? `보유 중 ${picks.length}건` : "보유 중인 픽 없음"}
+          {picks.length > 0 ? `진행중 ${picks.length}건` : "진행중인 픽 없음"}
         </h2>
         {avgRet != null && (
           <span
@@ -43,11 +43,11 @@ export function OpenPicksSummary({ picks }: { picks: OpenPick[] }) {
 
       {/* ⚠️ 대기 건수·진입 예정일은 여기서 말하지 않는다 — 우측 카드 자리가 그걸
           말한다. 좌우가 같은 문장을 두 번 하면 밴드 전체가 헛돈다(2026-08-22). 
-          좌는 «보유 전체가 어떤가», 우는 «종목별로 어떤가»다. */}
+          좌는 «진행중 전체가 어떤가», 우는 «종목별로 어떤가»다. */}
       <p className="mt-2 text-[13px] leading-relaxed text-text-dim">
         {picks.length > 0
           ? "진입가 대비 현재 종가 기준입니다. 아직 팔지 않았으므로 확정 손익이 아닙니다."
-          : "픽이 체결되면 보유 전체의 손익과 위험을 여기서 봅니다."}
+          : "픽이 체결되면 진행중 전체의 손익과 위험을 여기서 봅니다."}
       </p>
 
       {picks.length > 0 && (

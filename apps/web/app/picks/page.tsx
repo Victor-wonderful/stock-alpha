@@ -111,7 +111,7 @@ export default async function PicksPage({
       subtitle="발행한 모든 픽의 기록입니다. 맞은 것과 틀린 것을 함께 적습니다 — 다음 거래일 시가 진입 · 종가 기준 자동 확정."
       stats={[
         { label: "누적 발행", value: `${all.length}` },
-        { label: "진행 중", value: `${inProgress.length}` },
+        { label: "진행중", value: `${inProgress.length}` },
         // 이 화면의 결론 한 칸 — 종료된 픽의 평균 손익. 승률보다 이쪽이 판단 기준이다.
         {
           label: "종료 평균 손익",
@@ -143,7 +143,7 @@ export default async function PicksPage({
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-[12px] border border-border bg-surface px-4 py-3 text-[12px] leading-relaxed text-text-dim">
               <span className="font-bold text-text">아직 끝난 거래가 없습니다</span>
               <span>
-                — 지금 규칙은 8월 22일부터입니다. 발행 {current.length}건이 아직 보유 중이거나
+                — 지금 규칙은 8월 22일부터입니다. 발행 {current.length}건이 아직 진행중이거나
                 진입을 기다리고 있어, 승률과 평균 손익은 첫 청산이 나온 뒤에 채워집니다.
               </span>
             </div>
@@ -181,7 +181,7 @@ export default async function PicksPage({
             {
               label: "진행중 (미실현)",
               value: avg(inProgress) != null ? fmtPct(avg(inProgress)) : "—",
-              sub: `${inProgress.length}건 보유 중 · 현재가 기준`,
+              sub: `${inProgress.length}건 진행중 · 현재가 기준`,
               color:
                 avg(inProgress) == null
                   ? "text-text"
@@ -311,10 +311,10 @@ export default async function PicksPage({
                     ) : (
                       <>
                         <span className="tnum text-text-dim">종료 {st.closed}건</span>
-                        {/* 보유 중과 진입 대기를 나눠 적는다 — 합쳐서 「진행중」이라
-                            찍으면 아직 사지도 않은 픽이 보유로 세어져, 위 「진행 중」
-                            타일·/focus 「보유 중」과 숫자가 어긋난다(2026-08-25). */}
-                        <span className="tnum text-text-dim">보유 중 {st.open}</span>
+                        {/* 진행중(산 것)과 진입 대기(아직 안 산 것)를 나눠 적는다 —
+                            합쳐서 「진행중」이라 찍으면 아직 사지도 않은 픽이 세어져,
+                            위 「진행중」 타일·/focus 와 숫자가 어긋난다(2026-08-25). */}
+                        <span className="tnum text-text-dim">진행중 {st.open}</span>
                         {st.pending > 0 ? (
                           <span className="tnum text-text-mute">진입 대기 {st.pending}</span>
                         ) : null}
@@ -358,7 +358,7 @@ export default async function PicksPage({
                 {resim.data.reduce((a, r) => a + r.gatePassed, 0)}개뿐
               </b>
               입니다. 나머지는 «새 규칙이었다면 이랬을 것»이지 «발행됐을 것»이 아닙니다.
-              위아래 모두 같은 방식으로 중복(보유 중 재선정)을 합쳐 셉니다.
+              위아래 모두 같은 방식으로 중복(진행중 재선정)을 합쳐 셉니다.
             </div>
           </div>
         )}
