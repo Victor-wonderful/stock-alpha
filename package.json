@@ -11,6 +11,8 @@
     "db:migrate": "supabase db push",
     "db:reset": "supabase db reset",
     "docs:html": "node scripts/build-docs-html.mjs",
+    "docs:pptx": "node scripts/build-docs-pptx.mjs",
+    "docs:all": "npm run docs:html && npm run docs:pptx",
     "engine:dev": "python -m engine.cli",
     "engine:test": "pytest apps/engine"
   },
