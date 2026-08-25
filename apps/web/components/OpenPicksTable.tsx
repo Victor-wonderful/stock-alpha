@@ -70,7 +70,7 @@ export function OpenPicksTable({
             <p className="text-[13px] font-semibold text-text">아직 진행중인 픽이 없습니다</p>
             <p className="mt-1 text-[12px] text-text-mute">
               {pendingCount > 0
-                ? `오늘의 픽 ${pendingCount}건이 ${planDay ?? "다음 거래일"} 시가에 체결되면 여기에 줄이 생깁니다.`
+                ? `오늘의 픽 ${pendingCount}건은 ${planDay ?? "다음 거래일"} 시가에 사고, 그날 장 마감 뒤 분석이 돌면 여기로 내려옵니다.`
                 : "픽이 체결되면 여기에 줄이 생깁니다."}
             </p>
           </div>
@@ -217,7 +217,8 @@ export function OpenPicksTable({
                         <span className="tnum font-semibold text-text-dim">
                           {pendingCount}건
                         </span>
-                        이 {planDay ?? "다음 거래일"} 시가에 체결되면 여기에 줄이 생깁니다.
+                        은 {planDay ?? "다음 거래일"} 시가에 사고, 그날 장 마감 뒤
+                        분석이 돌면 여기로 내려옵니다.
                       </>
                     ) : (
                       "픽이 체결되면 여기에 줄이 생깁니다."
@@ -342,13 +343,17 @@ export function OpenPicksTable({
       {/* 진입 대기 안내는 표가 «비었을 때만» 나오고 있었다(2026-08-25 Victor —
           "여기는 왜 5개만 보여지는거지?"). 진행중 5건 + 대기 2건인 날, 위쪽
           「오늘의 픽」에는 2건이 있는데 이 표는 5줄이라 «빠진 것»처럼 읽힌다.
-          줄이 있든 없든 «아직 안 산 픽이 몇 건 있고 언제 들어오는지»를 말한다. */}
+          줄이 있든 없든 «아직 안 산 픽이 몇 건 있고 언제 들어오는지»를 말한다.
+          ⚠️ «시가에 체결되면 줄이 생긴다»고 쓰면 안 된다(2026-08-25 Victor 정정) —
+          사는 것은 시가지만 **상태가 open 으로 바뀌는 건 그날 저녁 배치**다
+          (confirm_pending_picks 는 D+1 봉이 쌓인 뒤 D+1 배치에서 돈다). 장중에
+          이 표를 봐도 안 내려와 있으니, 09시라고 적으면 «고장»으로 읽힌다. */}
       {picks.length > 0 && pendingCount > 0 && (
         <p className="border-t border-border-soft px-4 py-2.5 text-[12px] text-text-mute">
           오늘의 픽{" "}
           <span className="tnum font-semibold text-text-dim">{pendingCount}건</span>은
-          아직 사기 전이라 이 표에 없습니다 — {planDay ?? "다음 거래일"} 시가에 체결되면
-          줄이 생깁니다.
+          아직 사기 전이라 이 표에 없습니다 — {planDay ?? "다음 거래일"} 시가에 사고,
+          그날 장 마감 뒤 분석이 돌면 여기로 내려옵니다.
         </p>
       )}
     </div>
