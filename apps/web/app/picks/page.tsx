@@ -311,7 +311,13 @@ export default async function PicksPage({
                     ) : (
                       <>
                         <span className="tnum text-text-dim">종료 {st.closed}건</span>
-                        <span className="tnum text-text-dim">진행중 {st.open}</span>
+                        {/* 보유 중과 진입 대기를 나눠 적는다 — 합쳐서 「진행중」이라
+                            찍으면 아직 사지도 않은 픽이 보유로 세어져, 위 「진행 중」
+                            타일·/focus 「보유 중」과 숫자가 어긋난다(2026-08-25). */}
+                        <span className="tnum text-text-dim">보유 중 {st.open}</span>
+                        {st.pending > 0 ? (
+                          <span className="tnum text-text-mute">진입 대기 {st.pending}</span>
+                        ) : null}
                         <span className="tnum text-good">승 {st.wins}</span>
                         <span className="tnum text-text-dim">
                           승률{" "}
