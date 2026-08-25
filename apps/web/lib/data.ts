@@ -2142,7 +2142,12 @@ export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
 export interface ResimHorizonStat {
   horizon: string;
   total: number;
-  open: number;
+  // ⚠️ open 과 pending 을 **합치지 않는다**(2026-08-25). 예전엔 둘을 open 한 칸에
+  // 더해 화면이 「진행중」이라 찍었는데, 진입 대기는 «아직 사지 않은» 계획이다
+  // (다음 거래일 시가 진입). 그래서 /focus 「보유 중」(open 만)·같은 화면 상단
+  // 「진행 중」 타일과 숫자가 어긋났다 — 단기가 4+2 라 「진행중 6」으로 보였다.
+  open: number;      // 보유 중 (status=open)
+  pending: number;   // 진입 대기 (status=pending) — 아직 거래가 아니다
   closed: number;
   wins: number;
   mean: number | null;
@@ -2217,6 +2222,7 @@ export async function getResimHorizonStats(): Promise<Loaded<ResimHorizonStat[]>
           horizon: r.horizon,
           total: 0,
           open: 0,
+          pending: 0,
           closed: 0,
           wins: 0,
           mean: null as number | null,
@@ -2224,7 +2230,9 @@ export async function getResimHorizonStats(): Promise<Loaded<ResimHorizonStat[]>
         };
       cur.total += 1;
       if (r.gate) cur.gatePassed += 1;
-      if (r.status === "open" || r.status === "pending") {
+      if (r.status === "pending") {
+        cur.pending += 1;
+      } else if (r.status === "open") {
         cur.open += 1;
       } else {
         cur.closed += 1;
