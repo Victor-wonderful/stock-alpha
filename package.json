@@ -10,6 +10,7 @@
     "lint": "npm --prefix apps/web run lint",
     "db:migrate": "supabase db push",
     "db:reset": "supabase db reset",
+    "docs:html": "node scripts/build-docs-html.mjs",
     "engine:dev": "python -m engine.cli",
     "engine:test": "pytest apps/engine"
   },
