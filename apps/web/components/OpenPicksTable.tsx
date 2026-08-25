@@ -338,6 +338,19 @@ export function OpenPicksTable({
           올라가 그 뒤로는 손해 구간이 사라집니다
         </p>
       )}
+
+      {/* 진입 대기 안내는 표가 «비었을 때만» 나오고 있었다(2026-08-25 Victor —
+          "여기는 왜 5개만 보여지는거지?"). 진행중 5건 + 대기 2건인 날, 위쪽
+          「오늘의 픽」에는 2건이 있는데 이 표는 5줄이라 «빠진 것»처럼 읽힌다.
+          줄이 있든 없든 «아직 안 산 픽이 몇 건 있고 언제 들어오는지»를 말한다. */}
+      {picks.length > 0 && pendingCount > 0 && (
+        <p className="border-t border-border-soft px-4 py-2.5 text-[12px] text-text-mute">
+          오늘의 픽{" "}
+          <span className="tnum font-semibold text-text-dim">{pendingCount}건</span>은
+          아직 사기 전이라 이 표에 없습니다 — {planDay ?? "다음 거래일"} 시가에 체결되면
+          줄이 생깁니다.
+        </p>
+      )}
     </div>
   );
 }
