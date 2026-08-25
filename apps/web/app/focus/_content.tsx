@@ -25,6 +25,7 @@ import { regimeCopy } from "@/components/RegimeHeader";
 import { SampleBadge } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { fmtPct, fmtPrice, nextTradingDayLabel, tradingDayLabel } from "@/lib/format";
+import { MAX_POSITION_PCT, computeAccountRiskPct } from "@/lib/position";
 import { PickCard } from "./_pick-card";
 import { HORIZONS, isHorizonPaused, horizonSpec } from "@/lib/holding";
 import { PickNewsRail } from "@/components/PickNewsRail";
@@ -647,9 +648,17 @@ export default async function FocusContent() {
                 ))}
             {picks.length > 0 && (
               <p className="mt-1 text-[11px] text-text-mute">
-                권장 비중 = 손절 시 손실이 계좌의 {riskPct}%가 되도록 역산(상한 25%) ·{" "}
+                권장 비중 = 손절 시 손실이 계좌의 {riskPct}%가 되도록 역산(상한{" "}
+                {MAX_POSITION_PCT}%) ·{" "}
                 {picks.length}종목 전부 집행 시 총 리스크 약{" "}
-                {(picks.length * riskPct).toFixed(1)}%
+                {picks
+                  .reduce(
+                    (sum, p) =>
+                      sum + (computeAccountRiskPct(p.entry_price, p.stop_loss, riskPct) ?? 0),
+                    0,
+                  )
+                  .toFixed(1)}
+                %
               </p>
             )}
 
@@ -747,7 +756,7 @@ export default async function FocusContent() {
 
         {/* ── 진행 중 — 산 뒤 상태 ──
             「오늘의 픽」과 짝이다: 오늘의 픽 = 사기 전 계획, 진행 중 = 산 뒤 상태.
-            이게 없으면 이 페이지는 «권장 비중 25%로 사라»고만 하고 지금 무엇을 얼마나
+            이게 없으면 이 페이지는 «권장 비중 얼마로 사라»고만 하고 지금 무엇을 얼마나
             들고 있는지는 말하지 않는다 — 살 여력을 판단할 근거가 화면에 없다.
 
             **홈과 같은 형태**로 둔다(2026-08-23 Victor). 처음엔 좌측 열 안에 표만

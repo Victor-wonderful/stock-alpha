@@ -22,7 +22,7 @@ from engine.timeutil import kst_today
 from engine.logging import get_logger
 from engine.reports.context import EOD_STYLES, backtest_passed
 from engine.reports.runner import publish_indepth
-from engine.signals.levels import compute_levels, min_risk_floor
+from engine.signals.levels import MAX_POSITION_PCT, compute_levels, min_risk_floor
 
 log = get_logger(__name__)
 
@@ -664,11 +664,15 @@ PICK_RISK_PCT = 1.0
 MAX_PORTFOLIO_RISK_PCT = 10.0       # 동시 보유가 전부 손절될 때 계좌 손실 상한
 MAX_PORTFOLIO_EXPOSURE_PCT = 100.0  # 비중 합 — 현금 계좌라 레버리지 없음
 MAX_CONCURRENT_POSITIONS = 15       # 동시 보유 종목 수(관리 가능한 수)
+# ⚠️ 실측(8월 픽 36건): 셋 중 **노출만 걸린다**. 노출 100% 는 8.5종목에서 차고,
+#    그때 리스크는 6.65% · 종목수는 8.5 — 리스크 10% 와 종목수 15 는 도달하지 않는다.
+#    두 상한은 «안전망» 이지 «목표» 가 아니다. 동시보유 종목수를 늘리려면 이 둘이
+#    아니라 종목당 비중 상한(levels.MAX_POSITION_PCT)을 건드려야 한다.
 
 
 def position_size_pct(entry: float | None, stop: float | None,
                       risk_pct: float = PICK_RISK_PCT,
-                      max_pct: float = 25.0) -> float:
+                      max_pct: float = MAX_POSITION_PCT) -> float:
     """권장 계좌 비중(%) — 손절 시 손실이 계좌의 risk_pct% 가 되도록 역산. (순수)
 
     levels.compute_levels · 웹 lib/position 과 같은 공식이다. 픽 행에는 저장하지 않고

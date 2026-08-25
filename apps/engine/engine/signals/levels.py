@@ -20,6 +20,19 @@ from engine.signals.styles import TradeStyle, get_style_config
 MIN_RISK_ATR_MULT = 0.25   # 손절폭 ≥ ¼ATR
 MIN_RISK_PCT = 0.001       # 손절폭 ≥ 진입가 0.1%
 
+# ── 종목당 비중 상한 ──
+# 비중 = 리스크% ÷ 손절폭이라 손절이 좁을수록 비중이 커진다. 상한이 없으면 손절 1%
+# 짜리가 계좌 100% 를 먹는다. 이 상한은 «단일 출처» 다 — 엔진 발행 예산(reports.daily)
+# 과 웹 표시(lib/position.ts)가 같은 값을 써야 화면과 발행이 같은 말을 한다.
+#
+# 25 → 15 (2026-08-25). 25% 일 때 손절폭 4% 미만 구간이 전부 25% 로 묶여서,
+# 리스크는 1% 보다 작은데 노출만 25% 를 먹는 «비싼» 픽이 됐다. 실측(8월 픽 36건):
+# 33% 가 상한에 걸렸고 포트폴리오는 6.5종목에서 노출 100% 로 포화 — 리스크 예산
+# 10% 는 5.76% 만 쓰고 종목수 상한 15 는 도달조차 못 했다. 15% 로 낮추면 8.5종목·
+# 리스크 6.65% 로 예산을 더 쓴다. 손절폭 6.7% 이상인 «정상» 픽은 영향 없다.
+# 레벨(진입·손절·목표)은 그대로라 백테스트 기대값(R)은 불변이다.
+MAX_POSITION_PCT = 15.0
+
 
 def min_risk_floor(entry_price: float, atr: float | None) -> float:
     """거래로 인정할 최소 손절폭(가격 단위)."""
@@ -159,7 +172,7 @@ def compute_levels(
     resistance: float | None = None,
     now: datetime | None = None,
     market_close: datetime | None = None,
-    max_position_pct: float = 25.0,
+    max_position_pct: float = MAX_POSITION_PCT,
     setup: str | None = None,      # 손절 하한 적용 여부 판단용(STRUCT_FIRST_SETUPS)
     tp_r_mults: tuple[float, ...] | None = None,   # 실험: 목표를 R(실제 손절 거리) 배수로
     stop_atr_mult: float | None = None,  # 손절 ATR 배수 override (None=스타일 기본)
