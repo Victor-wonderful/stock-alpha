@@ -1,0 +1,514 @@
+<title>VECTA Stock 사용 설명</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;900&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  color-scheme: only light;
+  --bg:#F5F6FC; --surface:#FFFFFF; --surface-2:#F1F2FA; --surface-3:#E5E7F5;
+  --border:#E6E8F2; --border-strong:#CFD3E8;
+  --accent:#5252DC; --accent-soft:#ECECFD;
+  --text:#171A2B; --dim:#4A5068; --mute:#61677A;
+  --up:#C41F33; --up-soft:#FEF5F6; --down:#1F5FD0; --down-soft:#E9F0FC;
+  --warn:#B45309; --warn-soft:#FDF3E3;
+  --navy:#111A47; --on-navy:#FFFFFF; --on-navy-2:#B9C0E4; --on-navy-3:#9AA3CC;
+  --warn-on-navy:#F2C684;
+  --sans:"IBM Plex Sans KR","Pretendard Variable",Pretendard,system-ui,sans-serif;
+  --disp:"Gothic A1","IBM Plex Sans KR",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:15px; line-height:1.8;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px;}
+.col{max-width:720px;}
+@media(min-width:1120px){
+  .layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:56px;align-items:start;}
+  .toc{position:sticky;top:28px;}
+}
+@media(max-width:1119px){.toc{display:none;}}
+
+.masthead{background:var(--navy);color:var(--on-navy);padding:40px 0 44px;}
+.brandline{display:flex;align-items:center;gap:10px;margin-bottom:26px;}
+.brandline svg{display:block;}
+.brandline b{font-family:var(--disp);font-weight:900;letter-spacing:.16em;font-size:13px;}
+.brandline span{font-family:var(--mono);font-size:11px;color:var(--on-navy-3);letter-spacing:.1em;}
+.masthead h1{
+  font-family:var(--disp);font-weight:900;font-size:clamp(30px,6.4vw,46px);
+  line-height:1.14;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance;
+}
+.masthead p{margin:0;color:var(--on-navy-2);font-size:15px;max-width:44em;}
+.stamp{
+  display:inline-block;margin-top:22px;
+  font-family:var(--mono);font-size:11px;color:var(--on-navy-3);
+  border-top:1px solid rgba(185,192,228,.25);padding-top:12px;
+}
+
+.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;}
+.toc a{
+  display:flex;gap:9px;text-decoration:none;color:var(--mute);font-size:12.5px;
+  padding:5px 8px;border-radius:7px;line-height:1.45;
+}
+.toc a:hover{background:var(--surface-3);color:var(--text);}
+.toc a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.toc em{font-family:var(--mono);font-style:normal;color:var(--border-strong);font-size:11px;padding-top:1px;}
+.toc .lead{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--mute);padding:0 8px 10px;}
+
+section{padding:52px 0 0;}
+.sec-no{
+  font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--accent);
+  display:block;margin-bottom:9px;
+}
+h2{
+  font-family:var(--disp);font-weight:900;font-size:26px;line-height:1.25;
+  letter-spacing:-.015em;margin:0 0 8px;text-wrap:balance;
+}
+h3{font-family:var(--disp);font-weight:700;font-size:17.5px;margin:34px 0 8px;letter-spacing:-.01em;}
+.sub{color:var(--mute);font-size:13.5px;margin:0 0 22px;}
+p{margin:0 0 14px;}
+b,strong{font-weight:600;color:var(--text);}
+a{color:var(--accent);}
+hr{border:0;border-top:1px solid var(--border);margin:56px 0 0;}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px 26px;}
+.navy{background:var(--navy);color:var(--on-navy);border-radius:20px;padding:26px 28px;}
+.navy p{color:var(--on-navy-2);}
+.machine-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--on-navy-3);
+  display:block;margin-bottom:14px;
+}
+
+.facts{display:grid;gap:1px;background:rgba(185,192,228,.22);border-radius:14px;overflow:hidden;margin:0;}
+@media(min-width:620px){.facts{grid-template-columns:1fr 1fr;}}
+.facts div{background:var(--navy);padding:18px 20px;}
+.facts dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--on-navy-3);margin-bottom:7px;}
+.facts dd{margin:0;font-size:14px;color:var(--on-navy);line-height:1.65;}
+.facts dd b{color:var(--warn-on-navy);font-weight:600;}
+
+.tw{overflow-x:auto;margin:0 0 18px;border:1px solid var(--border);border-radius:14px;background:var(--surface);}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:440px;}
+th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.6;}
+thead th{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--mute);
+  background:var(--surface-2);font-weight:600;white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0;}
+td b{color:var(--text);}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+
+.mock{
+  background:var(--surface);border:1px solid var(--border-strong);border-radius:20px;
+  overflow:hidden;box-shadow:0 1px 2px rgba(23,26,43,.04),0 12px 32px -18px rgba(23,26,43,.35);
+}
+.mock-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+.mock-head .nm{font-family:var(--disp);font-weight:900;font-size:19px;letter-spacing:-.01em;}
+.mock-head .cd{font-family:var(--mono);font-size:11.5px;color:var(--mute);margin-left:7px;}
+.mock-head .sc{margin-left:auto;text-align:right;}
+.mock-head .sc em{display:block;font-style:normal;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--mute);}
+.mock-head .sc span{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums;}
+.chips{display:flex;gap:6px;flex-wrap:wrap;width:100%;}
+.chip{
+  font-family:var(--mono);font-size:10.5px;padding:3px 9px;border-radius:999px;
+  background:var(--surface-3);color:var(--dim);letter-spacing:.03em;
+}
+.chip.i{background:var(--accent-soft);color:var(--accent);}
+.mock-sec{padding:18px 22px;border-bottom:1px solid var(--border);}
+.mock-sec:last-child{border-bottom:0;}
+.mock-lab{
+  display:flex;align-items:baseline;gap:9px;margin-bottom:14px;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--mute);
+}
+.mock-lab i{
+  font-style:normal;width:19px;height:19px;border-radius:999px;background:var(--navy);color:#fff;
+  display:grid;place-items:center;font-size:10.5px;font-weight:600;flex:none;
+}
+.levels{display:grid;gap:1px;background:var(--border);border-radius:12px;overflow:hidden;margin:0;}
+@media(min-width:520px){.levels{grid-template-columns:repeat(3,1fr);}}
+.levels div{background:var(--surface-2);padding:12px 14px;}
+.levels dt{font-size:11px;color:var(--mute);margin-bottom:4px;}
+.levels dd{margin:0;font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;}
+.levels dd small{display:block;font-family:var(--sans);font-size:10.5px;font-weight:400;color:var(--mute);margin-top:3px;letter-spacing:0;}
+.levels .dn dd{color:var(--down);}
+.levels .up dd{color:var(--up);}
+.flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;}
+.flow span{background:var(--surface-2);border-radius:8px;padding:6px 11px;}
+.flow em{font-style:normal;color:var(--border-strong);font-family:var(--mono);}
+.bt{display:grid;gap:1px;background:var(--border);border-radius:12px;overflow:hidden;grid-template-columns:repeat(2,1fr);margin:0;}
+@media(min-width:520px){.bt{grid-template-columns:repeat(4,1fr);}}
+.bt div{background:var(--surface-2);padding:11px 13px;text-align:center;}
+.bt dt{font-size:10.5px;color:var(--mute);margin-bottom:4px;}
+.bt dd{margin:0;font-family:var(--mono);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;}
+.plain{margin:13px 0 0;font-size:13px;color:var(--dim);background:var(--warn-soft);border-radius:10px;padding:11px 14px;line-height:1.72;}
+.mockcap{font-family:var(--mono);font-size:10.5px;color:var(--mute);text-align:center;margin-top:12px;letter-spacing:.06em;}
+
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 18px;border-radius:0 12px 12px 0;margin:20px 0;font-size:13.5px;line-height:1.75;}
+.note.w{border-color:var(--warn);background:var(--warn-soft);}
+.note p:last-child{margin-bottom:0;}
+.note .h{font-weight:600;display:block;margin-bottom:4px;}
+
+.tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;}
+.tl li{display:grid;grid-template-columns:74px 1fr;gap:16px;padding:14px 0;border-top:1px solid var(--border);}
+.tl li:first-child{border-top:0;padding-top:0;}
+.tl time{font-family:var(--mono);font-size:12.5px;color:var(--accent);font-variant-numeric:tabular-nums;padding-top:2px;}
+.tl b{display:block;margin-bottom:2px;}
+.tl p{margin:0;font-size:13px;color:var(--mute);}
+
+.qa{list-style:none;margin:0;padding:0;}
+.qa li{border-top:1px solid var(--border);padding:16px 0;}
+.qa li:first-child{border-top:0;}
+.qa b{display:block;font-family:var(--disp);font-weight:700;font-size:15px;margin-bottom:5px;}
+.qa p{margin:0;color:var(--dim);font-size:13.5px;}
+
+.bd{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:999px;white-space:nowrap;display:inline-block;}
+.bd.p{background:var(--up-soft);color:var(--up);}
+.bd.f{background:var(--down-soft);color:var(--down);}
+.bd.n{background:var(--surface-3);color:var(--mute);}
+.bd.w{background:var(--warn-soft);color:var(--warn);}
+
+.rules{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:9px;font-size:14px;}
+
+footer{margin-top:64px;background:var(--navy);color:var(--on-navy-3);padding:36px 0 44px;font-size:12.5px;line-height:1.85;}
+footer b{color:var(--on-navy);}
+</style>
+
+<header class="masthead">
+  <div class="wrap"><div class="col">
+    <div class="brandline">
+      <svg width="20" height="20" viewBox="0 0 120 120" aria-hidden="true">
+        <defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stop-color="#8B8BF5"></stop><stop offset="1" stop-color="#FF7A87"></stop>
+        </linearGradient></defs>
+        <path d="M60 12 L108 104 H12 Z" fill="url(#g)" opacity="0.9"></path>
+        <path d="M38 78 L58 54 L72 68 L92 40" fill="none" stroke="#111A47" stroke-width="8" stroke-linecap="square"></path>
+      </svg>
+      <b>VECTA</b><span>STOCK</span>
+    </div>
+    <h1>규칙대로 사고,<br>규칙대로 나오는 법</h1>
+    <p>어떤 화면이 무엇을 답하는지, 픽 카드의 숫자를 어떻게 읽는지, 그리고 아직 안 되는 것은 무엇인지.</p>
+    <div class="stamp">회원용 사용 설명 · 2026-08-25 기준 · 화면이 바뀌면 이 문서도 바뀝니다</div>
+  </div></div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+  <nav class="toc" aria-label="목차">
+    <div class="lead">목차</div>
+    <ol>
+      <li><a href="#s0"><em>00</em>3분 요약</a></li>
+      <li><a href="#s1"><em>01</em>시작하기</a></li>
+      <li><a href="#s2"><em>02</em>하루 사용법</a></li>
+      <li><a href="#s3"><em>03</em>픽 카드 읽는 법</a></li>
+      <li><a href="#s4"><em>04</em>화면별 안내</a></li>
+      <li><a href="#s5"><em>05</em>용어 사전</a></li>
+      <li><a href="#s6"><em>06</em>아직 안 되는 것</a></li>
+      <li><a href="#s7"><em>07</em>하지 않는 일</a></li>
+      <li><a href="#s8"><em>08</em>자주 겪는 상황</a></li>
+    </ol>
+  </nav>
+
+  <main class="col">
+
+  <section id="s0">
+    <span class="sec-no">00 — 시작 전에</span>
+    <h2>3분 요약</h2>
+    <p class="sub">이 아래를 안 읽어도 이것만 알면 씁니다.</p>
+    <p>VECTA Stock은 <b>“오늘 뭘, 얼마에 사고, 어디서 나올지”를 계산해 숫자로 적어 두는 서비스</b>입니다. 감이 아니라 규칙으로 사고, 규칙대로 나오고, 그 결과를 전부 남깁니다.</p>
+    <div class="navy" style="margin-top:22px">
+      <span class="machine-tag">엔진이 매 거래일 하는 일</span>
+      <dl class="facts">
+        <div><dt>16:30 KST</dt><dd>장 마감 뒤 그날 <b>종가</b>로 전 종목을 다시 계산합니다.</dd></div>
+        <div><dt>발행 조건</dt><dd>검증을 통과한 종목만 올라옵니다. 통과가 없으면 <b>0건</b>입니다.</dd></div>
+        <div><dt>픽에 붙는 것</dt><dd>진입가 · 손절가 · 본전 도달가 · 권장 비중 · 보유 기간.</dd></div>
+        <div><dt>끝난 뒤</dt><dd>결과가 성과 화면에 남습니다. <b>틀린 것도 지우지 않습니다.</b></dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <hr>
+  <section id="s1">
+    <span class="sec-no">01 — 계정</span>
+    <h2>시작하기</h2>
+    <p class="sub">가입은 무료입니다. 회원 등급도, 결제도 없습니다.</p>
+
+    <h3>가입</h3>
+    <p>오른쪽 위 <b>회원가입</b> → 닉네임 · 연락처 · 이메일 · 비밀번호를 입력합니다. 로그인은 <b>이메일</b>로 합니다(별도 아이디 없음). 다른 회원에게 보이는 것은 <b>닉네임뿐</b>이고, 이메일은 화면에 나오지 않습니다.</p>
+    <div class="note">
+      <span class="h">유료화를 하게 되면</span>
+      <p>미리 알리고, <b>이미 열려 있던 것을 뒤에서 잠그지 않습니다.</b></p>
+    </div>
+
+    <h3>가입하면 무엇이 열리나</h3>
+    <p>로그인 없이 볼 수 있는 것은 <b>홈 · FAQ · 이용약관 · 개인정보처리방침</b>뿐입니다. 나머지 일곱 메뉴는 회원 전용입니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>메뉴</th><th>이 화면이 답하는 질문</th></tr></thead>
+      <tbody>
+        <tr><td><b>홈</b></td><td>오늘 무슨 일이 있었나 — 요약 상태판</td></tr>
+        <tr><td><b>오늘의 픽</b></td><td>그래서 뭘 사나 — 진입·손절·비중이 적힌 실행 계획</td></tr>
+        <tr><td><b>스크리너</b></td><td>조건으로 직접 찾아보고 싶다 — 탐색 도구</td></tr>
+        <tr><td><b>분석</b></td><td>이 종목 어때 — 5축 진단과 리포트</td></tr>
+        <tr><td><b>시장</b></td><td>지금 장이 어떤 상태인가</td></tr>
+        <tr><td><b>인사이트</b></td><td>읽을 것 — 브리프·브리핑·전문가 글</td></tr>
+        <tr><td><b>성과</b></td><td>이 서비스가 잘하고 있나</td></tr>
+        <tr><td><b>내 자산</b></td><td>내 조합은 괜찮나 — 관심·진단·알림</td></tr>
+      </tbody>
+    </table></div>
+    <p style="font-size:13px;color:var(--mute)">모바일에서는 상단 메뉴 대신 <b>화면 아래 탭바</b>로 이동합니다.</p>
+  </section>
+
+  <hr>
+  <section id="s2">
+    <span class="sec-no">02 — 루틴</span>
+    <h2>하루 사용법</h2>
+    <p class="sub">시간이 없는 분을 위한 최소 동선. 하루 5분이면 충분합니다.</p>
+    <div class="card">
+      <ul class="tl">
+        <li><time>아침 1분</time><div><b>홈</b><p>모닝 브리프 한 줄과 진행 중인 픽 상태를 봅니다. 08:30 배치가 밤사이 해외 변수를 갱신해 브리프를 씁니다.</p></div></li>
+        <li><time>장중</time><div><b>할 일 없음</b><p>픽의 진입은 “다음 거래일 시가”라 아침에 이미 끝났습니다. 장을 들여다볼 이유가 없습니다.</p></div></li>
+        <li><time>저녁 3분</time><div><b>오늘의 픽</b><p>새 픽이 있으면 카드 네 칸을 위에서 아래로 읽습니다. 16:30 배치가 그날 종가로 계산해 발행합니다.</p></div></li>
+        <li><time>주말 5분</time><div><b>내 자산 · 성과</b><p>보유 종목을 넣어 집중도·베타를 점검하고, 이번 주에 끝난 픽을 확인합니다.</p></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <hr>
+  <section id="s3">
+    <span class="sec-no">03 — 핵심</span>
+    <h2>픽 카드 읽는 법</h2>
+    <p class="sub">카드는 <b>사기 전에 읽는 순서</b> 그대로 네 칸입니다. 위에서 아래로 그냥 읽으면 됩니다.</p>
+
+    <div class="mock">
+      <div class="mock-head">
+        <div><span class="nm">예시 종목</span><span class="cd">000000</span></div>
+        <div class="sc"><em>종합 점수</em><span>71.4</span></div>
+        <div class="chips">
+          <span class="chip i">쌍바닥(W) 반등</span>
+          <span class="chip">중기 · 10거래일</span>
+          <span class="chip">분할 매수</span>
+        </div>
+      </div>
+
+      <div class="mock-sec">
+        <div class="mock-lab"><i>1</i>얼마에 사고 어디서 나오나</div>
+        <dl class="levels">
+          <div><dt>예상 진입가</dt><dd>48,200<small>다음 거래일 시가</small></dd></div>
+          <div class="dn"><dt>손절가</dt><dd>43,980<small>−8.8% · 전량 매도</small></dd></div>
+          <div class="up"><dt>본전 도달가</dt><dd>56,600<small>+17.4% · 손절이 본전으로</small></dd></div>
+          <div><dt>1주당 리스크</dt><dd>4,220<small>진입 − 손절</small></dd></div>
+          <div><dt>권장 비중</dt><dd>11.4%<small>계좌 리스크 1%</small></dd></div>
+          <div><dt>보유 기간</dt><dd>10일<small>최대 10거래일</small></dd></div>
+        </dl>
+      </div>
+
+      <div class="mock-sec">
+        <div class="mock-lab"><i>2</i>왜 이 종목인가</div>
+        <p style="margin:0;font-size:13.5px;color:var(--dim)">엔진이 고른 근거 문장이 들어갑니다 — 점수·팩터·수급·셋업 조건. <b>근거 리포트 전체 보기</b>로 원문까지 갈 수 있습니다.</p>
+      </div>
+
+      <div class="mock-sec">
+        <div class="mock-lab"><i>3</i>어떻게 사고 파나</div>
+        <div class="flow">
+          <span>시가 50%</span><em>+</em><span>−1×ATR에서 50%</span><em>→</em><span>손절 이탈 시 전량</span><em>→</em><span>기간 만료 청산</span>
+        </div>
+      </div>
+
+      <div class="mock-sec">
+        <div class="mock-lab"><i>4</i>이 조합의 검증 성적</div>
+        <dl class="bt">
+          <div><dt>승률</dt><dd>43%</dd></div>
+          <div><dt>이기면</dt><dd>2.3배</dd></div>
+          <div><dt>거래당</dt><dd>+0.35R</dd></div>
+          <div><dt>최대낙폭</dt><dd>−18.2%</dd></div>
+        </dl>
+        <p class="plain">10번 중 6번은 손실로 끝납니다. 대신 이길 때 2.3배 벌어서, 4,220원을 걸면 한 번당 평균 <b>+1,477원</b>이 남았습니다. <span style="color:var(--mute)">과거 데이터로 잰 값이고 미래 수익을 보장하지 않습니다 · 수수료·세금·슬리피지 반영</span></p>
+      </div>
+    </div>
+    <p class="mockcap">↑ 실제 화면 구조를 그린 예시입니다. 종목과 숫자는 설명을 위한 가상 값입니다.</p>
+
+    <h3>① 얼마에 사고 어디서 나오나</h3>
+    <div class="tw"><table>
+      <thead><tr><th>칸</th><th>뜻</th></tr></thead>
+      <tbody>
+        <tr><td><b>진입가</b></td><td>다음 거래일 <b>시가</b>에 시장가로 삽니다. 발행 당일에는 「예상 진입가」로 표시됩니다</td></tr>
+        <tr><td><b>손절가</b></td><td>이 가격이 깨지면 <b>전량 매도</b>. 예외 없습니다</td></tr>
+        <tr><td><b>본전 도달가</b></td><td>닿으면 파는 게 아니라 <b>손절선을 본전으로 올립니다</b></td></tr>
+        <tr><td><b>1주당 리스크</b></td><td>진입가 − 손절가. 1주를 살 때 실제로 거는 돈</td></tr>
+        <tr><td><b>권장 비중</b></td><td>손절에 걸려도 계좌의 <b>1%</b>만 잃도록 역산한 비중 (기본값, 최대 25%)</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>③ 기간이 사는 방법을 정합니다</h3>
+    <div class="tw"><table>
+      <thead><tr><th>기간</th><th>보유</th><th>사는 방법</th></tr></thead>
+      <tbody>
+        <tr><td><b>단기</b></td><td class="num">최대 5거래일<br><span style="color:var(--mute)">약 1주</span></td><td>다음 거래일 시가에 <b>전량</b> 매수</td></tr>
+        <tr><td><b>중기</b></td><td class="num">최대 10거래일<br><span style="color:var(--mute)">약 2주</span></td><td>시가 50% + 하락(−1×ATR) 시 50% <b>분할 매수</b></td></tr>
+        <tr><td style="color:var(--mute)">장기 <span class="bd n">발행 중단</span></td><td class="num" style="color:var(--mute)">최대 20거래일</td><td style="color:var(--mute)">지금은 쉽니다 — <a href="#s6">06장</a> 참고</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="note w">
+      <span class="h">⚠️ 목표가는 “파는 신호”가 아닙니다</span>
+      <p>가장 많이 오해하는 부분입니다. 목표가(=본전 도달가)에 닿으면 <b>팔지 않고 손절선만 본전으로 올린 뒤 기간까지 들고 갑니다.</b></p>
+      <p>12개 조합을 전부 비교했더니 예외 없이 이쪽이 나았습니다. 목표에서 팔면 크게 오를 종목의 이익을 스스로 잘라내기 때문입니다. <b>파는 주체는 목표가가 아니라 기간입니다.</b></p>
+    </div>
+
+    <h3>④ 승률이 낮은 것은 결함이 아닙니다</h3>
+    <p>카드 맨 아래 숫자는 이 픽이 쓴 <b>(셋업 × 기간)</b> 조합의 과거 성적입니다. 승률 40% 안팎이 정상입니다 — 이 시스템은 <b>승률이 아니라 기대값</b>으로 굴러갑니다. 승률을 억지로 올리면 이익 구간을 잘라내게 되고, 실측에서 오히려 돈을 잃었습니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>지표</th><th>읽는 법</th></tr></thead>
+      <tbody>
+        <tr><td><b>승률</b></td><td>100번 중 몇 번 이겼나</td></tr>
+        <tr><td><b>이기면 O배</b></td><td>이길 때 잃을 때보다 몇 배를 버나 (손익비)</td></tr>
+        <tr><td><b>거래당 R</b></td><td>한 번 거래할 때 평균 기대값. 1R = 1주당 리스크</td></tr>
+        <tr><td><b>최대낙폭</b></td><td>따라갔을 때 계좌가 가장 많이 줄어든 폭</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <hr>
+  <section id="s4">
+    <span class="sec-no">04 — 화면</span>
+    <h2>화면별 안내</h2>
+    <p class="sub">각 화면이 답하는 질문 하나씩.</p>
+
+    <h3>홈</h3>
+    <p>오늘 무슨 일이 있었는지 한 장으로 봅니다 — 시장 지표, 모닝 브리프, 진행 중인 픽, 오늘 발행된 픽, 최근 분석, 주간 브리핑, 전문가 글, 주요 뉴스. <b>홈은 요약본이고, 실행 계획은 「오늘의 픽」에 있습니다.</b></p>
+
+    <h3>스크리너</h3>
+    <p>발행 중인 시그널 전체를 셋업·기간·조건으로 걸러 찾습니다.</p>
+    <div class="note w"><p><b>스크리너에 뜬다고 매수 추천이 아닙니다.</b> 여기는 탐색 도구이고, 추천은 「오늘의 픽」뿐입니다.</p></div>
+
+    <h3>분석</h3>
+    <p>종목을 검색해 5축 진단과 리포트를 봅니다. 점수가 낮은 축은 주황색 점으로 표시되고, 판정은 <span class="bd p">매수</span> <span class="bd n">중립</span> <span class="bd w">관망</span> <span class="bd f">거래 부적합</span> 넷입니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>축</th><th>보는 것</th></tr></thead>
+      <tbody>
+        <tr><td><b>밸류</b></td><td>지금 가격이 싼가 (적정가 대비)</td></tr>
+        <tr><td><b>성장</b></td><td>매출·이익이 늘고 있나</td></tr>
+        <tr><td><b>수급</b></td><td>외국인·기관이 사고 있나</td></tr>
+        <tr><td><b>모멘텀</b></td><td>최근 주가 흐름이 강한가</td></tr>
+        <tr><td><b>안정성</b></td><td>재무가 튼튼한가, 변동이 심하지 않은가</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>시장</h3>
+    <p>지수·환율·해외 지수, 국면(레짐), 섹터 흐름, 공시·이벤트를 봅니다. 국면은 <b>강세장(Risk-On) · 중립 · 약세장(Risk-Off)</b> 셋입니다. 약세장에서는 픽이 줄거나 0건이 됩니다 — 화면이 비어 보이면 고장이 아니라 <b>엔진이 참고 있는 것</b>입니다.</p>
+
+    <h3>인사이트</h3>
+    <p>읽을 것이 모이는 곳입니다 — 전문가 추천 · 매일 브리프 · 주간 브리핑 · 최근 기업 분석 · 매크로 순서. 매일 브리프는 매 거래일 쌓이고 아카이브에서 지난 것도 다시 읽습니다.</p>
+    <div class="note"><p><b>전문가 글은 엔진 픽과 섞이지 않습니다.</b> 별도 코너에 필명과 함께 놓입니다. 전문가로 참여하려면 가입 후 <b>전문가 참여 신청</b>에서 필명과 참여 이유를 보내면 운영자가 검토합니다.</p></div>
+
+    <h3>성과</h3>
+    <p>발행한 픽이 어떻게 끝났는지 전부 남는 곳입니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>상태</th><th>뜻</th><th>성적에 들어가나</th></tr></thead>
+      <tbody>
+        <tr><td><span class="bd w">진행중</span></td><td>아직 안 끝남</td><td style="color:var(--mute)">—</td></tr>
+        <tr><td><span class="bd p">목표 도달</span></td><td>이익으로 종료</td><td>들어감</td></tr>
+        <tr><td><span class="bd f">손절</span></td><td>손실로 종료</td><td>들어감</td></tr>
+        <tr><td><span class="bd n">만료</span></td><td>기간이 끝나 청산</td><td>들어감</td></tr>
+        <tr><td><span class="bd n">미체결</span></td><td>진입가에 끝내 안 닿아 <b>살 수 없었던</b> 픽</td><td><b>안 들어감</b></td></tr>
+        <tr><td><span class="bd n">규칙 교체 정리</span></td><td>규칙이 바뀌어 우리가 닫은 픽</td><td>들어감 <span style="color:var(--mute)">(숨기지 않음)</span></td></tr>
+      </tbody>
+    </table></div>
+    <p style="font-size:13px;color:var(--mute)"><b>승률 = 수익으로 끝난 거래 ÷ 끝난 거래.</b> 미체결은 분모에 넣지 않습니다 — 살 수 없었던 것을 성적으로 세면 거짓말이 됩니다.</p>
+
+    <h3>내 자산 — 관심 · 진단 · 알림</h3>
+    <p><b>관심 종목</b> · 담아 둔 종목의 시세·최근 판정·픽 여부를 한 줄로 봅니다. 각 화면의 ★ 버튼으로 담습니다. 가짜 예시 데이터를 넣어 두지 않으니 처음에는 비어 있습니다.</p>
+    <p><b>리스크 진단</b> · 보유 종목과 비중을 입력하면 조합 전체를 진단합니다. <b>입력 내용은 저장되지 않습니다.</b></p>
+    <div class="tw"><table>
+      <thead><tr><th>지표</th><th>읽는 법</th></tr></thead>
+      <tbody>
+        <tr><td><b>가중 합성알파</b></td><td>시스템이 이 조합을 선호하는가 (+0.3σ 이상이면 선호 구간)</td></tr>
+        <tr><td><b>가중 베타</b></td><td>시장보다 얼마나 흔들리나 (1.1 초과면 시장보다 큼)</td></tr>
+        <tr><td><b>예상 변동성(연)</b></td><td>1년 기준 흔들림 폭</td></tr>
+        <tr><td><b>섹터 집중도</b></td><td>한 업종에 몰려 있나 (40% 미만이면 분산 양호)</td></tr>
+      </tbody>
+    </table></div>
+    <p><b>알림</b> · 픽 발행, 관심 종목 시그널, 손절/목표 도달, 모닝 브리프, 주간 트랙레코드를 켜고 끕니다.</p>
+    <div class="note w"><p><b>설정 저장과 외부 발송은 준비 중입니다.</b> 지금은 화면 안 피드로만 확인됩니다.</p></div>
+  </section>
+
+  <hr>
+  <section id="s5">
+    <span class="sec-no">05 — 말</span>
+    <h2>용어 사전</h2>
+    <p class="sub">화면에 나오는 말을 쉬운 말로.</p>
+    <div class="tw"><table>
+      <thead><tr><th>용어</th><th>쉬운 말</th></tr></thead>
+      <tbody>
+        <tr><td><b>셋업</b></td><td>매수 이유의 종류. 돌파 · 눌림목 · 과대낙폭 반등 · 쌍바닥(W) 반등 · 52주 신고가 등</td></tr>
+        <tr><td><b>기간</b></td><td>며칠 들고 갈지. 단기(5일) · 중기(10일) · 장기(20일)</td></tr>
+        <tr><td><b>국면(레짐)</b></td><td>지금 장의 성격. 강세장 / 중립 / 약세장</td></tr>
+        <tr><td><b>1R</b></td><td>한 번 거래에 거는 돈 = 진입가 − 손절가</td></tr>
+        <tr><td><b>기대값(R)</b></td><td>한 번 거래할 때 평균 몇 R을 버나. +0.35R = 1만원 걸면 평균 3,500원</td></tr>
+        <tr><td><b>손익비(R:R)</b></td><td>이길 때 버는 폭 ÷ 질 때 잃는 폭</td></tr>
+        <tr><td><b>최대낙폭(MDD)</b></td><td>따라가는 동안 계좌가 가장 많이 줄어든 폭</td></tr>
+        <tr><td><b>ATR</b></td><td>이 종목이 하루에 보통 얼마나 움직이나. 손절 폭의 기준</td></tr>
+        <tr><td><b>워크포워드</b></td><td>성적이 한 시기에만 나온 건 아닌지, 기간을 쪼개 다시 확인하는 검증</td></tr>
+        <tr><td><b>합성알파</b></td><td>여러 지표를 하나로 합친 점수. σ(시그마) 단위</td></tr>
+        <tr><td><b>거래 부적합</b></td><td>통과한 셋업이 없어 <b>지금은 살 이유가 없다</b>는 판정. 나쁜 회사라는 뜻이 아닙니다</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <hr>
+  <section id="s6">
+    <span class="sec-no">06 — 한계</span>
+    <h2>아직 안 되는 것</h2>
+    <p class="sub">되는 척하지 않겠습니다.</p>
+    <div class="tw"><table>
+      <thead><tr><th>항목</th><th>상태</th></tr></thead>
+      <tbody>
+        <tr><td><b>장기(20일) 픽 발행</b></td><td><b>쉬는 중.</b> 지난 1년 재현에서 단기 +0.331R · 중기 +0.457R 대비 장기 +0.204R로 가장 낮았고, 최근 구간은 기대값이 마이너스였습니다. 다시 통과하면 재개합니다</td></tr>
+        <tr><td><b>알림 설정 저장 · 외부 발송</b></td><td>준비 중 — 화면 안 피드로만 표시</td></tr>
+        <tr><td><b>관심 종목 「오늘의 변화」</b></td><td>미구현 — 없는 것을 예시로 그리지 않습니다</td></tr>
+        <tr><td><b>결제 · 유료 플랜</b></td><td>없음</td></tr>
+        <tr><td><b>미국 주식</b></td><td>미지원 — KOSPI · KOSDAQ만</td></tr>
+        <tr><td><b>자동매매 · 주문 연동</b></td><td>하지 않습니다 — <a href="#s7">07장</a> 참고</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <hr>
+  <section id="s7">
+    <span class="sec-no">07 — 경계</span>
+    <h2>이 서비스가 하지 않는 일</h2>
+    <div class="card">
+      <ul class="rules">
+        <li>자금을 맡아 두지 않습니다</li>
+        <li>매매를 대신하지 않고, 증권 계좌에 주문을 넣지 않습니다</li>
+        <li>개별 회원 사정에 맞춘 <b>맞춤 자문이 아닙니다</b> — 불특정 다수를 위한 투자 참고 정보입니다</li>
+        <li><b>수익을 보장하지 않습니다</b></li>
+      </ul>
+    </div>
+  </section>
+
+  <hr>
+  <section id="s8">
+    <span class="sec-no">08 — 문제 해결</span>
+    <h2>자주 겪는 상황</h2>
+    <ul class="qa">
+      <li><b>오늘 픽이 0건인데요?</b><p>고장이 아닙니다. 조건을 통과한 종목이 없거나, 약세장이라 엔진이 참고 있는 것입니다.</p></li>
+      <li><b>발행됐는데 왜 안 샀다고 나오나요?</b><p>진입은 다음 거래일 시가입니다. 발행 당일 밤에는 아직 사기 전 상태가 맞습니다.</p></li>
+      <li><b>화면 숫자가 어제와 다릅니다.</b><p>하루 두 번(08:30 / 16:30) 배치로만 바뀝니다. 그 사이 값은 최대 60초 캐시됩니다.</p></li>
+      <li><b>승률이 너무 낮은데요?</b><p>정상입니다. 이 시스템은 승률이 아니라 기대값으로 굴러갑니다. 03장 ④를 봐 주세요.</p></li>
+      <li><b>목표가에 닿았는데 왜 안 팔았나요?</b><p>목표가는 파는 신호가 아니라 손절을 본전으로 올리는 신호입니다. 03장을 봐 주세요.</p></li>
+      <li><b>내 관심 종목이 비어 있어요.</b><p>각 화면의 ★ 버튼으로 담아야 채워집니다.</p></li>
+    </ul>
+  </section>
+
+  </main>
+</div>
+</div>
+
+<footer>
+  <div class="wrap"><div class="col">
+    <p><b>면책</b> · 본 서비스가 제공하는 분석·시그널·투자의견·목표주가는 정보 제공 목적이며 투자 권유가 아닙니다. 모든 수치는 과거 데이터로 계산한 것이며 <b>과거 성과가 미래 수익을 보장하지 않습니다.</b> 모든 투자 판단과 그 결과에 대한 책임은 투자자 본인에게 있습니다.</p>
+    <p style="margin:0">자세한 내용은 서비스 내 이용약관 · 개인정보처리방침을 확인해 주세요. · VECTA Stock · 2026-08-25</p>
+  </div></div>
+</footer>
