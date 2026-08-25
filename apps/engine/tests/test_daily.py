@@ -702,9 +702,11 @@ def test_position_size_and_account_risk():
     # 손절 -10% → 비중 10% 여야 손절 시 계좌 -1%
     assert round(position_size_pct(10000, 9000), 4) == 10.0
     assert round(account_risk_pct(10000, 9000), 4) == 1.0
-    # 손절이 좁으면 25% 상한에 걸리고, 그러면 실제 리스크는 1% 보다 «작아진다».
-    assert position_size_pct(10000, 9900) == 25.0
-    assert round(account_risk_pct(10000, 9900), 4) == 0.25
+    # 손절이 좁으면 상한에 걸리고, 그러면 실제 리스크는 1% 보다 «작아진다».
+    # 상한은 levels.MAX_POSITION_PCT 단일 출처 — 숫자를 여기 박으면 두 곳이 갈라진다.
+    from engine.signals.levels import MAX_POSITION_PCT
+    assert position_size_pct(10000, 9900) == MAX_POSITION_PCT      # 손절 1% → 상한
+    assert round(account_risk_pct(10000, 9900), 4) == round(MAX_POSITION_PCT * 0.01, 4)
     # 값이 없으면 0 — 예산을 과소평가하지 않도록 조용히 통과시키지 않는다.
     assert position_size_pct(None, 9000) == 0.0
     assert position_size_pct(10000, None) == 0.0
