@@ -111,7 +111,7 @@ export default async function WatchlistPage() {
                         <SymbolCode symbol={r.symbol} className="text-[10.5px] text-text-mute" />
                         {r.pick && (
                           <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[10.5px] font-semibold text-accent">
-                            {r.pick.status === "open" ? "픽 보유 중" : "픽 진입 대기"}
+                            {r.pick.status === "open" ? "픽 진행중" : "픽 진입 대기"}
                           </span>
                         )}
                       </div>
@@ -191,7 +191,7 @@ export default async function WatchlistPage() {
                   <Rating item={r} />
                   {r.pick && (
                     <span className="rounded-[999px] bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">
-                      {r.pick.status === "open" ? "픽 보유 중" : "픽 진입 대기"}
+                      {r.pick.status === "open" ? "픽 진행중" : "픽 진입 대기"}
                     </span>
                   )}
                   <span className="ml-auto">
