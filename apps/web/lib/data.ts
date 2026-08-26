@@ -2325,7 +2325,16 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
           else if (effTarget != null && last >= effTarget) status = "목표 도달";
           else status = "진행중";
         }
-        return { ...base, last_close: last, return_pct: ret, status, closed: false };
+        // 본전스톱 전환(0037) 뒤에는 저장된 stop_loss 가 아니라 올라간 손절선(진입가)이
+        // 유효하다 — 저장값을 그대로 내보내면 /picks 가 /focus 와 다른 손절가를 그린다.
+        return {
+          ...base,
+          stop_loss: effStop,
+          last_close: last,
+          return_pct: ret,
+          status,
+          closed: false,
+        };
       }),
     );
 
