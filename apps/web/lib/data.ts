@@ -2309,8 +2309,8 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
         }
 
         // 열린 픽 — 읽기 시점 최신 종가로 추정 표시.
-        // 분할익절(0022): 이미 1차 익절(tp1_hit)한 진행 픽은 본전(entry)스톱·tp2 목표
-        // 기준으로 추정 — 잔량이 본전 밑이면 1차 익절(부분 수익 확정) 상태.
+        // 채택 규칙(trail·0037): tp1_hit 픽은 본전(entry)스톱 기준으로 추정 —
+        // 잔량이 본전 밑이면 «본전 청산» 예상 상태(손절이 아니라 무승부).
         const tp2 = r.tp2_price as number | null;
         const tp1Hit = Boolean(r.tp1_hit);
         const price = await getLatestPrice(r.instrument_id as number);
@@ -2321,7 +2321,7 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
         const effTarget = tp1Hit && tp2 != null ? tp2 : target;
         let status: PickRecord["status"] = "—";
         if (last != null && entry != null) {
-          if (effStop != null && last <= effStop) status = tp1Hit ? "1차 익절" : "손절";
+          if (effStop != null && last <= effStop) status = tp1Hit ? "본전 청산" : "손절";
           else if (effTarget != null && last >= effTarget) status = "목표 도달";
           else status = "진행중";
         }
