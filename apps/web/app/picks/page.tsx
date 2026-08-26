@@ -89,7 +89,6 @@ export default async function PicksPage({
   );
   const wins = decided.filter((r) => (r.return_pct ?? 0) > 0);
   const winRate = decided.length > 0 ? wins.length / decided.length : null;
-  const closedTarget = all.filter((r) => r.status === "목표 도달");
   const closedStop = all.filter((r) => r.status === "손절");
   const inProgress = all.filter((r) => r.status === "진행중");
   const closed = all.filter((r) => r.closed && r.return_pct != null);
@@ -97,6 +96,20 @@ export default async function PicksPage({
     closed.length > 0
       ? closed.reduce((a, r) => a + (r.return_pct ?? 0), 0) / closed.length
       : null;
+  // ── 전체 평균 손익 (진행중 포함 · 현재가 기준) ──
+  // 확정 평균만 대표 숫자로 쓰면 기록 초반에 반드시 왜곡된다: 지는 픽은 1~2일 만에
+  // 손절로 끝나고 이기는 픽은 5~10거래일을 채워야 확정되므로, «끝난 거래»가 손절로만
+  // 채워지는 구간이 산술적으로 생긴다(2026-08-26 실제로 그랬다 — 확정 -6.9% 뒤에
+  // 진행중 +4.4% 5건이 있었다). 거래가 된 픽 전체(확정+진행중 현재가)의 평균이
+  // 이 시점의 정직한 중간 그림이다.
+  const tradedWithReturn = traded.filter((r) => r.return_pct != null);
+  const avgAll =
+    tradedWithReturn.length > 0
+      ? tradedWithReturn.reduce((a, r) => a + (r.return_pct ?? 0), 0) /
+        tradedWithReturn.length
+      : null;
+  // 끝난 거래가 이만큼 쌓이기 전의 승률·확정 평균은 색을 빼고 «참고용»으로 그린다.
+  const SMALL_SAMPLE = decided.length < 10;
   const avg = (list: PickRecord[]) =>
     list.length > 0
       ? list.reduce((a, r) => a + (r.return_pct ?? 0), 0) / list.length
@@ -116,11 +129,12 @@ export default async function PicksPage({
       stats={[
         { label: "누적 발행", value: `${all.length}` },
         { label: "진행중", value: `${inProgress.length}` },
-        // 이 화면의 결론 한 칸 — 종료된 픽의 평균 손익. 승률보다 이쪽이 판단 기준이다.
+        // 이 화면의 결론 한 칸 — 거래된 픽 전체의 평균 손익(진행중은 현재가).
+        // 확정 평균은 기록 초반에 손절만 먼저 채점돼 반드시 나빠 보인다(위 avgAll 주석).
         {
-          label: "종료 평균 손익",
-          value: avgClosed != null ? `${avgClosed >= 0 ? "+" : ""}${(avgClosed * 100).toFixed(1)}%` : "—",
-          tone: (avgClosed ?? 0) >= 0 ? ("good" as const) : ("bad" as const),
+          label: "전체 평균 손익",
+          value: avgAll != null ? `${avgAll >= 0 ? "+" : ""}${(avgAll * 100).toFixed(1)}%` : "—",
+          tone: (avgAll ?? 0) >= 0 ? ("good" as const) : ("bad" as const),
         },
       ]}
     >
@@ -166,21 +180,16 @@ export default async function PicksPage({
               color: "text-text",
             },
             {
-              // 분모는 «끝난 거래»이고 규칙 교체 정리는 뺀다 — 위 decided 주석 참조.
-              label: "승률",
-              value:
-                winRate == null ? "—" : `${(winRate * 100).toFixed(1)}%`,
-              sub:
-                decided.length === 0
-                  ? "끝난 거래가 아직 없습니다"
-                  : `수익 ${wins.length} / 끝난 거래 ${decided.length}건 · 목표 도달 ${closedTarget.length}`,
-              color: "text-good",
-            },
-            {
-              label: "손절",
-              value: `${closedStop.length}건${traded.length ? ` (${Math.round((closedStop.length / traded.length) * 100)}%)` : ""}`,
-              sub: avg(closedStop) != null ? `평균 ${fmtPct(avg(closedStop))}` : undefined,
-              color: "text-bad",
+              // 결론 한 칸 — 거래된 픽 전체(확정 + 진행중 현재가)의 평균.
+              label: "전체 평균 손익",
+              value: avgAll != null ? fmtPct(avgAll) : "—",
+              sub: `거래 ${tradedWithReturn.length}건 · 진행중은 현재가 기준`,
+              color:
+                avgAll == null
+                  ? "text-text"
+                  : avgAll >= 0
+                    ? "text-good"
+                    : "text-bad",
             },
             {
               label: "진행중 (미실현)",
@@ -194,10 +203,42 @@ export default async function PicksPage({
                     : "text-bad",
             },
             {
+              label: "손절",
+              value: `${closedStop.length}건 / 거래 ${traded.length}건`,
+              sub: avg(closedStop) != null ? `평균 ${fmtPct(avg(closedStop))}` : undefined,
+              // 손절은 이 구조의 정상 작동음(자주 작게 잃는 쪽 갈래)이다 — 결론 칸이
+              // 아니므로 경고색 대문짝을 피하고, 값은 그대로 정직하게 적는다.
+              color: "text-text",
+            },
+            {
+              // 분모는 «끝난 거래»이고 규칙 교체 정리는 뺀다 — 위 decided 주석 참조.
+              // «목표 도달 N»은 지웠다 — 채택 규칙(trail)에서 목표는 파는 트리거가
+              // 아니라 본전스톱 트리거라 이 값은 언제나 0에 가깝고, 0이 정상인데
+              // 실패처럼 읽힌다.
+              label: "승률",
+              value:
+                winRate == null ? "—" : `${(winRate * 100).toFixed(1)}%`,
+              sub:
+                decided.length === 0
+                  ? "끝난 거래가 아직 없습니다"
+                  : SMALL_SAMPLE
+                    ? `끝난 거래 ${decided.length}건 — 표본이 적어 참고용`
+                    : `수익 ${wins.length} / 끝난 거래 ${decided.length}건`,
+              // 끝난 거래가 몇 건 안 될 때의 승률은 통계가 아니라 소음이다 — 색을 빼고
+              // 회색 참고 숫자로 그린다(숨기지는 않는다).
+              color: SMALL_SAMPLE ? "text-text-dim" : "text-good",
+            },
+            {
               label: "확정 픽 평균 수익률",
               value: avgClosed != null ? fmtPct(avgClosed) : "—",
-              sub: "만료 포함 · 확정 기준",
-              color: avgClosed != null && avgClosed >= 0 ? "text-good" : "text-bad",
+              sub: SMALL_SAMPLE
+                ? `끝난 거래 ${closed.length}건뿐 — 이긴 픽은 아직 진행중`
+                : "만료 포함 · 확정 기준",
+              color: SMALL_SAMPLE
+                ? "text-text-dim"
+                : avgClosed != null && avgClosed >= 0
+                  ? "text-good"
+                  : "text-bad",
             },
           ].map(({ label, value, sub, color }) => (
             <div key={label} className="flex flex-col gap-1 rounded-[12px] border border-border bg-surface px-4 py-3.5">
@@ -207,6 +248,17 @@ export default async function PicksPage({
             </div>
           ))}
         </div>
+
+        {/* 기록 초반의 착시를 읽는 법 — 지는 픽은 빨리 끝나고 이기는 픽은 늦게 끝난다.
+            이 한 줄이 없으면 확정 칸에 손절만 쌓이는 구간이 «망한 성적»으로 읽힌다. */}
+        {!legacyView && SMALL_SAMPLE && closedStop.length > 0 && (
+          <p className="px-1 text-[12px] leading-relaxed text-text-mute">
+            지는 픽은 보통 1~2일 만에 손절로 끝나고, 이기는 픽은 보유 기한(단기
+            5·중기 10거래일)을 채운 뒤에야 확정됩니다. 그래서 기록 초반에는 확정
+            칸에 손절이 먼저 쌓입니다 — 진행중인 픽까지 합친 «전체 평균 손익»이
+            이 시점의 더 정확한 그림입니다.
+          </p>
+        )}
 
         {/* 기간별 트랙레코드 — 이 개편의 핵심 실익.
             전체를 한 덩어리로 세면 «어느 전략의 어느 기간이 되는가»를 알 수 없다.
