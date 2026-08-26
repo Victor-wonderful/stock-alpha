@@ -12,6 +12,7 @@ import {
   getSignalsBySetups,
   getBacktests,
   countSignalsForCombos,
+  getUnfitBadgeBySymbols,
 } from "@/lib/data";
 import { fmtPrice, fmtPct, fmtNum, tradingDayLabel } from "@/lib/format";
 import {
@@ -87,6 +88,26 @@ function AiJudge({
       <span className="tnum text-sm font-extrabold text-accent">{score}</span>
       <span className="text-[9px] text-text-mute">리포트 없음</span>
     </div>
+  );
+}
+
+// ── 거래 부적합 뱃지 ──
+// 시그널은 남기고 이유만 붙인다. 판정은 리포트 생성 시각에 얼린 값이라 낡을 수
+// 있어서(8/21 부적합 27건 중 9건이 이틀 뒤 발행 대상), 숨기면 틀린 판정이 시그널을
+// 조용히 지운다. 어떤 종목이 담기는지는 getUnfitBadgeBySymbols 가 정한다.
+function UnfitBadge({
+  info,
+}: {
+  info: { reason: string; asOf: string } | undefined;
+}) {
+  if (!info) return null;
+  return (
+    <span
+      className="inline-block whitespace-nowrap rounded-[5px] bg-bad-soft px-1.5 py-0.5 text-[9px] font-bold text-bad"
+      title={`최신 리포트(${info.asOf}) 기준 거래가능 검사 미통과`}
+    >
+      거래 부적합 · {info.reason}
+    </span>
   );
 }
 
@@ -226,6 +247,12 @@ export default async function ScreenerPage({
   const sectionPrices = sectionView
     ? await getLatestPricesBySymbols(sectionSymbols)
     : new Map();
+
+  // 거래 부적합 뱃지 — 화면에 그리는 종목만 벌크 1회로 판정을 확인한다.
+  const unfitMap = await getUnfitBadgeBySymbols([
+    ...visible.map((s) => s.symbol),
+    ...sectionSymbols,
+  ]);
 
   const hl = computeHighlights(visible);
   // 최다 셋업도 표본이 아니라 전체 카운트에서 뽑는다.
@@ -501,6 +528,11 @@ export default async function ScreenerPage({
                               symbol={r.symbol}
                               className="relative z-10 shrink-0 text-[10px] text-text-mute"
                             />
+                            {unfitMap.has(r.symbol) && (
+                              <span className="relative z-10 shrink-0">
+                                <UnfitBadge info={unfitMap.get(r.symbol)} />
+                              </span>
+                            )}
                           </span>
                           {/* 기간 — "언제까지 들고 있나"를 목록에서 바로 본다.
                               이 기간이 지나면 엔진이 종가로 자동 청산한다.
@@ -596,6 +628,11 @@ export default async function ScreenerPage({
                           {s.name}
                         </Link>
                         <SymbolCode symbol={s.symbol} className="text-[12px] text-text-mute" />
+                        {unfitMap.has(s.symbol) && (
+                          <div className="mt-0.5">
+                            <UnfitBadge info={unfitMap.get(s.symbol)} />
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
@@ -712,6 +749,11 @@ export default async function ScreenerPage({
                               {s.name}
                             </Link>
                             <SymbolCode symbol={s.symbol} className="text-[10px] text-text-mute" />
+                            {unfitMap.has(s.symbol) && (
+                              <div className="mt-0.5">
+                                <UnfitBadge info={unfitMap.get(s.symbol)} />
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>

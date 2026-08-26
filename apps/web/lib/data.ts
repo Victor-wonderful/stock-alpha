@@ -609,6 +609,79 @@ export async function getSignals(
   }
 }
 
+/**
+ * 최신 리포트 판정이 «거래 부적합»인 종목 — 스크리너 행 경고 뱃지용.
+ *
+ * 숨기지 않고 뱃지로 다는 이유: 부적합 판정은 리포트를 만든 시각에 얼린 값이라
+ * 낡을 수 있다(8/21 부적합 27건 중 9건이 이틀 뒤 발행 대상이었고, 하나는 실제 픽).
+ * 숨기면 틀린 판정이 시그널을 조용히 지운다 — 남겨 두고 이유를 말한다.
+ *
+ * 판정을 실제로 막는(blocking) 검사가 떨어진 종목만 담는다. 차단 검사는 전부
+ * 통과했는데 rating 만 부적합인 건 옛 규칙(backtest_gate 포함)으로 찍힌 낡은
+ * 판정이므로 제외 — 엔진 daily.tradable_now 와 같은 규칙이다.
+ */
+export async function getUnfitBadgeBySymbols(
+  symbols: string[],
+): Promise<Map<string, { reason: string; asOf: string }>> {
+  const out = new Map<string, { reason: string; asOf: string }>();
+  const uniq = [...new Set(symbols.filter(Boolean))];
+  if (uniq.length === 0) return out;
+  try {
+    const supabase = createPublicClient();
+    const { data: insts } = await supabase
+      .from("instruments")
+      .select("id,symbol")
+      .in("symbol", uniq);
+    if (!insts || insts.length === 0) return out;
+    const idToSym = new Map<number, string>(
+      (insts as { id: number; symbol: string }[]).map((r) => [r.id, r.symbol]),
+    );
+    const ids = [...idToSym.keys()];
+    // 종목당 최신 1건만 필요하지만 PostgREST 에 «그룹별 최신»이 없다 — 넉넉히 받아
+    // 첫 건만 취한다(watchlist 와 같은 패턴).
+    const { data } = await supabase
+      .from("reports")
+      .select("instrument_id,as_of,rating,checks:payload->tradability->checks")
+      .eq("status", "published")
+      .eq("report_type", "indepth")
+      .in("instrument_id", ids)
+      .order("as_of", { ascending: false })
+      .limit(Math.min(ids.length * 6, 900));
+    const REASONS: Record<string, string> = {
+      active: "거래정지·유니버스 제외",
+      liquidity: "유동성 부족",
+      volatility: "변동성 과열",
+    };
+    const seen = new Set<number>();
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      const iid = Number(r.instrument_id);
+      if (seen.has(iid)) continue; // 최신순 정렬 — 첫 건이 그 종목의 최신 판정
+      seen.add(iid);
+      if (r.rating !== "거래 부적합") continue;
+      const checks = (r.checks ?? []) as {
+        key?: string;
+        passed?: boolean;
+        blocking?: boolean;
+      }[];
+      // blocking 플래그가 없는 옛 리포트는 backtest_gate 만 비차단으로 본다.
+      const failed = checks.filter(
+        (c) => !c.passed && (c.blocking ?? c.key !== "backtest_gate"),
+      );
+      if (checks.length > 0 && failed.length === 0) continue;
+      const reason =
+        failed
+          .map((c) => REASONS[c.key ?? ""] ?? c.key)
+          .filter(Boolean)
+          .join(" · ") || "사유 미상";
+      const sym = idToSym.get(iid);
+      if (sym) out.set(sym, { reason, asOf: String(r.as_of) });
+    }
+    return out;
+  } catch {
+    return out;
+  }
+}
+
 function applyFilters(rows: SignalView[], f: SignalFilters): SignalView[] {
   return rows.filter(
     (r) =>
