@@ -747,6 +747,19 @@ def _pre_trail(bar: dict, trail_from: str) -> bool:
     return bool(trail_from and ts and ts <= trail_from)
 
 
+# resolve_pick_status 가 «판정에 쓰는» 컬럼 전부. 여기서 하나라도 빠지면 판정이
+# 조용히 달라진다 — 값이 None 이면 규칙이 그냥 꺼지기 때문이다.
+#
+# 2026-08-27 실제 사고: tp1_hit_at 이 빠져 있어 _pre_trail(전환 봉 가드)이 통째로
+# 꺼졌고, 전환 «이전» 봉의 저가로 픽 2건이 본전(0%) 청산됐다. 실제로는 각각
+# +10.5% · +16.4% 로 끝나야 했다. 테스트가 이 목록을 검사한다.
+PICK_JUDGE_FIELDS: tuple[str, ...] = (
+    "id", "as_of", "entry_price", "target_price", "tp2_price", "stop_loss",
+    "tp1_hit", "tp1_hit_at", "style", "setup", "horizon", "instrument_id",
+    "entry_rule", "confirmed_at",
+)
+
+
 def _trail_from(pick: dict) -> str:
     """이 픽이 «이미 전환된 채로» 들어왔다면 그 전환일(YYYY-MM-DD), 아니면 빈 문자열.
 
@@ -1092,8 +1105,7 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
     d = date.fromisoformat(today) if today else kst_today()
     open_picks = (
         client.table("recommendations")
-        .select("id,as_of,entry_price,target_price,tp2_price,stop_loss,"
-                "tp1_hit,style,setup,horizon,instrument_id,entry_rule,confirmed_at")
+        .select(",".join(PICK_JUDGE_FIELDS))
         .eq("basket_type", "daily_focus").eq("status", "open").execute()
     ).data or []
 
