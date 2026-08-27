@@ -132,7 +132,7 @@ def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell"
               상방은 안 자른다. 목표를 아예 끄면(use_targets=False) 되돌림을 그대로
               맞고, 목표에 팔면 크게 가는 종목을 놓친다. 그 사이를 노린다.
 
-              스톱 = max(평단, 그동안의 최고가 − trail_r_mult×R),  R = 평단 − 최초손절.
+              스톱 = max(1차 진입가, 최고가 − trail_r_mult×R),  R = 1차 진입가 − 최초손절.
               «되돌려줄 수 있는 최대치는 처음에 걸었던 리스크만큼»이라는 규칙이다.
               한 번 올라간 스톱은 내려오지 않는다(래칫). 하한이 평단이므로 옛
               본전스톱보다 **낮아지는 일은 없다** — 더 일찍 털리는 대신 더 높은
@@ -170,9 +170,12 @@ def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell"
                 break
             if not trailed:                            # 목표 도달 → 추격 스톱 개시
                 trailed = True
-                avg_e = sum(w * e for w, e in filled) / sum(w for w, _ in filled)
-                trail_dist = max(avg_e - stop, 0.0) * trail_r_mult
-                eff_stop = avg_e                       # 하한 = 평단. 그 아래로는 안 간다
+                # 기준은 «1차 진입가»다 — 평단이 아니다. 손절선을 1차 진입에 고정하는
+                # 이 규칙의 원칙(HorizonProfile 독스트링)과 같은 기준이어야 한다.
+                # 분할이 낮추는 건 평단이지 «본전»이 아니다. (2026-08-27 Victor 확인)
+                first_e = legs[0][1]
+                trail_dist = max(first_e - stop, 0.0) * trail_r_mult
+                eff_stop = first_e                     # 하한 = 1차 진입가
                 peak = hi
         if trailed and trail_dist > 0:                 # 래칫 — 올라가기만 한다
             peak = hi if peak is None else max(peak, hi)

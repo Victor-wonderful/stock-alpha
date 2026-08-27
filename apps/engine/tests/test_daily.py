@@ -805,3 +805,20 @@ def test_scaleout_breakeven_also_ignores_the_transition_bar():
     bars = [{"low": 97.0, "high": 107.0, "close": 105.0, "ts": "2026-08-26"},
             {"low": 104.0, "high": 109.0, "close": 108.0, "ts": "2026-08-27"}]
     assert rd.resolve_pick_status(pick, bars, date(2026, 8, 27)) is None
+
+
+def test_pick_judge_fields_cover_everything_the_rule_reads():
+    """판정이 «읽는» 컬럼은 전부 조회 목록에 있어야 한다.
+
+    2026-08-27 사고: tp1_hit_at 이 조회에서 빠져 전환 봉 가드가 통째로 꺼졌고,
+    픽 2건이 전환 «이전» 봉의 저가로 본전(0%) 청산됐다. 값이 None 이면 규칙이
+    에러 없이 «그냥 꺼진다» — 그래서 조용했다. 이 테스트가 그 침묵을 깬다.
+    """
+    required = {
+        "entry_price", "target_price", "tp2_price", "stop_loss",
+        "tp1_hit", "tp1_hit_at",          # ← 전환 여부와 전환«일». 둘 다 필요하다
+        "as_of", "confirmed_at", "entry_rule",
+        "style", "setup", "horizon",
+    }
+    missing = required - set(rd.PICK_JUDGE_FIELDS)
+    assert not missing, f"판정이 읽는데 조회하지 않는 컬럼: {sorted(missing)}"

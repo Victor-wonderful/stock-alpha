@@ -458,3 +458,22 @@ def test_precomputed_detections_give_identical_trades():
         fast = backtest_playbook(df, setup, entry_mode="open", detections=det)
         assert [t.r_multiple for t in base] == [t.r_multiple for t in fast], setup
         assert [t.entry_ts for t in base] == [t.entry_ts for t in fast], setup
+
+
+def test_trail_floor_uses_first_entry_not_average():
+    """추격 스톱의 기준은 «1차 진입가»다 — 분할로 낮아진 평단이 아니다.
+
+    2·3차가 싸게 체결되면 평단이 내려간다. 그 평단을 기준으로 잡으면 스톱이 원래보다
+    아래로 내려가 «본전»의 뜻이 흔들린다. 손절선을 1차 진입에 고정하는 원칙과 같다.
+    """
+    from engine.backtest.event_backtest import _exit_scalein
+
+    # 1차 100 · 2차 90(2봉 저가 88 에서 체결) → 평단 95. 목표 110, 손절 85.
+    # 1차 기준이면 R=15, 고점 112 → 스톱 max(100, 97) = 100.
+    # 평단 기준이었다면 R=10, 스톱 max(95, 102) = 102 로 «더 높게» 잡혀 다르게 나온다.
+    df = _df(lows=[100, 88, 99], highs=[100, 112, 101], closes=[100, 111, 99.5])
+    net, gross, *_ = _exit_scalein(
+        df, 0, len(df), ((0.5, 100.0), (0.5, 90.0)), 85.0, 110.0, 5, _FreeCosts(),
+        target_action="trail")
+    # 스톱 100 에 3봉 저가 99 가 걸린다 → 평단 95 대비 +5, 비중 가중 후 gross = 5.0
+    assert gross == pytest.approx(5.0)
