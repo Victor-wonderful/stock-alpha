@@ -10,7 +10,7 @@ import {
   NON_TRADE_PICK_STATUSES,
   type PickRecord,
 } from "@/lib/data";
-import { HORIZONS, horizonLabel, isHorizonPaused } from "@/lib/holding";
+import { HORIZONS, horizonLabel, horizonSpec, isHorizonPaused } from "@/lib/holding";
 import { fmtPct, fmtPrice } from "@/lib/format";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
@@ -493,6 +493,11 @@ export default async function PicksPage({
                           {r.name}
                         </Link>
                         <SymbolCode symbol={r.symbol} className="text-[12px] text-text-mute" />
+                        {horizonLabel(r.horizon) && (
+                          <span className="rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[11px] font-bold text-accent">
+                            {horizonLabel(r.horizon)}
+                          </span>
+                        )}
                         {r.reselects != null && r.reselects > 1 && (
                           <span className="rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent">
                             {r.reselects}일 선정
@@ -572,6 +577,18 @@ export default async function PicksPage({
                           {r.name}
                         </Link>
                         <SymbolCode symbol={r.symbol} className="ml-2 text-2xs text-text-mute" />
+                        {/* 기간 칩 — 위의 「기간별 성과」와 이 줄을 잇는 유일한 표시다.
+                            없으면 어느 행이 어느 기간에 들어가는지 알 수 없다.
+                            «최대 N거래일»을 같이 적는다 — 만기가 아니라 상한이라서,
+                            그 전에 끝난 청산(손절·추격)을 이상하게 읽지 않도록. */}
+                        {horizonLabel(r.horizon) && (
+                          <span
+                            className="ml-2 rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent"
+                            title={`보유 상한 ${horizonSpec(r.horizon)?.bars ?? "?"}거래일 — 손절·추격 스톱에 걸리면 그 전에 끝납니다`}
+                          >
+                            {horizonLabel(r.horizon)}
+                          </span>
+                        )}
                         {r.reselects != null && r.reselects > 1 && (
                           <span
                             className="ml-2 rounded-[6px] bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent"
