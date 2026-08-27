@@ -95,6 +95,10 @@ export default async function PicksPage({
   const winRate = decided.length > 0 ? wins.length / decided.length : null;
   const closedStop = all.filter((r) => r.status === "손절");
   const inProgress = all.filter((r) => r.status === "진행중");
+  // «이긴 픽은 아직 진행중»은 사실일 때만 적는다. 2026-08-27 에 이 문장이 거짓이
+  // 된 채로 화면에 남아 있었다 — 추격 청산 2건이 이미 이익으로 확정됐는데도
+  // «이긴 픽은 진행중»이라고 적혀 있었다. 문구를 데이터에 묶는다.
+  const openWinners = inProgress.filter((r) => (r.return_pct ?? 0) > 0);
   const closed = all.filter((r) => r.closed && r.return_pct != null);
   const avgClosed =
     closed.length > 0
@@ -236,7 +240,9 @@ export default async function PicksPage({
               label: "확정 픽 평균 수익률",
               value: avgClosed != null ? fmtPct(avgClosed) : "—",
               sub: SMALL_SAMPLE
-                ? `끝난 거래 ${closed.length}건뿐 — 이긴 픽은 아직 진행중`
+                ? openWinners.length > 0
+                  ? `끝난 거래 ${closed.length}건뿐 — 이긴 픽 ${openWinners.length}건은 아직 진행중`
+                  : `끝난 거래 ${closed.length}건뿐 — 표본이 적어 참고용`
                 : "만료 포함 · 확정 기준",
               color: SMALL_SAMPLE
                 ? "text-text-dim"
@@ -253,14 +259,17 @@ export default async function PicksPage({
           ))}
         </div>
 
-        {/* 기록 초반의 착시를 읽는 법 — 지는 픽은 빨리 끝나고 이기는 픽은 늦게 끝난다.
-            이 한 줄이 없으면 확정 칸에 손절만 쌓이는 구간이 «망한 성적»으로 읽힌다. */}
-        {!legacyView && SMALL_SAMPLE && closedStop.length > 0 && (
+        {/* 기록 초반의 착시를 읽는 법 — 지는 픽은 빨리 끝나고, 이기는 픽은 «이길
+            만큼 오른 뒤에야» 끝난다. 이 한 줄이 없으면 확정 칸에 손절만 쌓이는
+            구간이 «망한 성적»으로 읽힌다.
+            ⚠️ 이긴 픽이 실제로 진행중일 때만 띄운다 — 2026-08-27 에 이 문단이
+            거짓이 된 채로 남아 있었다(추격 청산 2건이 이미 확정된 뒤였다). */}
+        {!legacyView && SMALL_SAMPLE && closedStop.length > 0 && openWinners.length > 0 && (
           <p className="px-1 text-[12px] leading-relaxed text-text-mute">
-            지는 픽은 보통 1~2일 만에 손절로 끝나고, 이기는 픽은 보유 기한(단기
-            5·중기 10거래일)을 채운 뒤에야 확정됩니다. 그래서 기록 초반에는 확정
-            칸에 손절이 먼저 쌓입니다 — 진행중인 픽까지 합친 «전체 평균 손익»이
-            이 시점의 더 정확한 그림입니다.
+            지는 픽은 보통 1~2일 만에 손절로 끝나고, 이기는 픽은 목표를 찍고 추격
+            손절이 걸릴 때까지 열려 있습니다. 그래서 기록 초반에는 확정 칸에 손절이
+            먼저 쌓입니다 — 진행중인 픽까지 합친 «전체 평균 손익»이 이 시점의 더
+            정확한 그림입니다.
           </p>
         )}
 
@@ -279,8 +288,17 @@ export default async function PicksPage({
               {HORIZONS.map((hz) => {
                 const rows = all.filter((r) => r.horizon === hz.key);
                 const tr = rows.filter((r) => !NON_TRADE_PICK_STATUSES.has(r.status));
-                const won = rows.filter((r) => r.status === "목표 도달");
-                const lost = rows.filter((r) => r.status === "손절");
+                // «목표 도달»만 세면 이긴 거래가 통째로 안 보인다 — 이 규칙에서
+                // 목표는 파는 트리거가 아니라 추격스톱 전환점이라 그 상태가 거의
+                // 안 나오기 때문이다. 실제로 2026-08-27 에 「목표 0 · 손절 4」만
+                // 떠서, 이익으로 끝난 추격 청산 2건이 화면 어디에도 없었다.
+                // 세는 기준을 «상태»가 아니라 «결과»로 바꾼다.
+                const won = rows.filter(
+                  (r) => r.closed && (r.return_pct ?? 0) > 0,
+                );
+                const lost = rows.filter(
+                  (r) => r.closed && (r.return_pct ?? 0) < 0,
+                );
                 const done = rows.filter((r) => r.closed && r.return_pct != null);
                 const mean =
                   done.length > 0
@@ -307,8 +325,8 @@ export default async function PicksPage({
                       <>
                         <span className="tnum text-text-dim">발행 {rows.length}건</span>
                         <span className="tnum text-text-dim">거래 {tr.length}건</span>
-                        <span className="tnum text-good">목표 {won.length}</span>
-                        <span className="tnum text-bad">손절 {lost.length}</span>
+                        <span className="tnum text-good">이익 {won.length}</span>
+                        <span className="tnum text-bad">손실 {lost.length}</span>
                         <span
                           className={`tnum ml-auto font-semibold ${
                             mean == null ? "text-text-mute" : mean >= 0 ? "text-good" : "text-bad"
