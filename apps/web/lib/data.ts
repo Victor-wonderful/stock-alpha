@@ -2090,6 +2090,8 @@ export interface PickRecord {
     | "—";
   closed: boolean; // 엔진이 확정 기록한 픽인지(0017) — 표시 구분용
   closed_at?: string | null; // 청산일 — 포지션 합산(보유 창) 판정용
+  /** 진입 확정일(시가 매수한 날) — 보유 «1거래일째». 청산 예정일 계산의 기준. */
+  confirmed_at?: string | null;
   reselects?: number; // 같은 포지션이 여러 날 재선정된 횟수(>1이면 '연속 선정' 표시)
 }
 
@@ -2375,6 +2377,9 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
           target_price: target,
           stop_loss: stop,
           closed_at: (r.closed_at as string) ?? null,
+          // 진입 확정일 — 청산 예정일을 세는 «1거래일째»다. 없으면(아직 안 산 픽)
+          // 발행일 다음 거래일이 진입일이라 세는 기준이 하루 달라진다.
+          confirmed_at: (r.confirmed_at as string) ?? null,
         };
 
         // 엔진이 확정(0017)한 픽 — 기록된 청산가/수익률 그대로 (트랙레코드)
