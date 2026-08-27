@@ -115,7 +115,7 @@ export function PickCard({
   priceDate?: string | null;
 }) {
   // 레벨 파생값 — 홈 표(HomePicksTable)와 **같은 공식·같은 이름**을 쓴다. 한 종목이
-  // 두 화면에서 다른 말을 하면(홈 「본전 도달가」 / 여기 「목표가」) 사용자는 둘 중
+  // 두 화면에서 다른 말을 하면(홈 「목표가」 / 여기 「목표가」) 사용자는 둘 중
   // 하나가 틀렸다고 읽는다. R:R·2차 목표·상승여력은 «목표에서 판다»를 전제한 값이라
   // 지금 규칙(trail: 목표에 닿으면 손절만 본전으로 올림)에서는 실현되지 않는다.
   const entryP = pick.entry_price;
@@ -160,7 +160,7 @@ export function PickCard({
       sub: stopPct != null ? `${fmtPct(stopPct)} · 전량 매도` : "전량 매도",
     },
     {
-      label: "본전 도달가",
+      label: "목표가",
       value: fmtPrice(targetP),
       tone: "text-good",
       sub: toTarget != null ? `${fmtPct(toTarget)} · 손절이 본전으로` : "손절이 본전으로",

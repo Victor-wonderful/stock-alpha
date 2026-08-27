@@ -71,13 +71,13 @@ export function OpenPicksSummary({ picks }: { picks: OpenPick[] }) {
             </dd>
           </div>
           <div className="flex items-baseline gap-3 py-2.5">
-            <dt className="w-[68px] shrink-0 text-[12px] text-text-mute">본전스톱</dt>
+            <dt className="w-[68px] shrink-0 text-[12px] text-text-mute">추격스톱</dt>
             <dd className="tnum flex-1 text-[13px]">
               <span className={breakeven > 0 ? "font-bold text-pass" : "text-text-dim"}>
                 {breakeven}건
               </span>
               {breakeven > 0 && (
-                <span className="text-[11px] text-text-mute"> · 손해 구간 없음</span>
+                <span className="text-[11px] text-text-mute"> · 이익 구간 확보</span>
               )}
             </dd>
           </div>

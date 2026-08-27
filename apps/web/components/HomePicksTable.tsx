@@ -25,8 +25,8 @@ import { computePositionSizePct } from "@/lib/position";
  * ## 폰에서 표를 쓰지 않는 이유 (2026-08-24 Victor 의 갤럭시 Z 폴드 화면)
  *
  * 열이 8개다. 폰에서는 `min-w-[760px]` 이 걸려 가로 스크롤이 되는데, 첫 화면에 보이는
- * 것은 종목·현재가·진입가·손절가까지고 **본전 도달가부터는 옆으로 밀어야** 나왔다.
- * 「손절이 본전으로 올라가는 지점」은 이 제품의 매매 규칙에서 가장 중요한 값이라
+ * 것은 종목·현재가·진입가·손절가까지고 **목표가부터는 옆으로 밀어야** 나왔다.
+ * 「손절이 고점 추격으로 바뀌는 지점」은 이 제품의 매매 규칙에서 가장 중요한 값이라
  * 스크롤 뒤에 숨으면 안 된다.
  *
  * 그래서 폰에서는 종목당 카드 한 장에 세 값(진입·손절·본전)을 세로로 세우고, 나머지
@@ -42,7 +42,7 @@ const HEADS = [
   "현재가",
   "진입가",
   "손절가",
-  "본전 도달가",
+  "목표가",
   "청산 기한",
   "권장 비중",
   "1주당 리스크",
@@ -77,7 +77,7 @@ function derive(
     stop,
     target,
     // 목표 수익률은 진입가 대비다. 진입 전이라 «상승여력»과 같은 값이지만, 이 값은
-    // 파는 값이 아니라 손절이 본전으로 올라가는 지점까지의 거리다.
+    // 파는 값이 아니라 손절이 추격으로 바뀌는 지점까지의 거리다.
     toTarget: entry != null && entry > 0 && target != null ? target / entry - 1 : null,
     stopPct: entry != null && entry > 0 && stop != null ? stop / entry - 1 : null,
     // 1주당 리스크 = 진입가 − 손절가. 실제로 거는 돈이다.
@@ -208,7 +208,7 @@ export function HomePicksTable({
                       cls: "text-bad",
                     },
                     {
-                      k: "본전 도달가",
+                      k: "목표가",
                       v: r.target,
                       note:
                         r.toTarget != null
@@ -354,7 +354,7 @@ export function HomePicksTable({
             {planDay ? `${planDay} 시가 매수` : "다음 거래일 시가 매수"}
           </span>
           <span className="text-text-mute">→</span>
-          <span>본전 도달가에 닿으면 팔지 않고 손절을 진입가로 올림</span>
+          <span>목표가에 닿으면 팔지 않고 손절을 «고점 − 1R» 로 올림</span>
           <span className="text-text-mute">→</span>
           <span>손절 닿으면 전량 매도</span>
           <span className="text-text-mute">→</span>

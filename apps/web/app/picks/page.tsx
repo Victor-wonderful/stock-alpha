@@ -25,9 +25,12 @@ const STATUS_BADGE: Record<string, string> = {
   // 중립색으로 둔다. 성적처럼 읽히면 안 된다.
   미체결: "bg-surface-3 text-text-mute",
   손절: "bg-bad-soft text-bad",
-  // 본전스톱 전환 뒤 본전선에서 나간 픽 — 손절이 아니라 무승부(수익률 ~0%).
+  // 스톱 전환 뒤 «평단»에서 나간 픽 — 손절이 아니라 무승부(수익률 ~0%).
+  // 2026-08-27 추격스톱 교체 이후로는 드물어진다(추격은 평단보다 위에 선다).
   // 빨간 배지로 그리면 진 것처럼 읽히므로 중립색.
   "본전 청산": "bg-surface-3 text-text-dim",
+  // 추격 스톱에 걸려 «이익을 남기고» 나간 픽 — 무승부가 아니라 이긴 거래다.
+  "추격 청산": "bg-good-soft text-good",
   "1차 익절": "bg-good-soft text-good", // 옛 규칙(분할익절) 픽만
   진행중: "bg-warn-soft text-warn",
   만료: "bg-surface-3 text-text-dim",
@@ -37,7 +40,8 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const FILTERS = [
-  "전체", "진입 대기", "진행중", "목표 도달", "손절", "본전 청산", "만료", "미체결",
+  "전체", "진입 대기", "진행중", "목표 도달", "추격 청산", "손절", "본전 청산",
+  "만료", "미체결",
   // 2026-08-22 규칙 교체로 우리가 닫은 픽. 숨기지 않는다 — 성적에 들어가고,
   // 왜 닫혔는지 이름이 말한다.
   "규칙 교체 정리",
@@ -82,7 +86,7 @@ export default async function PicksPage({
   // (2026-08-25 Victor 확정). 그 13건은 매매 결과가 아니라 우리가 규칙을 바꿔서
   // 그날 종가로 강제로 닫은 것이라, 우연히 작게 끝난 값이 승률을 부풀린다.
   //
-  // 목표 도달률로 재지 않는 이유: 규칙이 «목표는 파는 트리거가 아니라 본전스톱 전환»
+  // 목표 도달률로 재지 않는 이유: 규칙이 «목표는 파는 트리거가 아니라 추격스톱 전환»
   // 으로 바뀌어(0037) 목표 도달이라는 상태 자체가 거의 나오지 않는다.
   const decided = all.filter(
     (r) => r.closed && r.return_pct != null && r.status !== "규칙 교체 정리",
@@ -213,7 +217,7 @@ export default async function PicksPage({
             {
               // 분모는 «끝난 거래»이고 규칙 교체 정리는 뺀다 — 위 decided 주석 참조.
               // «목표 도달 N»은 지웠다 — 채택 규칙(trail)에서 목표는 파는 트리거가
-              // 아니라 본전스톱 트리거라 이 값은 언제나 0에 가깝고, 0이 정상인데
+              // 아니라 추격스톱 트리거라 이 값은 언제나 0에 가깝고, 0이 정상인데
               // 실패처럼 읽힌다.
               label: "승률",
               value:
@@ -505,11 +509,15 @@ export default async function PicksPage({
                       <dd className="inline font-semibold text-text">{fmtPrice(r.entry_price)}</dd>
                     </span>
                     <span>
+                      <dt className="inline text-text-mute">{r.closed ? "청산 " : "현재 "}</dt>
+                      <dd className="inline font-semibold text-text">{fmtPrice(r.last_close)}</dd>
+                    </span>
+                    <span>
                       <dt className="inline text-text-mute">손절 </dt>
                       <dd className="inline font-semibold text-bad">{fmtPrice(r.stop_loss)}</dd>
                     </span>
                     <span>
-                      <dt className="inline text-text-mute">본전 </dt>
+                      <dt className="inline text-text-mute">목표 </dt>
                       <dd className="inline font-semibold text-good">{fmtPrice(r.target_price)}</dd>
                     </span>
                   </dl>
@@ -518,13 +526,21 @@ export default async function PicksPage({
             </div>
 
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[820px] text-sm">
+              <table className="w-full min-w-[900px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-2xs uppercase tracking-wide text-text-mute">
                     <th className="py-2 pl-1 text-left font-medium">종목</th>
                     <th className="px-3 py-2 text-left font-medium">발행일</th>
                     <th className="px-3 py-2 text-right font-medium">진입가</th>
-                    <th className="px-3 py-2 text-right font-medium">본전 도달가</th>
+                    {/* 진행중이면 최신 종가, 끝난 픽이면 실제 청산가. 수익률이 «무엇
+                        대비 무엇인지»를 이 열이 말해 준다 — 없으면 숫자만 남는다. */}
+                    <th className="px-3 py-2 text-right font-medium">현재가</th>
+                    <th
+                      className="px-3 py-2 text-right font-medium"
+                      title="여기에 닿으면 팔지 않고 손절선이 «고점 − 1R» 을 따라 올라갑니다"
+                    >
+                      목표가
+                    </th>
                     <th className="px-3 py-2 text-right font-medium">손절가</th>
                     <th className="px-3 py-2 text-right font-medium">수익률</th>
                     <th className="px-3 py-2 text-right font-medium">상태</th>
@@ -549,6 +565,12 @@ export default async function PicksPage({
                       </td>
                       <td className="tnum px-3 py-2.5 text-left text-text-dim">{r.as_of}</td>
                       <td className="tnum px-3 py-2.5 text-right text-text">{fmtPrice(r.entry_price)}</td>
+                      <td
+                        className={`tnum px-3 py-2.5 text-right ${r.closed ? "text-text-dim" : "text-text"}`}
+                        title={r.closed ? "청산가 — 실제로 나간 가격" : "최신 종가 (장중 실시간 아님)"}
+                      >
+                        {fmtPrice(r.last_close)}
+                      </td>
                       <td className="tnum px-3 py-2.5 text-right text-good">{fmtPrice(r.target_price)}</td>
                       <td className="tnum px-3 py-2.5 text-right text-bad">{fmtPrice(r.stop_loss)}</td>
                       <td

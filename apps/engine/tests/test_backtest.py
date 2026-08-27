@@ -407,16 +407,36 @@ def test_target_trail_does_not_sell_at_target():
     assert gross == pytest.approx(28.0), "목표에서 팔았으면 10 이었을 것"
 
 
-def test_target_trail_protects_with_breakeven_stop():
-    """목표 도달 후 되돌아오면 본전에서 끊는다 — 손실로 끝나지 않는다."""
+def test_target_trail_locks_in_profit_on_pullback():
+    """목표 도달 후 되돌아오면 «고점 − 1R» 에서 끊는다 — 본전이 아니라 이익이다.
+
+    2026-08-27 규칙 교체. 옛 본전스톱이었다면 100(=0%)에 나갔다. 진입 100·손절 95
+    이므로 R=5, 고점 112 → 스톱 107. 되돌림에서 +7 을 지킨다.
+    """
     from engine.backtest.event_backtest import _exit_scalein
 
-    # 2봉에서 목표 터치 후 3봉에서 96 까지 하락 → 본전 100 에 청산
+    # 2봉에서 목표 터치(고점 112) 후 3봉에서 96 까지 하락 → 추격 스톱 107 에 청산
     df = _df(lows=[100, 105, 96], highs=[100, 112, 101], closes=[100, 111, 97])
     net, gross, *_ = _exit_scalein(
         df, 0, len(df), ((1.0, 100.0),), 95.0, 110.0, 5, _FreeCosts(),
         target_action="trail")
-    assert gross == pytest.approx(0.0)
+    assert gross == pytest.approx(7.0), "본전스톱이었다면 0 이었을 것"
+
+
+def test_trail_stop_never_drops_below_average_entry():
+    """추격 스톱의 하한은 평단이다 — 옛 본전스톱보다 나빠지는 일은 없다.
+
+    목표를 «간신히» 넘긴 경우 고점−1R 이 평단 아래로 내려갈 수 있다. 그때는
+    평단이 스톱이다(=본전). 손실로 끝나지 않는다는 옛 보장은 유지된다.
+    """
+    from engine.backtest.event_backtest import _exit_scalein
+
+    # R=10(진입 100·손절 90), 고점 110 → 110−10 = 100 = 평단. 그 아래로 안 간다
+    df = _df(lows=[100, 105, 88], highs=[100, 110, 101], closes=[100, 109, 89])
+    net, gross, *_ = _exit_scalein(
+        df, 0, len(df), ((1.0, 100.0),), 90.0, 110.0, 5, _FreeCosts(),
+        target_action="trail")
+    assert gross == pytest.approx(0.0), "평단 아래로 내려가면 안 된다"
 
 
 def test_precomputed_detections_give_identical_trades():

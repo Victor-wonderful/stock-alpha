@@ -2084,6 +2084,9 @@ export interface PickRecord {
     // 본전 도달가에 닿아 손절이 본전으로 올라간 뒤, 되돌아와 그 자리에서 나간 픽.
     // 손절이 아니라 무승부다(수익률 ~0%) — «손절»로 적으면 진 것처럼 읽힌다.
     | "본전 청산"
+    // 2026-08-27 규칙 교체. 목표 도달 뒤 손절이 «고점 − 1R» 을 따라 올라가고,
+    // 되돌아와 그 자리에서 나간 픽. 이익이 남는 청산이다 — 본전 청산과 다르다.
+    | "추격 청산"
     | "—";
   closed: boolean; // 엔진이 확정 기록한 픽인지(0017) — 표시 구분용
   closed_at?: string | null; // 청산일 — 포지션 합산(보유 창) 판정용
@@ -2098,6 +2101,8 @@ const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
   // 채택 규칙(trail)에서 목표에 닿아 본전스톱으로 전환된 뒤 되돌아온 픽.
   // 거래는 거래다 — 승률의 분모에 들어간다(분자에는 안 들어간다, 수익률 0%).
   breakeven: "본전 청산",
+  // 추격 스톱(고점 − 1R)에 걸려 «이익을 남기고» 나간 픽 — 승률의 분자에 들어간다.
+  trailed: "추격 청산",
   // 진입가에 끝내 닿지 않아 «살 수가 없었던» 픽(2026-08-20). 거래가 없었으므로
   // 손익도 없다 — 승률 계산에서 분모·분자 어디에도 넣지 않는다.
   unfilled: "미체결",
@@ -2143,7 +2148,7 @@ export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
     const { data } = await supabase
       .from("recommendations")
       .select(
-        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,horizon,setup,instruments(symbol,name)",
+        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,confirmed_at,instrument_id,horizon,setup,instruments(symbol,name)",
       )
       .eq("basket_type", "daily_focus")
       .eq("status", "open")
@@ -2152,25 +2157,39 @@ export async function getOpenPicks(limit = 30): Promise<OpenPick[]> {
     const rows = (data ?? []) as Record<string, unknown>[];
     if (rows.length === 0) return [];
 
-    const picks = rows.map((r) => {
+    const picks = await Promise.all(rows.map(async (r) => {
       const inst = (r.instruments ?? {}) as Record<string, unknown>;
+      // 채택 규칙(target_action="trail")에서 tp1_hit 은 «1차 익절»이 아니라
+      // **손절이 전환됨**을 뜻한다(2026-08-22). 그래서 바뀌는 건 목표가 아니라
+      // 손절이다 — 예전 코드는 정반대로 «목표를 tp2 로 바꾸고 손절은 그대로»였고,
+      // 그건 옛 스케일아웃(0022) 전제였다. tp2 는 trail 경로가 아예 안 쓴다.
+      //
+      // 2026-08-27 개정: 전환 뒤 손절선은 진입가 고정이 아니라 «고점 − 1R»이다
+      // (하한은 진입가). 엔진(resolve_pick_status)과 같은 선을 그려야 /picks·
+      // /focus·실제 청산이 어긋나지 않는다.
+      const entry = (r.entry_price as number) ?? null;
+      const stopRaw = (r.stop_loss as number) ?? null;
+      let stop = stopRaw;
+      if (r.tp1_hit && entry != null) {
+        stop = entry;
+        if (stopRaw != null) {
+          const since = (r.confirmed_at as string | null) ?? String(r.as_of);
+          const peak = await getPeakHigh(r.instrument_id as number, since);
+          if (peak != null) stop = Math.max(entry, peak - (entry - stopRaw));
+        }
+      }
       return {
         symbol: (inst.symbol as string) ?? "",
         name: (inst.name as string) ?? "",
         asOf: String(r.as_of),
-        entry: (r.entry_price as number) ?? null,
-        // 채택 규칙(target_action="trail")에서 tp1_hit 은 «1차 익절»이 아니라
-        // **본전스톱으로 전환됨**을 뜻한다(2026-08-22). 그래서 바뀌는 건 목표가 아니라
-        // 손절이다 — 예전 코드는 정반대로 «목표를 tp2 로 바꾸고 손절은 그대로»였고,
-        // 그건 옛 스케일아웃(0022) 전제였다. tp2 는 trail 경로가 아예 안 쓴다.
+        entry,
         target: (r.target_price as number) ?? null,
-        stop: ((r.tp1_hit ? (r.entry_price as number) : (r.stop_loss as number)) ??
-          null) as number | null,
+        stop,
         tp1Hit: Boolean(r.tp1_hit),
         horizon: (r.horizon as string) ?? null,
         setup: (r.setup as string) ?? null,
       };
-    });
+    }));
 
     const priceMap = await getLatestPricesBySymbols(picks.map((p) => p.symbol));
     const today = Date.now();
@@ -2333,7 +2352,7 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
     const { data, error } = await supabase
       .from("recommendations")
       .select(
-        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,instrument_id,status,closed_at,exit_price,close_return_pct,horizon,setup,instruments(symbol,name)",
+        "as_of,entry_price,target_price,tp2_price,stop_loss,tp1_hit,confirmed_at,instrument_id,status,closed_at,exit_price,close_return_pct,horizon,setup,instruments(symbol,name)",
       )
       .eq("basket_type", "daily_focus")
       .order("as_of", { ascending: false })
@@ -2382,24 +2401,36 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
         }
 
         // 열린 픽 — 읽기 시점 최신 종가로 추정 표시.
-        // 채택 규칙(trail·0037): tp1_hit 픽은 본전(entry)스톱 기준으로 추정 —
-        // 잔량이 본전 밑이면 «본전 청산» 예상 상태(손절이 아니라 무승부).
+        // 채택 규칙(trail·0037, 2026-08-27 개정): 목표에 닿은 픽은 손절이
+        // «고점 − 1R» 을 따라 올라간다. 화면도 그 올라간 선을 써야 엔진과 같은
+        // 손절가를 그린다 — 진입가를 그대로 쓰면 실제보다 낮게 나온다.
         const tp2 = r.tp2_price as number | null;
         const tp1Hit = Boolean(r.tp1_hit);
         const price = await getLatestPrice(r.instrument_id as number);
         const last = price.data?.close ?? null;
         const ret =
           entry != null && entry > 0 && last != null ? last / entry - 1 : null;
-        const effStop = tp1Hit && entry != null ? entry : stop;
+        let effStop = tp1Hit && entry != null ? entry : stop;
+        if (tp1Hit && entry != null && stop != null) {
+          const since = (r.confirmed_at as string | null) ?? (r.as_of as string);
+          const peak = await getPeakHigh(r.instrument_id as number, since);
+          if (peak != null) effStop = Math.max(entry, peak - (entry - stop));
+        }
         const effTarget = tp1Hit && tp2 != null ? tp2 : target;
         let status: PickRecord["status"] = "—";
         if (last != null && entry != null) {
-          if (effStop != null && last <= effStop) status = tp1Hit ? "본전 청산" : "손절";
-          else if (effTarget != null && last >= effTarget) status = "목표 도달";
+          if (effStop != null && last <= effStop) {
+            status = !tp1Hit
+              ? "손절"
+              : effStop > entry
+                ? "추격 청산"
+                : "본전 청산";
+          } else if (effTarget != null && last >= effTarget) status = "목표 도달";
           else status = "진행중";
         }
-        // 본전스톱 전환(0037) 뒤에는 저장된 stop_loss 가 아니라 올라간 손절선(진입가)이
-        // 유효하다 — 저장값을 그대로 내보내면 /picks 가 /focus 와 다른 손절가를 그린다.
+        // 전환(0037) 뒤에는 저장된 stop_loss 가 아니라 올라간 손절선(고점 − 1R,
+        // 하한 진입가)이 유효하다 — 저장값을 그대로 내보내면 /picks 가 /focus 와
+        // 다른 손절가를 그린다.
         return {
           ...base,
           stop_loss: effStop,
@@ -2587,6 +2618,28 @@ export async function getOhlcv(
     return { data: candles, isSample: false };
   } catch {
     return { data: [], isSample: true };
+  }
+}
+
+/** 특정 날짜 이후의 최고가 — 추격 손절선(고점 − 1R) 추정용. 없으면 null. */
+export async function getPeakHigh(
+  instrumentId: number,
+  since: string,
+): Promise<number | null> {
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("ohlcv")
+      .select("high")
+      .eq("instrument_id", instrumentId)
+      .eq("interval", "1d")
+      .gte("ts", since)
+      .order("high", { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) return null;
+    return Number(data[0].high);
+  } catch {
+    return null;
   }
 }
 

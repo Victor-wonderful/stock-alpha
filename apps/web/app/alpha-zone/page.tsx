@@ -39,7 +39,7 @@ export default async function AlphaZonePage() {
 
       {/* 범례 */}
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
-        <ZoneKey color="rgba(46,189,133,0.85)" label="진입 → 본전 도달가" />
+        <ZoneKey color="rgba(46,189,133,0.85)" label="진입 → 목표가" />
         <ZoneKey color="rgba(61,123,255,0.85)" label="진입 → 손절가" />
         <ZoneKey color="#1F5FD0" label="손절선" line />
         <span className="ml-auto text-text-mute">
@@ -62,7 +62,7 @@ export default async function AlphaZonePage() {
       )}
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-text-mute">
-        매수 추천이 아닌 셋업 트리거 기록 — 진입·손절·본전 도달가는 백테스트 캘리브레이션 기준 · 판단 책임은 투자자 본인
+        매수 추천이 아닌 셋업 트리거 기록 — 진입·손절·목표가는 백테스트 캘리브레이션 기준 · 판단 책임은 투자자 본인
       </p>
     </AppShell>
   );
@@ -160,7 +160,7 @@ function ZoneCard({ c }: { c: AlphaZoneCard }) {
         <Stat label="진입" value={fmtPrice(c.entry, c.currency)} />
         <Stat label="손절" value={fmtPrice(c.stop, c.currency)} tone="bad" sub={fmtPct(slPct)} />
         <Stat
-          label="본전 도달"
+          label="목표 도달"
           value={fmtPrice(c.tp1, c.currency)}
           tone="good"
           sub={tpPct != null ? fmtPct(tpPct) : undefined}

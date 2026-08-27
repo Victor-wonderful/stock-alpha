@@ -106,7 +106,8 @@ def precompute_detections(
     return out
 
 
-def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell"):
+def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell",
+                  trail_r_mult=1.0):
     """분할 진입 — 나눠 사고 한 번에 판다.
 
     legs: [(비중, 진입가), ...] 1차가 맨 앞. 1차는 진입 봉에 체결된 것으로 보고,
@@ -126,10 +127,21 @@ def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell"
 
     target_action — 목표가에 닿았을 때 무엇을 하는가.
       "sell"  (기본) 목표가에 전량 청산. 상방이 목표에서 잘린다.
-      "trail" **팔지 않고 손절을 평단(본전)으로 올린 뒤 기간까지 보유한다.**
+      "trail" **팔지 않고 손절을 «고점 추격»으로 바꾼 뒤 기간까지 보유한다.**
               파는 주체는 기간이고 목표는 안전장치가 된다 — 되돌림은 막으면서
               상방은 안 자른다. 목표를 아예 끄면(use_targets=False) 되돌림을 그대로
               맞고, 목표에 팔면 크게 가는 종목을 놓친다. 그 사이를 노린다.
+
+              스톱 = max(평단, 그동안의 최고가 − trail_r_mult×R),  R = 평단 − 최초손절.
+              «되돌려줄 수 있는 최대치는 처음에 걸었던 리스크만큼»이라는 규칙이다.
+              한 번 올라간 스톱은 내려오지 않는다(래칫). 하한이 평단이므로 옛
+              본전스톱보다 **낮아지는 일은 없다** — 더 일찍 털리는 대신 더 높은
+              가격에 나간다.
+
+              ⚠️ 2026-08-27 Victor 결정으로 «본전 고정»에서 바꿨다. 본전스톱은
+              12개 비교에서 검증됐지만(var/holding_horizon_trail.jsonl) 추격스톱은
+              **측정된 적이 없다.** 되돌림을 무승부가 아니라 이익으로 끝내려는
+              의도적 교체이고, 게이트가 다음 배치에서 이 규칙으로 다시 잰다.
 
     반환: (net_pnl, gross_pnl, bars, filled_w, avg_entry)
     """
@@ -141,10 +153,14 @@ def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell"
     idx = cap
     eff_stop = stop
     trailed = False
+    peak = None
+    trail_dist = 0.0
     for j in range(i + 1, cap + 1):
         lo, hi = float(df["low"].iloc[j]), float(df["high"].iloc[j])
         while pending and lo <= pending[0][1]:         # 추가 체결(보수적: 먼저)
             filled.append(pending.pop(0))
+        # 손절을 목표보다 «먼저» 본다(보수적). 이 순서 덕에, 목표를 찍은 그 봉의
+        # 저가로 곧바로 새 스톱에 걸리는 일이 없다 — 스톱은 그 봉 «다음»부터 산다.
         if lo <= eff_stop:
             exit_price, idx = eff_stop, j
             break
@@ -152,9 +168,15 @@ def _exit_scalein(df, i, n, legs, stop, tp, timeout, costs, target_action="sell"
             if target_action != "trail":
                 exit_price, idx = tp, j
                 break
-            if not trailed:                            # 목표 도달 → 본전 스톱으로 전환
+            if not trailed:                            # 목표 도달 → 추격 스톱 개시
                 trailed = True
-                eff_stop = sum(w * e for w, e in filled) / sum(w for w, _ in filled)
+                avg_e = sum(w * e for w, e in filled) / sum(w for w, _ in filled)
+                trail_dist = max(avg_e - stop, 0.0) * trail_r_mult
+                eff_stop = avg_e                       # 하한 = 평단. 그 아래로는 안 간다
+                peak = hi
+        if trailed and trail_dist > 0:                 # 래칫 — 올라가기만 한다
+            peak = hi if peak is None else max(peak, hi)
+            eff_stop = max(eff_stop, peak - trail_dist)
     if exit_price is None:                             # 기간 만료 → 종가
         exit_price = float(df["close"].iloc[cap])
         idx = cap
@@ -240,7 +262,8 @@ def backtest_playbook(
     timeout_bars: int | None = None,      # 실험: 보유 상한(봉) override — 고정 보유기간
     use_targets: bool = True,             # 실험: False 면 목표가 청산을 끈다
     scale_in: tuple[tuple[float, float], ...] | None = None,
-    target_action: str = "sell",          # "trail" 이면 목표에서 안 팔고 본전스톱
+    target_action: str = "sell",          # "trail" 이면 목표에서 안 팔고 고점 추격스톱
+    trail_r_mult: float = 1.0,            # 추격 폭 — 고점에서 몇 R 아래 (HorizonProfile)
     tp_atr_mults: tuple[float, ...] | None = None,   # 목표 ATR 배수 override
     detections: list | None = None,       # precompute_detections 결과 재사용(속도)
 ) -> list[Trade]:
@@ -366,7 +389,7 @@ def backtest_playbook(
             pnl, gross, bars, _fw, _avg = _exit_scalein(
                 df, i_entry, n, eff_legs, stop,
                 tp if use_targets else float("inf"), timeout, costs,
-                target_action=target_action)
+                target_action=target_action, trail_r_mult=trail_r_mult)
         elif not use_targets:
             # 목표 없음 — 손절 아니면 기간 만료 종가. tp 를 도달 불가 값으로 둔다.
             pnl, gross, bars = _exit_single(

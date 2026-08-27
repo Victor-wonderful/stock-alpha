@@ -698,7 +698,7 @@ export default async function ScreenerPage({
                     "손절가",
                     // 「목표가」·「R:R」을 버렸다(2026-08-23). 채택 규칙(trail)은 목표에서
                     // 팔지 않는다 — 닿으면 손절만 진입가로 올린다. 홈·오늘의 픽과 같은 말로.
-                    "본전 도달가",
+                    "목표가",
                     "1주당 리스크",
                     "합성알파",
                     "12일 추세",
@@ -819,7 +819,7 @@ export default async function ScreenerPage({
                         {fmtPrice(s.entry_price)}
                       </td>
 
-                      {/* 손절가 — 본전 도달가보다 앞에 둔다. 잃는 쪽을 먼저 읽게. */}
+                      {/* 손절가 — 목표가보다 앞에 둔다. 잃는 쪽을 먼저 읽게. */}
                       <td className="mono px-3 py-3">
                         <span className="text-[13px] font-semibold text-bad">
                           {fmtPrice(s.stop_loss)}
@@ -831,7 +831,7 @@ export default async function ScreenerPage({
                         )}
                       </td>
 
-                      {/* 본전 도달가 — 파는 값이 아니다. 닿으면 손절이 진입가로 올라간다. */}
+                      {/* 목표가 — 파는 값이 아니다. 닿으면 손절이 «고점 − 1R» 을 따라간다. */}
                       <td className="mono px-3 py-3">
                         <span className="text-[13px] font-semibold text-good">
                           {fmtPrice(s.tp1)}
