@@ -107,7 +107,7 @@ export function BackfillTrackRecord() {
         <p className="mt-1 text-[11px] leading-relaxed text-text-mute">
           발행한 픽이 아니라 <b className="font-semibold text-text-dim">계산</b>입니다.{" "}
           {snap.start} ~ {snap.end} ({snap.tradingDays}거래일)에 지금 규칙을 그대로
-          적용했습니다 — 다음 거래일 시가 진입 · 목표는 본전스톱 · 기간별 보유 상한 ·
+          적용했습니다 — 다음 거래일 시가 진입 · 목표는 본전스톱(재현 당시 규칙) · 기간별 보유 상한 ·
           하루 최대 {snap.picksMax}건 · 한 종목 1건. 후보 {snap.candidates.toLocaleString("ko-KR")}건
           중에서 골랐습니다.
         </p>
