@@ -764,25 +764,36 @@ _KEPCO_BARS = [
 ]
 
 
-def test_breakeven_stop_ignores_the_bar_it_was_raised_on():
-    """전환 봉의 저가로 본전 청산되면 안 된다 — 그 저가는 전환보다 먼저 지나갔다.
+def test_trail_stop_ignores_the_bar_it_was_raised_on():
+    """전환 봉의 저가로 스톱이 걸리면 안 된다 — 그 저가는 전환보다 먼저 지나갔다.
 
-    2026-08-27 실제 사고: 한전기술이 진입 봉(8/26)에 목표를 찍어 본전스톱으로
-    전환됐는데, 다음 날 배치가 «같은 봉»을 다시 읽으며 그 봉의 저가로 본전 청산했다.
-    8/27 종가로 +14.6% 인 픽이 0% 무승부로 기록됐다.
+    2026-08-27 실제 사고: 한전기술이 진입 봉(8/26)에 목표를 찍어 스톱이 전환됐는데,
+    다음 날 배치가 «같은 봉»을 다시 읽으며 그 봉의 저가(107,600)로 청산했다.
+    가드가 없으면 진입가 110,200(=0%)에 닫힌다. 있으면 8/27 저가가 추격 스톱
+    (고점 135,400 − 1R 7,122 = 128,278)을 건드려 **이익으로** 닫힌다.
     """
     out = rd.resolve_pick_status(_kepco_pick(), _KEPCO_BARS, date(2026, 8, 27))
-    assert out is None, f"열려 있어야 하는데 {out} 로 닫혔다"
+    assert out["status"] == "trailed", "본전(0%)으로 닫히면 그 봉을 또 읽은 것이다"
+    assert out["exit_price"] == pytest.approx(128277.7)
+    assert out["close_return_pct"] > 0.16
 
 
-def test_breakeven_stop_still_fires_on_a_later_bar():
-    """다음 봉부터는 본전스톱이 정상 작동한다 — 가드가 규칙을 죽이면 안 된다."""
+def test_trail_stop_ratchets_up_and_never_below_entry():
+    """스톱은 고점을 따라 올라가기만 하고, 하한은 진입가다."""
     bars = _KEPCO_BARS[:1] + [
-        {"low": 105000.0, "high": 124000.0, "close": 106000.0, "ts": "2026-08-27"}]
-    out = rd.resolve_pick_status(_kepco_pick(), bars, date(2026, 8, 27))
-    assert out["status"] == "breakeven"
-    assert out["exit_price"] == 110200.0
-    assert out["close_return_pct"] == 0.0
+        # 고점이 더 오르면 스톱도 오른다 → 다음 봉에서 그 자리에 걸린다
+        {"low": 130000.0, "high": 140000.0, "close": 139000.0, "ts": "2026-08-27"},
+        {"low": 120000.0, "high": 141000.0, "close": 121000.0, "ts": "2026-08-28"}]
+    out = rd.resolve_pick_status(_kepco_pick(), bars, date(2026, 8, 28))
+    assert out["status"] == "trailed"
+    assert out["exit_price"] == pytest.approx(132877.7)   # 140,000 − 7,122.3
+
+
+def test_trail_falls_back_to_breakeven_when_stop_is_missing():
+    """손절가가 없으면 되돌림 폭을 못 구한다 — 옛 본전스톱으로 물러선다."""
+    pick = _kepco_pick(stop_loss=None)
+    out = rd.resolve_pick_status(pick, _KEPCO_BARS, date(2026, 8, 27))
+    assert out is None or out["status"] == "breakeven"
 
 
 def test_scaleout_breakeven_also_ignores_the_transition_bar():

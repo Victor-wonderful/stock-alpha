@@ -70,7 +70,7 @@ export function HomeHero({
         </p>
 
         <p className="text-[14.5px] leading-[1.8] text-on-navy-2 xl:w-[560px] xl:text-[15px] xl:leading-[1.75]">
-          백테스트를 통과한 전략만 추천에 올립니다. 진입가·손절가·본전 도달가까지 계산해
+          백테스트를 통과한 전략만 추천에 올립니다. 진입가·손절가·목표가까지 계산해
           <br className="hidden xl:inline" />
           붙이고, 맞은 것과 틀린 것을 모두 기록으로 남깁니다.
         </p>

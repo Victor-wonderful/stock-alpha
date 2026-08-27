@@ -101,7 +101,7 @@ export function SignalTable({ rows }: { rows: SignalView[] }) {
             {/* 「목표」·「R:R」을 버렸다(2026-08-23) — 채택 규칙(trail)은 목표에서
                 팔지 않고 손절만 진입가로 올린다. 홈·오늘의 픽·스크리너와 같은 말로. */}
             <Th className="text-right">손절</Th>
-            <Th className="text-right">본전 도달가</Th>
+            <Th className="text-right">목표가</Th>
             <Th className="text-right">1주당 리스크</Th>
             <Th className="pr-4 text-right">비중</Th>
           </tr>

@@ -232,13 +232,13 @@ export default async function StockDetailPage({
             {lead ? (
               <>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-text-dim">
-                  <ZoneKey color="rgba(46,189,133,0.85)" label="진입 → 본전 도달가" />
+                  <ZoneKey color="rgba(46,189,133,0.85)" label="진입 → 목표가" />
                   <ZoneKey color="rgba(61,123,255,0.85)" label="진입 → 손절가" />
                   <ZoneKey color="#1F5FD0" label="손절선" line />
                 </div>
                 <p className="mt-2 text-2xs text-text-mute">
                   {candles.length > 0
-                    ? `* KIS 일봉 ${candles.length}개. 색 존은 대표 시그널의 진입·손절·본전 도달 가격대.`
+                    ? `* KIS 일봉 ${candles.length}개. 색 존은 대표 시그널의 진입·손절·목표 가격대.`
                     : "* 실 OHLCV 연결 전 합성 캔들로 구조를 표시합니다."}
                 </p>
               </>
@@ -512,7 +512,7 @@ function AlphaLevels({
         <Stat label="진입가" value={fmtPrice(entry, currency)} />
         <Stat label="손절가" value={fmtPrice(stop, currency)} tone="bear" sub={fmtPct(slPct)} />
         <Stat
-          label="본전 도달가"
+          label="목표가"
           value={fmtPrice(tp1, currency)}
           tone="bull"
           sub={tpPct != null ? `${fmtPct(tpPct)} · 손절이 본전으로` : "손절이 본전으로"}

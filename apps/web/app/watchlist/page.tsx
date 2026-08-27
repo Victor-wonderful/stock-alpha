@@ -225,14 +225,14 @@ export default async function WatchlistPage() {
  * 새 개념(«픽 담기»)을 하나 더 만들지 않고도 답할 수 있고, 아무도 안 누르면 비어
  * 있는 화면이 하나 더 생기는 일도 없다.
  *
- * 막대는 **손절선과 본전 도달선 사이에서 현재가의 위치**다. 수익률 막대가 아니다 —
+ * 막대는 **손절선과 목표선 사이에서 현재가의 위치**다. 수익률 막대가 아니다 —
  * 이 규칙에서 중요한 것은 «얼마 벌었나»가 아니라 «어느 선에 가까운가»이기 때문이다.
- * 본전 도달선에 닿으면 손절이 진입가로 올라가고(파는 자리가 아니다), 손절선에 닿으면
+ * 목표선에 닿으면 손절이 «고점 − 1R» 추격으로 바뀌고(파는 자리가 아니다), 손절선에 닿으면
  * 전량 정리다.
  */
 function PickPlan({ pick: p, last }: { pick: WatchPick; last: number | null }) {
   const pending = p.status !== "open";
-  // 손절 → 본전 사이에서 현재가가 몇 %쯤인가. 범위 밖이면 끝에 붙인다.
+  // 손절 → 목표 사이에서 현재가가 몇 %쯤인가. 범위 밖이면 끝에 붙인다.
   const pos =
     last != null && p.stop != null && p.target != null && p.target > p.stop
       ? Math.min(100, Math.max(0, ((last - p.stop) / (p.target - p.stop)) * 100))
@@ -246,7 +246,7 @@ function PickPlan({ pick: p, last }: { pick: WatchPick; last: number | null }) {
         </span>
         {p.tp1Hit && (
           <span className="rounded-[999px] bg-good-soft px-2 py-0.5 font-semibold text-good">
-            본전 도달 — 손절이 진입가로
+            목표 도달 — 손절이 고점 추격으로
           </span>
         )}
         {p.fromEntryPct != null && (

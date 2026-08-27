@@ -48,9 +48,9 @@ export interface WatchPick {
   status: string;
   horizon: string | null;
   entry: number | null;
-  /** 본전 도달로 손절이 올라갔으면 진입가가 손절이다(trail 규칙, 0037) */
+  /** 목표 도달로 손절이 올라갔으면 «고점 − 1R»(하한 진입가)이 손절이다(trail 규칙, 0037) */
   stop: number | null;
-  /** 본전 도달가 — 여기 닿으면 손절이 진입가로 올라간다. 파는 자리가 아니다 */
+  /** 목표가 — 여기 닿으면 손절이 고점 추격으로 바뀐다. 파는 자리가 아니다 */
   target: number | null;
   tp1Hit: boolean;
   /** 청산 예정일 라벨 — 휴장일 표가 그 구간을 못 덮으면 null */

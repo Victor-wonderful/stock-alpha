@@ -37,7 +37,7 @@ const HEADS = [
   "진입가",
   "현재 손익률",
   "손절가",
-  "본전 도달가",
+  "목표가",
   "청산 예정일",
   "보유",
 ];
@@ -61,7 +61,7 @@ export function OpenPicksTable({
   return (
     <div className="overflow-hidden rounded-[12px] border border-border bg-surface">
       {/* ── 폰 (768 미만) — 종목당 카드 ──
-          열이 8개다. 폰에서 표로 두면 손절가·본전 도달가가 가로 스크롤 뒤로 숨는데,
+          열이 8개다. 폰에서 표로 두면 손절가·목표가가 가로 스크롤 뒤로 숨는데,
           그 둘이 «지금 팔아야 하나»를 판단하는 값이다(2026-08-24 Victor 의 폰 화면).
           홈의 「오늘의 픽」과 같은 규칙이다 — 두 표는 같은 것을 다른 시점에서 본다. */}
       <div className="md:hidden">
@@ -98,7 +98,7 @@ export function OpenPicksTable({
                       <SymbolCode symbol={p.symbol} className="text-[12px] text-text-mute" />
                       {p.tp1Hit && (
                         <span className="rounded-[4px] bg-pass-soft px-1.5 py-0.5 text-[11px] font-semibold text-pass">
-                          본전스톱
+                          추격스톱
                         </span>
                       )}
                       {near && !p.tp1Hit && (
@@ -146,7 +146,7 @@ export function OpenPicksTable({
                       cls: "text-bad",
                     },
                     {
-                      k: "본전 도달가",
+                      k: "목표가",
                       v: p.target,
                       note: p.tp1Hit
                         ? "도달 — 손절이 본전"
@@ -248,10 +248,10 @@ export function OpenPicksTable({
                           {p.name}
                         </Link>
                         <SymbolCode symbol={p.symbol} className="text-[10.5px] text-text-mute" />
-                        {/* 본전스톱으로 전환된 픽 — 이 시점부터 손절선이 진입가다. */}
+                        {/* 추격스톱으로 전환된 픽 — 이 시점부터 손절선이 «고점 − 1R» 이다. */}
                         {p.tp1Hit && (
                           <span className="rounded-[4px] bg-pass-soft px-1.5 py-px text-[10px] font-semibold text-pass">
-                            본전스톱
+                            추격스톱
                           </span>
                         )}
                         {near && !p.tp1Hit && (
@@ -335,7 +335,7 @@ export function OpenPicksTable({
 
       {picks.length > 0 && (
         <p className="border-t border-border-soft px-4 py-2.5 text-[12px] text-text-mute">
-          손절까지가 0에 가까울수록 코앞입니다 · 본전 도달가에 닿으면 손절이 진입가로
+          손절까지가 0에 가까울수록 코앞입니다 · 목표가에 닿으면 손절이 고점 추격으로
           올라가 그 뒤로는 손해 구간이 사라집니다
         </p>
       )}

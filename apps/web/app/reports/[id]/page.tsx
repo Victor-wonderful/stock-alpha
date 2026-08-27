@@ -338,7 +338,7 @@ export default async function ReportDetailPage({
                             tone: "text-bad",
                           },
                           {
-                            label: "본전 도달가",
+                            label: "목표가",
                             value: fmtPrice(row.tp1),
                             sub: tpPct != null ? `+${tpPct.toFixed(1)}% · 손절이 본전으로` : "손절이 본전으로",
                             tone: "text-good",

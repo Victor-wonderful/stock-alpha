@@ -807,11 +807,13 @@ def resolve_pick_status(
     # 목표가에 닿았을 때 무엇을 하는가 — 기간 프로파일이 정한다(HorizonProfile.
     # target_action). 기간 없는 옛 픽만 "sell"(목표에서 판다)로 폴백한다.
     target_action = "sell"
+    trail_r_mult = 1.0
     if pick.get("horizon"):
         from engine.signals.horizons import get_profile
         prof = get_profile(pick["horizon"], pick.get("setup"))
         timeout = prof.bars
         target_action = prof.target_action
+        trail_r_mult = prof.trail_r_mult
     else:
         timeout = _TIMEOUT_BARS.get(pick.get("style"), 10)
     # 진입 규칙이 next_open 이면 시가 시장가라 «항상 체결»이다 — 체결 확인은 옛
@@ -834,7 +836,8 @@ def resolve_pick_status(
     # trail 에서는 tp2 를 쓰지 않는다(_exit_scalein 이 tp 를 하나만 받는다).
     #   손절 이탈        → 전량 청산 (stopped)
     #   목표 도달        → **팔지 않고** 손절을 진입가(본전)로 올린다. 안 닫는다.
-    #   본전 이탈(전환 후) → 본전 청산 (breakeven) — 손절이 아니라 무승부다
+    #   추격 이탈(전환 후) → 추격 청산 (trailed) — 고점에서 1R 되돌린 자리다
+    #                        스톱이 평단이면 본전 청산(breakeven) — 무승부다
     #   기간 만료        → 그날 종가 전량 (expired)
     if target_action == "trail" and e is not None:
         # tp1_hit 은 여기서 «본전스톱으로 전환됨»을 뜻한다(1차 익절이 아니다).
@@ -842,6 +845,10 @@ def resolve_pick_status(
         eff_stop = e if trailed else s
         filled = trailed or next_open
         trail_from = _trail_from(pick)
+        # 되돌림 허용폭 — 고점에서 몇 R 아래에 스톱을 둘 것인가. 백테스트
+        # (_exit_scalein)와 반드시 같은 식이어야 한다.
+        trail_dist = max(e - s, 0.0) * trail_r_mult if s is not None else 0.0
+        peak: float | None = None
         for k, bar in enumerate(bars):
             lo, hi, cl = _bar_lhc(bar)
             if not filled:
@@ -856,12 +863,18 @@ def resolve_pick_status(
             # 들어온 픽은 _pre_trail 이 그 봉을 걸러 준다(다음 배치의 재판독).
             if (eff_stop is not None and lo <= eff_stop
                     and not _pre_trail(bar, trail_from)):
-                return _close_patch(
-                    "breakeven" if trailed else "stopped",
-                    today, eff_stop, eff_stop / e - 1)
+                if not trailed:
+                    status = "stopped"
+                else:
+                    status = "trailed" if eff_stop > e else "breakeven"
+                return _close_patch(status, today, eff_stop, eff_stop / e - 1)
             if not trailed and t1 is not None and hi >= t1:
                 trailed = True
-                eff_stop = e           # 본전으로 올린다. 팔지 않는다.
+                eff_stop = e           # 하한은 평단. 팔지 않는다.
+                peak = hi
+            if trailed and trail_dist > 0:             # 래칫 — 올라가기만 한다
+                peak = hi if peak is None else max(peak, hi)
+                eff_stop = max(eff_stop, peak - trail_dist)
             if k + 1 >= timeout:
                 return _close_patch("expired", today, cl, cl / e - 1,
                                     tp1_hit=trailed or None)
@@ -1084,8 +1097,9 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
         .eq("basket_type", "daily_focus").eq("status", "open").execute()
     ).data or []
 
-    counts = {"target": 0, "stopped": 0, "breakeven": 0, "expired": 0,
-              "partial": 0, "unfilled": 0, "voided": 0, "tp1_hit": 0, "open": 0}
+    counts = {"target": 0, "stopped": 0, "trailed": 0, "breakeven": 0,
+              "expired": 0, "partial": 0, "unfilled": 0, "voided": 0,
+              "tp1_hit": 0, "open": 0}
     for p in open_picks:
         # 어느 봉부터 따라갈 것인가 — 진입 규칙에 따라 다르다.
         #   next_open: 진입 봉(confirmed_at)«부터». 시가에 이미 샀으므로 그날의
