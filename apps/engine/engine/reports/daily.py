@@ -1050,8 +1050,8 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
         .eq("basket_type", "daily_focus").eq("status", "open").execute()
     ).data or []
 
-    counts = {"target": 0, "stopped": 0, "expired": 0, "partial": 0,
-              "unfilled": 0, "voided": 0, "tp1_hit": 0, "open": 0}
+    counts = {"target": 0, "stopped": 0, "breakeven": 0, "expired": 0,
+              "partial": 0, "unfilled": 0, "voided": 0, "tp1_hit": 0, "open": 0}
     for p in open_picks:
         # 어느 봉부터 따라갈 것인가 — 진입 규칙에 따라 다르다.
         #   next_open: 진입 봉(confirmed_at)«부터». 시가에 이미 샀으므로 그날의
@@ -1076,7 +1076,9 @@ def manage_picks(today: str | None = None) -> dict[str, int]:
             continue
         client.table("recommendations").update(patch).eq("id", p["id"]).execute()
         if "status" in patch:                  # 종결 패치
-            counts[patch["status"]] += 1
+            # 새 종결 상태가 생겨도 배치를 죽이지 않는다 — 2026-08-27 에 본전 청산
+            # (breakeven)이 처음 나오면서 KeyError 로 일일 배치가 3번 다 죽었다.
+            counts[patch["status"]] = counts.get(patch["status"], 0) + 1
         else:                                  # 1차 익절(비종결) — 여전히 open
             counts["tp1_hit"] += 1
             counts["open"] += 1
