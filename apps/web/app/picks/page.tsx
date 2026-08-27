@@ -5,13 +5,19 @@ import { AppShell } from "@/components/AppShell";
 import { tradingDayLabel } from "@/lib/format";
 import { BackfillTrackRecord } from "@/components/BackfillTrackRecord";
 import {
+  getNthTradingDay,
   getPickHistory,
   getResimHorizonStats,
   NON_TRADE_PICK_STATUSES,
   type PickRecord,
 } from "@/lib/data";
 import { HORIZONS, horizonLabel, horizonSpec, isHorizonPaused } from "@/lib/holding";
-import { fmtPct, fmtPrice } from "@/lib/format";
+import {
+  fmtPct,
+  fmtPrice,
+  nthTradingDayLabel,
+  tradingWindowIsCertain,
+} from "@/lib/format";
 
 // force-dynamic 제거(2026-08-15): 이 플래그는 fetch 캐시까지 강제로 끈다
 // (fetchCache: force-no-store). 데이터는 하루 두 번 배치로만 바뀌는데도 매 클릭마다
@@ -72,6 +78,47 @@ export default async function PicksPage({
   const legacy = history.data.filter((r) => !r.horizon);
   const all = legacyView ? legacy : current;
   const rows = filter === "전체" ? all : all.filter((r) => r.status === filter);
+
+  // ── 청산 예정일 ──
+  // 기간은 «만기»가 아니라 «상한»이다. 손절·추격 스톱에 걸리면 그 전에 끝나고,
+  // 아무것도 안 걸리면 이 날 종가에 판다. 아직 안 끝난 픽에만 붙인다.
+  //
+  // 세는 기준이 다르면 하루가 어긋난다(홈과 같은 규칙):
+  //   진입 확정된 픽 — 진입일이 «1거래일째»다 → confirmed_at 뒤로 bars-1 거래일
+  //   아직 안 산 픽   — 발행일 다음 거래일이 진입일이다 → as_of 뒤로 bars 거래일
+  //
+  // 픽마다 부르면 왕복이 는다(픽 14건이면 28회). 같은 (기준일, 기간) 조합만 센다.
+  const exitDue = new Map<string, string | null>();
+  {
+    const keyOf = (r: PickRecord) => {
+      const bars = horizonSpec(r.horizon)?.bars;
+      if (!bars || r.closed) return null;
+      const from = r.confirmed_at ?? r.as_of;
+      const n = r.confirmed_at ? bars - 1 : bars;
+      return from && n > 0 ? `${from}|${n}|${bars}` : null;
+    };
+    const combos = [...new Set(all.map(keyOf).filter((k): k is string => !!k))];
+    const resolved = await Promise.all(
+      combos.map((k) => {
+        const [from, n] = k.split("|");
+        return getNthTradingDay(from, Number(n));
+      }),
+    );
+    combos.forEach((k, i) => {
+      const [from, n, bars] = k.split("|");
+      // DB 휴장일 표가 그 구간을 못 덮으면 주말만 건너뛴 추정으로 물러선다. 그 창에
+      // 고정 공휴일이 하나라도 낄 수 있으면 아예 비운다 — 틀린 날짜보다 «없음»이 낫다.
+      const fallback = tradingWindowIsCertain(from, Number(bars) * 2)
+        ? nthTradingDayLabel(from, Number(n))
+        : null;
+      exitDue.set(k, resolved[i] ? tradingDayLabel(resolved[i]!) : fallback);
+    });
+    // 행에서 바로 꺼내 쓰도록 같은 키로 되짚는다.
+    for (const r of all) {
+      const k = keyOf(r);
+      if (k) exitDue.set(`row:${r.as_of}|${r.symbol}`, exitDue.get(k) ?? null);
+    }
+  }
 
   // 요약 집계 — 전체 발행 기준 (필터와 무관)
   //
@@ -504,7 +551,14 @@ export default async function PicksPage({
                           </span>
                         )}
                       </div>
-                      <p className="tnum mt-1 text-[12px] text-text-mute">{r.as_of} 발행</p>
+                      <p className="tnum mt-1 text-[12px] text-text-mute">
+                        {r.as_of} 발행
+                        {r.closed && r.closed_at
+                          ? ` · ${tradingDayLabel(r.closed_at)} 청산`
+                          : exitDue.get(`row:${r.as_of}|${r.symbol}`)
+                            ? ` · ~${exitDue.get(`row:${r.as_of}|${r.symbol}`)} 청산 예정`
+                            : ""}
+                      </p>
                     </div>
                     <div className="shrink-0 text-right">
                       <p
@@ -598,7 +652,26 @@ export default async function PicksPage({
                           </span>
                         )}
                       </td>
-                      <td className="tnum px-3 py-2.5 text-left text-text-dim">{r.as_of}</td>
+                      <td className="tnum px-3 py-2.5 text-left align-top text-text-dim">
+                        {r.as_of}
+                        {/* 청산일 — 끝난 픽은 실제로 나간 날, 진행중이면 «상한이
+                            다 차는 날». 기간 칩만으로는 «언제까지 들고 있나»가
+                            안 보인다(2026-08-27 Victor). */}
+                        {r.closed && r.closed_at ? (
+                          <span className="block text-[10px] text-text-mute">
+                            청산 {tradingDayLabel(r.closed_at)}
+                          </span>
+                        ) : (
+                          exitDue.get(`row:${r.as_of}|${r.symbol}`) && (
+                            <span
+                              className="block text-[10px] text-text-mute"
+                              title="손절·추격 스톱에 걸리면 이 날 전에 끝납니다 — 기간은 상한입니다"
+                            >
+                              ~{exitDue.get(`row:${r.as_of}|${r.symbol}`)} 예정
+                            </span>
+                          )
+                        )}
+                      </td>
                       <td className="tnum px-3 py-2.5 text-right text-text">{fmtPrice(r.entry_price)}</td>
                       <td
                         className={`tnum px-3 py-2.5 text-right ${r.closed ? "text-text-dim" : "text-text"}`}
