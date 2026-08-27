@@ -729,6 +729,34 @@ def _bar_lhc(bar: dict) -> tuple[float, float, float]:
     return float(bar["low"]), float(bar["high"]), float(bar["close"])
 
 
+def _pre_trail(bar: dict, trail_from: str) -> bool:
+    """본전스톱을 적용하면 «안 되는» 봉인가 — 전환이 일어난 봉과 그 이전.
+
+    전환(목표 도달 → 손절을 본전으로)은 그 봉의 «고가»로 일어난다. 그 봉의 저가는
+    전환보다 먼저 지나간 가격이므로 본전스톱에 걸릴 수 없다. 한 번의 실행 안에서는
+    검사 순서(손절 → 목표)가 이걸 막지만, 전환이 DB 에 저장된 뒤 «다음» 배치가 같은
+    봉을 다시 읽을 때는 막지 못한다 — 처음부터 본전스톱을 켠 채로 읽기 때문이다.
+
+    2026-08-27 한전기술이 그렇게 닫혔다: 진입 봉(8/26)에 목표를 찍어 본전스톱으로
+    전환됐는데, 다음 날 배치가 같은 봉의 저가(107,600 < 진입 110,200)로 본전 청산했다.
+    그날 종가로 +14.6% 인 픽이 0% 무승부로 기록됐다.
+
+    ts 가 없는 봉(단위 테스트의 합성 봉)은 판단하지 않는다 — 기존 동작 그대로.
+    """
+    ts = str(bar.get("ts") or "")[:10]
+    return bool(trail_from and ts and ts <= trail_from)
+
+
+def _trail_from(pick: dict) -> str:
+    """이 픽이 «이미 전환된 채로» 들어왔다면 그 전환일(YYYY-MM-DD), 아니면 빈 문자열.
+
+    이번 실행 안에서 전환되는 경우는 빈 문자열이다 — 그때는 검사 순서가 보호한다.
+    """
+    if not pick.get("tp1_hit"):
+        return ""
+    return str(pick.get("tp1_hit_at") or "")[:10]
+
+
 def resolve_pick_status(
     pick: dict, bars: list[dict] | None, today: date
 ) -> dict | None:
@@ -813,6 +841,7 @@ def resolve_pick_status(
         trailed = bool(pick.get("tp1_hit"))
         eff_stop = e if trailed else s
         filled = trailed or next_open
+        trail_from = _trail_from(pick)
         for k, bar in enumerate(bars):
             lo, hi, cl = _bar_lhc(bar)
             if not filled:
@@ -823,8 +852,10 @@ def resolve_pick_status(
                 else:
                     continue
             # 손절을 목표보다 먼저 본다 — 백테스트와 같은 순서(보수적). 전환된 봉에서
-            # 곧바로 본전에 걸리는 일도 이 순서 덕에 생기지 않는다.
-            if eff_stop is not None and lo <= eff_stop:
+            # 곧바로 본전에 걸리는 일도 이 순서 덕에 생기지 않는다. 이미 전환된 채로
+            # 들어온 픽은 _pre_trail 이 그 봉을 걸러 준다(다음 배치의 재판독).
+            if (eff_stop is not None and lo <= eff_stop
+                    and not _pre_trail(bar, trail_from)):
                 return _close_patch(
                     "breakeven" if trailed else "stopped",
                     today, eff_stop, eff_stop / e - 1)
@@ -870,6 +901,7 @@ def resolve_pick_status(
         return None
 
     tp1_hit = bool(pick.get("tp1_hit"))
+    trail_from = _trail_from(pick)
     tp1_ret = (t1 / e - 1) if t1 is not None else 0.0
     # tp1 을 이미 맞은 픽은 과거에 체결된 것이다(그때 진입 없이 익절될 수 없다).
     filled = tp1_hit or next_open
@@ -895,9 +927,11 @@ def resolve_pick_status(
             if k + 1 >= timeout:
                 return _close_patch("expired", today, cl, cl / e - 1)
         else:
-            if lo <= e:                                    # 본전 청산 → 1차 익절만 실현
+            # 전환 봉(과 그 이전)은 건너뛴다 — 그 봉에서는 이미 «tp2 불허»로 지나갔다.
+            pre = _pre_trail(bar, trail_from)
+            if lo <= e and not pre:                        # 본전 청산 → 1차 익절만 실현
                 return _close_patch("partial", today, e, 0.5 * tp1_ret)
-            if hi >= t2:                                   # 2차 목표 → 전량 익절
+            if hi >= t2 and not pre:                       # 2차 목표 → 전량 익절
                 return _close_patch("target", today, t2,
                                     0.5 * tp1_ret + 0.5 * (t2 / e - 1))
             if k + 1 >= timeout:
