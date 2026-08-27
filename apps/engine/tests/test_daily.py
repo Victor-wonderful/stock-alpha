@@ -744,3 +744,53 @@ def test_select_picks_respects_open_book():
     assert select_picks([report], open_book=full) == []
     # 미주입이면 제약 없음(하위호환).
     assert len(select_picks([report])) == 1
+
+
+def _kepco_pick(**over):
+    """2026-08-27 한전기술 재현용 픽 — 진입 봉에서 목표를 찍고 본전스톱으로 전환됐다."""
+    pick = {"as_of": "2026-08-25", "style": "swing", "horizon": "short",
+            "setup": "vol_squeeze", "entry_rule": "next_open",
+            "confirmed_at": "2026-08-26", "entry_price": 110200.0,
+            "stop_loss": 103077.7, "target_price": 124444.6,
+            "tp2_price": 135128.0, "tp1_hit": True, "tp1_hit_at": "2026-08-26"}
+    pick.update(over)
+    return pick
+
+
+_KEPCO_BARS = [
+    # 진입 봉 — 고가가 목표를 넘겨 전환됐다. 저가는 진입가 아래지만 «전환 전»이다.
+    {"low": 107600.0, "high": 135400.0, "close": 123400.0, "ts": "2026-08-26"},
+    {"low": 117800.0, "high": 128400.0, "close": 126300.0, "ts": "2026-08-27"},
+]
+
+
+def test_breakeven_stop_ignores_the_bar_it_was_raised_on():
+    """전환 봉의 저가로 본전 청산되면 안 된다 — 그 저가는 전환보다 먼저 지나갔다.
+
+    2026-08-27 실제 사고: 한전기술이 진입 봉(8/26)에 목표를 찍어 본전스톱으로
+    전환됐는데, 다음 날 배치가 «같은 봉»을 다시 읽으며 그 봉의 저가로 본전 청산했다.
+    8/27 종가로 +14.6% 인 픽이 0% 무승부로 기록됐다.
+    """
+    out = rd.resolve_pick_status(_kepco_pick(), _KEPCO_BARS, date(2026, 8, 27))
+    assert out is None, f"열려 있어야 하는데 {out} 로 닫혔다"
+
+
+def test_breakeven_stop_still_fires_on_a_later_bar():
+    """다음 봉부터는 본전스톱이 정상 작동한다 — 가드가 규칙을 죽이면 안 된다."""
+    bars = _KEPCO_BARS[:1] + [
+        {"low": 105000.0, "high": 124000.0, "close": 106000.0, "ts": "2026-08-27"}]
+    out = rd.resolve_pick_status(_kepco_pick(), bars, date(2026, 8, 27))
+    assert out["status"] == "breakeven"
+    assert out["exit_price"] == 110200.0
+    assert out["close_return_pct"] == 0.0
+
+
+def test_scaleout_breakeven_also_ignores_the_transition_bar():
+    """옛 스케일아웃 픽(tp2 있음·기간 없음)도 같은 재판독 함정을 피한다."""
+    pick = {"as_of": "2026-08-25", "style": "swing", "entry_rule": "next_open",
+            "confirmed_at": "2026-08-26", "entry_price": 100.0, "stop_loss": 95.0,
+            "target_price": 106.0, "tp2_price": 112.0,
+            "tp1_hit": True, "tp1_hit_at": "2026-08-26"}
+    bars = [{"low": 97.0, "high": 107.0, "close": 105.0, "ts": "2026-08-26"},
+            {"low": 104.0, "high": 109.0, "close": 108.0, "ts": "2026-08-27"}]
+    assert rd.resolve_pick_status(pick, bars, date(2026, 8, 27)) is None
