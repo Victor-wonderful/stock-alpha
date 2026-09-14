@@ -141,3 +141,52 @@ export async function signOut() {
   revalidatePath("/", "layout");
   redirect("/");
 }
+
+/**
+ * 비밀번호 재설정 메일 (2026-09-14 Victor: "회원이 비밀번호 잊어버리거나 새로 셋팅해야
+ * 할 경우도 있잖아"). 그때까지 이 제품에는 «비밀번호를 잊으면 끝»이었다.
+ *
+ * 메일의 링크는 /auth/confirm 으로 온다(type=recovery). 거기서 토큰을 세션으로 바꾸고
+ * /account/password 로 보내면, 그 화면이 새 비밀번호를 받는다.
+ *
+ * 결과 문구는 **주소가 있든 없든 같다** — 「그 이메일은 가입돼 있지 않습니다」라고
+ * 말하면 누가 회원인지 밖에서 알아낼 수 있다.
+ */
+export async function requestPasswordReset(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) redirect("/login/reset?error=" + encodeURIComponent("이메일을 입력해 주세요."));
+
+  const supabase = await createClient();
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/$/, "");
+  await supabase.auth.resetPasswordForEmail(email, {
+    // 비어 있으면(로컬) Supabase 의 Site URL 로 간다.
+    redirectTo: site ? `${site}/auth/confirm?next=/account/password` : undefined,
+  });
+  // 오류도 삼킨다 — 속도 제한 같은 서버 사정을 회원에게 낱낱이 알릴 이유가 없고,
+  // 「보냈다」는 문구가 회원 존재 여부를 새지 않게 한다.
+  redirect("/login/reset?sent=1");
+}
+
+/** 새 비밀번호 저장 — 메일 링크로 온 사람(recovery 세션)도, 로그인한 사람도 같은 길. */
+export async function updatePassword(formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  const back = (msg: string): never =>
+    redirect("/account/password?error=" + encodeURIComponent(msg));
+  if (password.length < 8) back("비밀번호는 8자 이상이어야 합니다.");
+  if (password !== confirm) back("두 칸의 비밀번호가 다릅니다.");
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    back(
+      /same password|different from the old/i.test(error.message)
+        ? "지금 쓰는 비밀번호와 다른 것으로 정해 주세요."
+        : /session|not logged in|Auth session missing/i.test(error.message)
+          ? "링크가 만료됐거나 로그인이 풀렸습니다. 재설정 메일을 다시 요청해 주세요."
+          : error.message,
+    );
+  }
+  revalidatePath("/", "layout");
+  redirect("/account/password?done=1");
+}

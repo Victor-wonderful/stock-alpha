@@ -41,6 +41,8 @@ const NAV: { group: string; items: { href: string; label: string }[] }[] = [
       { href: "/picks", label: "성과" },
       { href: "/watchlist", label: "내 자산" },
       { href: "/alerts", label: "알림" },
+      // 로그인한 사람의 비밀번호 변경. 안 한 사람은 미들웨어가 로그인으로 보낸다.
+      { href: "/account/password", label: "비밀번호 변경" },
     ],
   },
 ];

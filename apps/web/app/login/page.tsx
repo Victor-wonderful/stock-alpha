@@ -293,6 +293,17 @@ export default async function LoginPage({
         >
           {isSignup ? "가입하기" : "로그인"}
         </button>
+        {/* 비밀번호를 잊은 사람의 길 — 2026-09-14 까지 없었다. 버튼 아래, 오른쪽 정렬. */}
+        {!isSignup && (
+          <p className="text-right">
+            <Link
+              href="/login/reset"
+              className="text-[12.5px] text-text-mute transition-colors hover:text-accent"
+            >
+              비밀번호를 잊으셨나요?
+            </Link>
+          </p>
+        )}
       </form>
 
       <p className="mt-6 text-[11.5px] leading-[1.7] text-text-mute">
