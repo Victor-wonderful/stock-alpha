@@ -621,7 +621,7 @@ export default async function PicksPage({
                       <dd className="inline font-semibold text-bad">{fmtPrice(r.stop_loss)}</dd>
                     </span>
                     <span>
-                      <dt className="inline text-text-mute">목표 </dt>
+                      <dt className="inline text-text-mute">목표(추격 전환) </dt>
                       <dd className="inline font-semibold text-good">{fmtPrice(r.target_price)}</dd>
                     </span>
                   </dl>
@@ -643,7 +643,7 @@ export default async function PicksPage({
                       className="px-3 py-2 text-right font-medium"
                       title="여기에 닿으면 팔지 않고 손절선이 «고점 − 1R» 을 따라 올라갑니다"
                     >
-                      목표가
+                      목표(추격 전환)
                     </th>
                     <th className="px-3 py-2 text-right font-medium">손절가</th>
                     <th className="px-3 py-2 text-right font-medium">수익률</th>
