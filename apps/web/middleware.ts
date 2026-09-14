@@ -103,10 +103,11 @@ export async function middleware(request: NextRequest) {
   // ── 옛 주소 → 대표 주소 ──
   // 프로덕션 별칭이 둘(stock-alpha-olive · stock-alpha-victor-alpha)이라 "사이트가
   // 두 개냐"는 혼란이 실제로 있었다. 도메인이 생겼으니 옛 주소는 전부 그리로 보낸다.
+  // www.vecta.win 도 같다 — 주소는 하나여야 한다(검색엔진도 사람도 둘로 나뉘면 손해).
   if (
     SITE_URL &&
     process.env.VERCEL_ENV === "production" &&
-    hostname.endsWith(".vercel.app")
+    (hostname.endsWith(".vercel.app") || hostname === "www." + new URL(SITE_URL).hostname)
   ) {
     return NextResponse.redirect(`${SITE_URL}${pathname}${search}`, 308);
   }
