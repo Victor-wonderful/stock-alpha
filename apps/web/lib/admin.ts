@@ -191,3 +191,98 @@ export async function getAdminStats(): Promise<AdminStats | null> {
     return null;
   }
 }
+
+// ── 엔진 상태판 (0050 admin_engine_status) ──
+/**
+ * 엔진이 어젯밤 제대로 돌았는가 — DB 에 남은 흔적으로 판정한다.
+ *
+ * 2026-09-14 Victor: "관리자 페이지 대시보드가 이렇게 밖에 안되나?". 배치 로그는 운영
+ * PC 의 파일이라 웹에서 못 읽고, 8/27 에 배치가 사흘 연속 죽었을 때 아무도 몰랐다.
+ * 산출물마다 «가장 최근 날짜»와 «그날 건수»를 받아 기준일(= 시세의 최신일, 마지막
+ * 거래일)과 견준다. 판정 규칙은 여기(웹)에 있다 — 거래일 계산(휴장일)이 웹에 있어서다.
+ *
+ *   0 거래일 늦음 → 정상 · 1 → 지연 · 2 이상 → 멈춤
+ *
+ * ⚠️ 판정에 «오늘(달력)»을 쓰지 않는다. 주말·휴장일에는 새 봉이 없는 것이 정상이고,
+ * 그날 화면을 열어 «멈춤»이 뜨면 거짓 경보다 — 기준일도 시세에서 가져온다.
+ */
+export type EngineItem = {
+  key: string;
+  label: string;
+  latest: string | null;
+  n: number;
+  /** 기준일보다 몇 거래일 늦은가. null = 기준일을 모른다 */
+  lag: number | null;
+  state: "ok" | "late" | "stalled" | "unknown";
+};
+
+export type EngineStatus = {
+  basis: string | null;
+  items: EngineItem[];
+  dbBytes: number | null;
+  ohlcvBytes: number | null;
+};
+
+const ENGINE_ITEMS: [key: string, label: string][] = [
+  ["ohlcv", "시세(일봉)"],
+  ["factor_scores", "팩터"],
+  ["valuations", "밸류에이션"],
+  ["risk_metrics", "리스크"],
+  ["market_regime", "국면"],
+  ["signals", "시그널"],
+  ["daily_focus", "픽 발행"],
+  ["reports", "리포트"],
+  ["disclosures", "공시"],
+  ["blog_posts", "블로그 글"],
+];
+
+export async function getEngineStatus(
+  /** 거래일 계산 — lib/data getTradingCalendar().nth */
+  nth: (from: string, n: number) => string | null,
+): Promise<EngineStatus | null> {
+  try {
+    const supabase = await createUserClient();
+    const { data, error } = await supabase.rpc("admin_engine_status");
+    if (error || !data) throw error ?? new Error("empty");
+    const raw = data as Record<string, { latest?: string | null; n?: number } | number | null>;
+    const ohlcv = raw.ohlcv as { latest?: string | null } | null;
+    const basis = ohlcv?.latest ? String(ohlcv.latest) : null;
+
+    // 기준일까지 몇 거래일인가. nth 가 확정 달력 밖이면(먼 미래) null 을 주므로 그때는
+    // 달력일로 대신 센다 — 정확하진 않아도 «멀다»는 건 맞다.
+    const lagOf = (latest: string | null): number | null => {
+      if (!latest || !basis) return null;
+      if (latest >= basis) return 0;
+      for (let k = 1; k <= 30; k++) {
+        const d = nth(latest, k);
+        if (d === null) {
+          const days = Math.round(
+            (Date.parse(basis + "T00:00:00Z") - Date.parse(latest + "T00:00:00Z")) / 86_400_000,
+          );
+          return Math.max(k, Math.ceil(days * 5 / 7));
+        }
+        if (d >= basis) return k;
+      }
+      return 30;
+    };
+
+    const items: EngineItem[] = ENGINE_ITEMS.map(([key, label]) => {
+      const r = raw[key] as { latest?: string | null; n?: number } | null;
+      const latest = r?.latest ? String(r.latest) : null;
+      const lag = lagOf(latest);
+      const state: EngineItem["state"] =
+        lag === null ? "unknown" : lag === 0 ? "ok" : lag === 1 ? "late" : "stalled";
+      return { key, label, latest, n: Number(r?.n ?? 0), lag, state };
+    });
+
+    return {
+      basis,
+      items,
+      dbBytes: typeof raw.db_bytes === "number" ? raw.db_bytes : Number(raw.db_bytes ?? 0) || null,
+      ohlcvBytes:
+        typeof raw.ohlcv_bytes === "number" ? raw.ohlcv_bytes : Number(raw.ohlcv_bytes ?? 0) || null,
+    };
+  } catch {
+    return null;
+  }
+}
