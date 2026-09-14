@@ -2093,6 +2093,8 @@ export interface PickRecord {
   /** 진입 확정일(시가 매수한 날) — 보유 «1거래일째». 청산 예정일 계산의 기준. */
   confirmed_at?: string | null;
   reselects?: number; // 같은 포지션이 여러 날 재선정된 횟수(>1이면 '연속 선정' 표시)
+  /** 목표에 닿아 손절이 «고점 − 1R» 추격으로 전환된 열린 픽. 홈의 「추격스톱」 칩과 같은 뜻. */
+  trailing?: boolean;
 }
 
 const PICK_STATUS_LABELS: Record<string, PickRecord["status"]> = {
@@ -2443,6 +2445,9 @@ export async function getPickHistory(limit = 60): Promise<Loaded<PickRecord[]>> 
           return_pct: ret,
           status,
           closed: false,
+          // 홈은 이 픽에 「추격스톱」을 달아 주는데 성과 표는 「진행중」만 적어
+          // 두 화면이 다른 말을 하는 것처럼 읽혔다(2026-09-14 Victor). 같은 값을 실어 보낸다.
+          trailing: tp1Hit,
         };
       }),
     );

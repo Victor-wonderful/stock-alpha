@@ -589,11 +589,21 @@ export default async function PicksPage({
                       >
                         {r.return_pct != null ? fmtPct(r.return_pct) : "—"}
                       </p>
-                      <span
-                        className={`mt-1 inline-block rounded-[999px] px-2.5 py-0.5 text-[11px] font-bold ${STATUS_BADGE[r.status]}`}
-                      >
-                        {r.status}
-                        {!r.closed && r.status !== "진행중" && r.status !== "—" ? " (예정)" : ""}
+                      <span className="mt-1 inline-flex items-center gap-1.5">
+                        <span
+                          className={`inline-block rounded-[999px] px-2.5 py-0.5 text-[11px] font-bold ${STATUS_BADGE[r.status]}`}
+                        >
+                          {r.status}
+                          {!r.closed && r.status !== "진행중" && r.status !== "—" ? " (예정)" : ""}
+                        </span>
+                        {r.trailing && r.status === "진행중" && (
+                          <span
+                            className="rounded-[4px] bg-pass-soft px-1.5 py-0.5 text-[10px] font-semibold text-pass"
+                            title="목표에 닿아 손절이 고점 추격으로 올라간 상태 — 아직 들고 있습니다"
+                          >
+                            추격스톱
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -706,9 +716,19 @@ export default async function PicksPage({
                         {r.return_pct != null ? fmtPct(r.return_pct) : "—"}
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <span className={`rounded-[999px] px-2.5 py-0.5 text-[10px] font-bold ${STATUS_BADGE[r.status]}`}>
-                          {r.status}
-                          {!r.closed && r.status !== "진행중" && r.status !== "—" ? " (예정)" : ""}
+                        <span className="inline-flex items-center justify-end gap-1.5">
+                          {r.trailing && r.status === "진행중" && (
+                          <span
+                            className="rounded-[4px] bg-pass-soft px-1.5 py-0.5 text-[10px] font-semibold text-pass"
+                            title="목표에 닿아 손절이 고점 추격으로 올라간 상태 — 아직 들고 있습니다"
+                          >
+                            추격스톱
+                          </span>
+                        )}
+                          <span className={`rounded-[999px] px-2.5 py-0.5 text-[10px] font-bold ${STATUS_BADGE[r.status]}`}>
+                            {r.status}
+                            {!r.closed && r.status !== "진행중" && r.status !== "—" ? " (예정)" : ""}
+                          </span>
                         </span>
                       </td>
                     </tr>
