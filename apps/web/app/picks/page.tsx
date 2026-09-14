@@ -601,7 +601,7 @@ export default async function PicksPage({
                             className="rounded-[4px] bg-pass-soft px-1.5 py-0.5 text-[10px] font-semibold text-pass"
                             title="목표에 닿아 손절이 고점 추격으로 올라간 상태 — 아직 들고 있습니다"
                           >
-                            추격스톱
+                            추격 중
                           </span>
                         )}
                       </span>
@@ -722,7 +722,7 @@ export default async function PicksPage({
                             className="rounded-[4px] bg-pass-soft px-1.5 py-0.5 text-[10px] font-semibold text-pass"
                             title="목표에 닿아 손절이 고점 추격으로 올라간 상태 — 아직 들고 있습니다"
                           >
-                            추격스톱
+                            추격 중
                           </span>
                         )}
                           <span className={`rounded-[999px] px-2.5 py-0.5 text-[10px] font-bold ${STATUS_BADGE[r.status]}`}>

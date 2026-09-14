@@ -98,7 +98,7 @@ export function OpenPicksTable({
                       <SymbolCode symbol={p.symbol} className="text-[12px] text-text-mute" />
                       {p.tp1Hit && (
                         <span className="rounded-[4px] bg-pass-soft px-1.5 py-0.5 text-[11px] font-semibold text-pass">
-                          추격스톱
+                          추격 중
                         </span>
                       )}
                       {near && !p.tp1Hit && (
@@ -149,7 +149,7 @@ export function OpenPicksTable({
                       k: "목표가",
                       v: p.target,
                       note: p.tp1Hit
-                        ? "도달 — 손절이 본전"
+                        ? "도달 — 추격 중"
                         : p.toTargetPct != null
                           ? `${fmtPct(p.toTargetPct)} 남음`
                           : "닿으면 손절이 본전으로",
@@ -251,7 +251,7 @@ export function OpenPicksTable({
                         {/* 추격스톱으로 전환된 픽 — 이 시점부터 손절선이 «고점 − 1R» 이다. */}
                         {p.tp1Hit && (
                           <span className="rounded-[4px] bg-pass-soft px-1.5 py-px text-[10px] font-semibold text-pass">
-                            추격스톱
+                            추격 중
                           </span>
                         )}
                         {near && !p.tp1Hit && (
@@ -305,7 +305,7 @@ export function OpenPicksTable({
                       {p.target != null ? won(p.target) : "—"}
                       <span className="block text-[10.5px] font-normal text-text-mute">
                         {p.tp1Hit
-                          ? "도달 — 손절이 본전"
+                          ? "도달 — 추격 중"
                           : p.toTargetPct != null
                             ? `${fmtPct(p.toTargetPct)} 남음`
                             : "닿으면 손절이 본전으로"}
@@ -335,8 +335,8 @@ export function OpenPicksTable({
 
       {picks.length > 0 && (
         <p className="border-t border-border-soft px-4 py-2.5 text-[12px] text-text-mute">
-          손절까지가 0에 가까울수록 코앞입니다 · 목표가에 닿으면 손절이 고점 추격으로
-          올라가 그 뒤로는 손해 구간이 사라집니다
+          손절까지가 0에 가까울수록 코앞입니다 · 목표가에 닿으면 「추격 중」이 되어 손절이
+          고점을 따라 올라가고, 그 선에 닿으면 「추격 청산」으로 이익을 확정합니다
         </p>
       )}
 
