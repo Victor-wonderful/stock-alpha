@@ -320,6 +320,21 @@ export default async function PicksPage({
           </p>
         )}
 
+        {/* 세부 근거 — 접어 둔다(2026-09-14 Victor: "기간별 성과, 재현 이 항목들은
+            접기를 해서 안 보이게 하든가 없어도 될 것 같다").
+            지우지 않는 이유: 기간별 성과·1년 재현·규칙 교체 재현은 «이 성적을 왜
+            믿어도 되는가»의 근거라 유사투자자문 고지의 일부다. 다만 매일 오는 사람이
+            매번 볼 것은 아니어서, 보고 싶은 사람만 펼친다. 자바스크립트 없이 도는
+            <details> 를 쓴다(회원 목록의 옛 방식과 같다). */}
+        <details className="group rounded-[12px] border border-border bg-surface">
+          <summary className="flex cursor-pointer list-none items-center gap-2.5 px-5 py-3.5 text-[12.5px] font-semibold text-text-dim transition-colors hover:text-text">
+            <span>세부 근거 — 기간별 성과 · 지난 1년 재현 · 규칙 교체 재현</span>
+            <span className="ml-auto text-[11px] font-normal text-text-mute">
+              <span className="group-open:hidden">펼치기</span>
+              <span className="hidden group-open:inline">접기</span>
+            </span>
+          </summary>
+          <div className="space-y-4 border-t border-border-soft px-4 pb-4 pt-4">
         {/* 기간별 트랙레코드 — 이 개편의 핵심 실익.
             전체를 한 덩어리로 세면 «어느 전략의 어느 기간이 되는가»를 알 수 없다.
             단기는 5거래일이면 완결되므로 발행 일주일 뒤부터 진짜 성적이 쌓인다. */}
@@ -487,6 +502,8 @@ export default async function PicksPage({
             </div>
           </div>
         )}
+          </div>
+        </details>
 
         {/* 상태 필터 */}
         <div className="flex flex-wrap items-center gap-2">
