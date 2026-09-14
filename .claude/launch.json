@@ -38,6 +38,16 @@
       ],
       "port": 3100,
       "autoPort": false
+    },
+    {
+      "name": "blog-3111",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "scripts\\dev-blog.cmd"
+      ],
+      "port": 3111,
+      "autoPort": false
     }
   ]
 }
