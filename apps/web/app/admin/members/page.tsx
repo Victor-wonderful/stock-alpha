@@ -241,7 +241,9 @@ function MemberTr({ m }: { m: Member }) {
           <>
             {ymd(m.termsAgreedAt)}
             {m.agreedDocVersion && (
-              <span className="ml-1 text-text-mute">v{m.agreedDocVersion}</span>
+              <span className="ml-1 text-text-mute" title="동의한 약관 문서의 판(발효일)">
+                {m.agreedDocVersion.replace(/-/g, ".")}판
+              </span>
             )}
           </>
         ) : (
