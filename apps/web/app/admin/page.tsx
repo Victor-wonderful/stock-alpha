@@ -349,7 +349,7 @@ export default async function AdminHomePage() {
 
 function DbGauge({ bytes, ohlcvBytes }: { bytes: number; ohlcvBytes: number | null }) {
   const ratio = Math.min(1, bytes / DB_PLAN_BYTES);
-  const bar = ratio >= 0.9 ? "bg-bad" : ratio >= 0.7 ? "bg-warn" : "bg-accent";
+  const bar = ratio >= 0.9 ? "bg-fail" : ratio >= 0.7 ? "bg-warn" : "bg-accent";
   return (
     <>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-3">
@@ -372,13 +372,14 @@ function DbGauge({ bytes, ohlcvBytes }: { bytes: number; ohlcvBytes: number | nu
 }
 
 function EngineRow({ item }: { item: EngineItem }) {
+  // 합격 축(pass/fail)이다 — 시세 축(good/bad)을 쓰면 「정상」이 상승색(빨강)으로 뜬다.
   const badge =
     item.state === "ok"
-      ? ["bg-good-soft text-good", "정상"]
+      ? ["bg-pass-soft text-pass", "정상"]
       : item.state === "late"
         ? ["bg-warn-soft text-warn", "지연 1일"]
         : item.state === "stalled"
-          ? ["bg-bad-soft text-bad", `멈춤 ${item.lag}일`]
+          ? ["bg-fail-soft text-fail", `멈춤 ${item.lag}일`]
           : ["bg-surface-3 text-text-mute", "—"];
   return (
     <tr>
@@ -411,7 +412,7 @@ function Todo({
   const pill = !has
     ? "bg-surface-3 text-text-mute"
     : tone === "bad"
-      ? "bg-bad-soft text-bad"
+      ? "bg-fail-soft text-fail"
       : tone === "warn"
         ? "bg-warn-soft text-warn"
         : "bg-accent text-text-on-accent";
