@@ -14,7 +14,8 @@ import { createClient as createUserClient } from "@/lib/supabase/server";
  */
 
 const back = (msg?: string): never =>
-  redirect(msg ? `/admin/experts?error=${encodeURIComponent(msg)}` : "/admin/experts?done=1");
+  // 주소는 관리 호스트 기준(/experts). 미들웨어가 app/admin/experts 로 바꿔 그린다.
+  redirect(msg ? `/experts?error=${encodeURIComponent(msg)}` : "/experts?done=1");
 
 export async function approveApplication(formData: FormData) {
   const id = Number(formData.get("id"));

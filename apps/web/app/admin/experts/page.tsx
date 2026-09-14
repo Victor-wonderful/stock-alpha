@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CheckCircle2, TriangleAlert } from "lucide-react";
 
-import { AppShell } from "@/components/AppShell";
+import { AdminShell } from "@/components/AdminShell";
 import { getExpertApplications, isAdmin, type ExpertApplication } from "@/lib/admin";
 import { approveApplication, rejectApplication } from "./actions";
 
@@ -38,7 +38,7 @@ export default async function AdminExpertsPage({
   const decided = apps.filter((a) => a.status !== "pending");
 
   return (
-    <AppShell
+    <AdminShell
       title="전문가 신청"
       subtitle="승인하면 그 자리에서 전문가로 등록되고, 그분 화면에 「추천 쓰기」가 생깁니다."
       stats={[
@@ -48,7 +48,7 @@ export default async function AdminExpertsPage({
     >
       <div className="mx-auto w-full max-w-[820px]">
         <Link
-          href="/admin"
+          href="/"
           className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] text-text-mute transition-colors hover:text-accent"
         >
           <ArrowLeft size={14} strokeWidth={2} aria-hidden />
@@ -116,7 +116,7 @@ export default async function AdminExpertsPage({
           </section>
         )}
       </div>
-    </AppShell>
+    </AdminShell>
   );
 }
 

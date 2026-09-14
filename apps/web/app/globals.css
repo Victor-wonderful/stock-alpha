@@ -192,6 +192,10 @@ body {
   body {
     padding-bottom: calc(58px + env(safe-area-inset-bottom));
   }
+  /* 관리 호스트(admin.)에는 탭바가 없다 — 비워 둔 자리도 없앤다(app/layout.tsx). */
+  html[data-admin] body {
+    padding-bottom: 0;
+  }
 }
 
 /* ═══════════════ 폰·태블릿 최적화 (2026-08-24) ═══════════════

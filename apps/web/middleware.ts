@@ -45,7 +45,36 @@ function isPublic(pathname: string): boolean {
   );
 }
 
-// 세션 토큰 갱신 + 공개 목록 게이트
+/**
+ * 사이트의 대표 주소(2026-09-14, vecta.win). 비어 있으면 옛 주소 리다이렉트를 하지 않는다.
+ * 프리뷰 배포에서는 값이 있어도 리다이렉트하지 않는다 — 프리뷰도 *.vercel.app 이라
+ * 걸리면 프리뷰 화면을 볼 방법이 없어진다.
+ */
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/$/, "");
+
+/**
+ * 관리 호스트인가 — `admin.` 으로 시작하는 주소(admin.vecta.win · 개발은 admin.localhost:3000).
+ *
+ * 관리 화면을 회원 사이트와 **주소로** 가른다(2026-09-14 Victor: "별도 어드민 페이지가
+ * 있어야 할 것 같다"). 로그인 시스템을 따로 만들지는 않는다 — 비밀번호 저장소가 둘이
+ * 되면 새어 나갈 곳도 둘이고, DB 는 어차피 «이 요청이 운영자인가»를 profiles.is_admin
+ * 으로 판정한다. 대신 입구를 나눈다:
+ *   · admin.vecta.win/…  → app/admin/… 으로 조용히 바꿔 그린다(주소창은 그대로)
+ *   · vecta.win/admin    → 404. 회원 사이트에는 관리 화면이 없는 것으로 보인다
+ *   · 관리 호스트의 로그인은 운영자만 통과하고(app/admin/login), 그 뒤 OTP 를 한 번 더 묻는다
+ * 쿠키는 호스트별이라 회원 사이트의 세션은 관리 호스트로 넘어오지 않는다 — 그래서
+ * 관리 호스트에 있는 세션은 전부 관리 로그인을 거친 것이다.
+ */
+function isAdminHost(hostname: string): boolean {
+  return hostname.startsWith("admin.");
+}
+
+/** 관리 호스트에서 로그인 없이도 열리는 곳 — 로그인 화면뿐이다. */
+const ADMIN_OPEN = ["/login"];
+/** 로그인은 했지만 OTP 를 아직 안 거친 사람이 갈 수 있는 곳. */
+const ADMIN_PRE_MFA = ["/login", "/otp"];
+
+// 세션 토큰 갱신 + 공개 목록 게이트 + 호스트 분기
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -68,11 +97,86 @@ export async function middleware(request: NextRequest) {
     },
   );
 
+  const { pathname, search } = request.nextUrl;
+  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+
+  // ── 옛 주소 → 대표 주소 ──
+  // 프로덕션 별칭이 둘(stock-alpha-olive · stock-alpha-victor-alpha)이라 "사이트가
+  // 두 개냐"는 혼란이 실제로 있었다. 도메인이 생겼으니 옛 주소는 전부 그리로 보낸다.
+  if (
+    SITE_URL &&
+    process.env.VERCEL_ENV === "production" &&
+    hostname.endsWith(".vercel.app")
+  ) {
+    return NextResponse.redirect(`${SITE_URL}${pathname}${search}`, 308);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
+  // ── 관리 호스트 ──
+  if (isAdminHost(hostname)) {
+    // 검색엔진에는 아무것도 알리지 않는다 — 로그인 화면조차.
+    if (pathname === "/robots.txt") {
+      return new NextResponse("User-agent: *\nDisallow: /\n", {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+    // 내부 경로를 그대로 친 경우(/admin/members) — 주소를 깨끗한 쪽으로 돌려보낸다.
+    // 서버 액션이 옛 redirect("/admin/…") 를 남겨 뒀더라도 여기서 흡수된다.
+    if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+      const url = request.nextUrl.clone();
+      url.pathname = pathname.slice("/admin".length) || "/";
+      return NextResponse.redirect(url, 308);
+    }
+
+    if (!user) {
+      if (!ADMIN_OPEN.includes(pathname)) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        url.search = "";
+        if (pathname !== "/") url.searchParams.set("next", pathname + search);
+        return NextResponse.redirect(url);
+      }
+    } else {
+      // 비밀번호는 맞았다. OTP 까지 거쳤는가 — 세션의 보증 수준(aal)으로 안다.
+      // aal2 = OTP 통과. 아직이면 /otp 로(등록 안 한 사람은 그 화면이 등록부터 시킨다).
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const verified = aal?.currentLevel === "aal2";
+      if (!verified && !ADMIN_PRE_MFA.includes(pathname)) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/otp";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+      if (verified && ADMIN_PRE_MFA.includes(pathname)) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+    }
+
+    // admin.vecta.win/members → app/admin/members. 주소창은 바뀌지 않는다.
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin" + (pathname === "/" ? "" : pathname);
+    const headers = new Headers(request.headers);
+    // 루트 레이아웃이 회원용 푸터·하단 탭바를 빼도록 알린다(app/layout.tsx).
+    headers.set("x-vecta-admin", "1");
+    const rewritten = NextResponse.rewrite(url, { request: { headers } });
+    // 위에서 갱신한 세션 쿠키를 옮겨 싣는다 — 안 옮기면 토큰 갱신이 사라진다.
+    response.cookies.getAll().forEach((c) => rewritten.cookies.set(c));
+    return rewritten;
+  }
+
+  // ── 회원 사이트 ──
+  // 관리 화면은 이 호스트에 없다. 「권한이 없습니다」가 아니라 «없는 주소»여야 한다.
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/__no_such_page";
+    return NextResponse.rewrite(url);
+  }
 
   // API 는 리다이렉트하지 않는다 — fetch 가 HTML 로그인 화면을 받아 파싱에서 죽는다.
   // 각 라우트가 스스로 세션을 보고 401 을 낸다(app/api/instruments 참조).

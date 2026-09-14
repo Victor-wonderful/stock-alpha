@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
-import { AppShell } from "@/components/AppShell";
+import { AdminShell } from "@/components/AdminShell";
 import {
   getAdminStats,
   getExpertApplications,
@@ -21,7 +21,7 @@ import {
  * 그래서 「기다리는 일」이 숫자 옆에 나란히 있다.
  *
  * 크기가 고정이어야 한다. 회원이 1,000명이 되어도 이 화면의 길이는 같아야 하고,
- * 늘어나는 목록은 자기 페이지를 갖는다(/admin/members) — 오늘 인사이트·분석에서
+ * 늘어나는 목록은 자기 페이지를 갖는다(/members — admin.vecta.win 기준) — 오늘 인사이트·분석에서
  * 세운 규칙과 같다.
  *
  * 운영자가 아니면 404. 「권한이 없습니다」는 그 주소에 관리 화면이 있다는 사실을
@@ -44,7 +44,7 @@ export default async function AdminHomePage() {
   const pending = apps.filter((a) => a.status === "pending");
 
   return (
-    <AppShell
+    <AdminShell
       title="관리"
       subtitle="운영자만 보는 화면입니다."
       stats={[
@@ -64,7 +64,7 @@ export default async function AdminHomePage() {
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="text-sm font-bold text-text">최근 가입</h2>
             <Link
-              href="/admin/members"
+              href="/members"
               className="text-[11.5px] font-semibold text-accent hover:underline"
             >
               회원 전체 →
@@ -111,13 +111,13 @@ export default async function AdminHomePage() {
             <Todo
               label="전문가 신청"
               count={pending.length}
-              href="/admin/experts"
+              href="/experts"
               hint={pending.length > 0 ? pending.map((p) => p.name).join(" · ") : null}
             />
             <Todo
               label="메일 미확인 회원"
               count={stats?.unconfirmed ?? 0}
-              href="/admin/members"
+              href="/members"
               hint={null}
             />
           </ul>
@@ -131,7 +131,7 @@ export default async function AdminHomePage() {
       <p className="mt-5 text-[11.5px] leading-relaxed text-text-mute">
         지난 7일 가입 {stats?.members7d ?? 0}명.
       </p>
-    </AppShell>
+    </AdminShell>
   );
 }
 

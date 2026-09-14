@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, Search } from "lucide-react";
 
-import { AppShell } from "@/components/AppShell";
+import { AdminShell } from "@/components/AdminShell";
 import { getMembers, isAdmin, type Member } from "@/lib/admin";
 
 /**
@@ -47,7 +47,7 @@ export default async function AdminMembersPage({
     return (
       <Link
         key={label}
-        href={qs ? `/admin/members?${qs}` : "/admin/members"}
+        href={qs ? `/members?${qs}` : "/members"}
         className={`inline-flex items-center gap-1.5 rounded-[999px] px-3 py-1.5 text-xs font-semibold transition-colors ${
           on
             ? "bg-accent text-text-on-accent"
@@ -67,7 +67,7 @@ export default async function AdminMembersPage({
   };
 
   return (
-    <AppShell
+    <AdminShell
       title="회원"
       subtitle="이메일·연락처는 접혀 있습니다 — 행을 펼치면 보입니다."
       stats={[
@@ -80,7 +80,7 @@ export default async function AdminMembersPage({
       ]}
     >
       <Link
-        href="/admin"
+        href="/"
         className="inline-flex items-center gap-1.5 text-[12.5px] text-text-mute transition-colors hover:text-accent"
       >
         <ArrowLeft size={14} strokeWidth={2} aria-hidden />
@@ -88,7 +88,7 @@ export default async function AdminMembersPage({
       </Link>
 
       {/* 검색 */}
-      <form method="get" action="/admin/members" className="mb-4 mt-5">
+      <form method="get" action="/members" className="mb-4 mt-5">
         {filter && <input type="hidden" name="filter" value={filter} />}
         <div className="flex items-center gap-3 rounded-[12px] border border-border bg-surface px-5 py-3.5 focus-within:border-accent">
           <Search className="h-4.5 w-4.5 shrink-0 text-text-mute" />
@@ -115,7 +115,7 @@ export default async function AdminMembersPage({
         {/* CSV — 검색어를 그대로 넘긴다. 보고 있는 것이 내려받는 것이어야 한다.
             a 태그로 두는 이유: 파일 응답이라 라우터가 화면을 바꾸면 안 된다. */}
         <a
-          href={q ? `/admin/members/export?q=${encodeURIComponent(q)}` : "/admin/members/export"}
+          href={q ? `/members/export?q=${encodeURIComponent(q)}` : "/members/export"}
           className="inline-flex min-h-9 items-center gap-1.5 rounded-[9px] border border-border px-3.5 text-[12.5px] font-semibold text-text-dim transition-colors hover:border-border-strong hover:text-text"
         >
           <Download className="h-4 w-4" aria-hidden />
@@ -141,7 +141,7 @@ export default async function AdminMembersPage({
         내려받은 파일에는 이메일과 연락처가 들어 있습니다. 개인정보이므로 필요한 곳에만
         쓰고, 쓰고 난 파일은 지워 주세요.
       </p>
-    </AppShell>
+    </AdminShell>
   );
 }
 
