@@ -13353,7 +13353,7 @@
                               "type": "frame",
                               "id": "t6KrL",
                               "name": "칩 월 종가 매도",
-                              "fill": "$surface-3",
+                              "fill": "$bad-soft",
                               "cornerRadius": 8,
                               "padding": [
                                 3,
@@ -13364,7 +13364,7 @@
                                   "type": "text",
                                   "id": "invlZ",
                                   "name": "칩 글",
-                                  "fill": "$text-dim",
+                                  "fill": "$bad",
                                   "content": "월 종가 매도",
                                   "fontFamily": "Noto Sans KR",
                                   "fontSize": 12,
@@ -14064,13 +14064,14 @@
                               "type": "frame",
                               "id": "lYeDa",
                               "name": "복사",
+                              "height": 34,
                               "cornerRadius": 8,
                               "stroke": "$border",
                               "strokeWidth": 1,
                               "gap": 3,
                               "padding": [
-                                3,
-                                8
+                                0,
+                                12
                               ],
                               "alignItems": "center",
                               "children": [
@@ -14272,13 +14273,14 @@
                               "type": "frame",
                               "id": "TpX1K",
                               "name": "복사",
+                              "height": 34,
                               "cornerRadius": 8,
                               "stroke": "$border",
                               "strokeWidth": 1,
                               "gap": 3,
                               "padding": [
-                                3,
-                                8
+                                0,
+                                12
                               ],
                               "alignItems": "center",
                               "children": [
@@ -14408,13 +14410,14 @@
                               "type": "frame",
                               "id": "RVyCK",
                               "name": "복사",
+                              "height": 34,
                               "cornerRadius": 8,
                               "stroke": "$border",
                               "strokeWidth": 1,
                               "gap": 3,
                               "padding": [
-                                3,
-                                8
+                                0,
+                                12
                               ],
                               "alignItems": "center",
                               "children": [
@@ -14484,7 +14487,7 @@
                           "type": "frame",
                           "id": "aNUTx",
                           "name": "칩",
-                          "fill": "$surface-3",
+                          "fill": "$bad-soft",
                           "cornerRadius": 8,
                           "padding": [
                             3,
@@ -14495,7 +14498,7 @@
                               "type": "text",
                               "id": "ltknY",
                               "name": "칩 글",
-                              "fill": "$text-dim",
+                              "fill": "$bad",
                               "content": "월 종가 매도",
                               "fontFamily": "Noto Sans KR",
                               "fontSize": 12,
@@ -16878,6 +16881,492 @@
                           ]
                         }
                       ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "mO57c",
+      "x": 4393,
+      "y": 1420,
+      "name": "시안 E · 내 주문표 · 상태 4종",
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 20,
+      "padding": 32,
+      "children": [
+        {
+          "type": "text",
+          "id": "b0Z7q",
+          "name": "보드 제목",
+          "fill": "$text",
+          "content": "내 주문표 · 상태별 화면 (카드 윗부분만)",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 16,
+          "fontWeight": "700"
+        },
+        {
+          "type": "frame",
+          "id": "QKKHI",
+          "name": "상태들",
+          "gap": 20,
+          "children": [
+            {
+              "type": "frame",
+              "id": "IWm6Q",
+              "name": "상태 ① 첫 방문 · 투자 금액 미입력",
+              "width": 330,
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "VkxNa",
+                  "name": "라벨",
+                  "fill": "$accent",
+                  "content": "① 첫 방문 · 투자 금액 미입력",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "frame",
+                  "id": "taM89",
+                  "name": "카드",
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    16,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "WSWmr",
+                      "name": "라벨",
+                      "fill": "$text-mute",
+                      "content": "VECTA 픽 기준 할 일",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "hgs2r",
+                      "name": "제목",
+                      "fill": "$text",
+                      "content": "10월 12일(월) 할 일 4종목",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 17,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Ogmwz",
+                      "name": "안내 띠",
+                      "width": "fill_container",
+                      "fill": "$accent-soft",
+                      "cornerRadius": 10,
+                      "gap": 8,
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "nuYEU",
+                          "name": "아이콘",
+                          "width": 16,
+                          "height": 16,
+                          "icon": "calculator",
+                          "library": "lucide",
+                          "fill": "$accent"
+                        },
+                        {
+                          "type": "text",
+                          "id": "gwkbX",
+                          "name": "글",
+                          "fill": "$accent",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "투자 금액을 넣으면 종목마다 몇 주를 살지 계산해 드립니다. 한 번만 넣으면 기억합니다.",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "y8XdqM",
+                      "name": "예시 줄",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "k4APb",
+                          "name": "종목",
+                          "fill": "$text",
+                          "content": "비에이치 · 월 시가 매수",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "e0IF4",
+                          "name": "수량",
+                          "fill": "$text-mute",
+                          "content": "금액 입력 후 표시",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "u77l3",
+              "name": "상태 ② 할 일 없는 날",
+              "width": 330,
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "qvEvA",
+                  "name": "라벨",
+                  "fill": "$accent",
+                  "content": "② 할 일 없는 날",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "frame",
+                  "id": "AbWc0",
+                  "name": "카드",
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    16,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "s6eDt",
+                      "name": "라벨",
+                      "fill": "$text-mute",
+                      "content": "VECTA 픽 기준 할 일",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DvG62",
+                      "name": "제목",
+                      "fill": "$text",
+                      "content": "10월 13일(화) 할 일 없음",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 17,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "K7Ids",
+                      "name": "빈 상태",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": [
+                        18,
+                        0
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "MOHcS",
+                          "name": "아이콘",
+                          "width": 22,
+                          "height": 22,
+                          "icon": "coffee",
+                          "library": "lucide",
+                          "fill": "$text-mute"
+                        },
+                        {
+                          "type": "text",
+                          "id": "h5iNhH",
+                          "name": "제목",
+                          "fill": "$text",
+                          "content": "내일은 할 일이 없습니다",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RDHjO",
+                          "name": "부제",
+                          "fill": "$text-mute",
+                          "content": "진행 중인 픽 6건은 그대로 두세요",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "AEGJV",
+                          "name": "링크",
+                          "gap": 4,
+                          "padding": [
+                            4,
+                            0
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "U4eNB4",
+                              "name": "글",
+                              "fill": "$accent",
+                              "content": "진행 중인 픽 보기",
+                              "fontFamily": "Noto Sans KR",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "vwhxr",
+                              "name": "화살표",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "arrow-right",
+                              "library": "lucide",
+                              "fill": "$accent"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "K2Vy5",
+              "name": "상태 ③ 목록이 오래됨 (오늘 분석 미완료)",
+              "width": 330,
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "bxUJ0",
+                  "name": "라벨",
+                  "fill": "$accent",
+                  "content": "③ 목록이 오래됨 (오늘 분석 미완료)",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "frame",
+                  "id": "oqz7t",
+                  "name": "카드",
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    16,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "eCAB3",
+                      "name": "라벨",
+                      "fill": "$text-mute",
+                      "content": "VECTA 픽 기준 할 일",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "dGO1e",
+                      "name": "제목",
+                      "fill": "$text",
+                      "content": "10월 12일(월) 할 일 4종목",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 17,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lwkEO",
+                      "name": "안내 띠",
+                      "width": "fill_container",
+                      "fill": "$warn-soft",
+                      "cornerRadius": 10,
+                      "gap": 8,
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "rMDY3",
+                          "name": "아이콘",
+                          "width": 16,
+                          "height": 16,
+                          "icon": "clock-alert",
+                          "library": "lucide",
+                          "fill": "$warn"
+                        },
+                        {
+                          "type": "text",
+                          "id": "wQdgL",
+                          "name": "글",
+                          "fill": "$warn",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "지난 거래일(10월 8일) 기준 목록입니다. 오늘 분석이 아직 끝나지 않았어요 — 끝나면 자동으로 바뀝니다.",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Q7rGZU",
+              "name": "상태 ④ 금액이 작아 0주",
+              "width": 330,
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Bg3RN",
+                  "name": "라벨",
+                  "fill": "$accent",
+                  "content": "④ 금액이 작아 0주",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "frame",
+                  "id": "V4Ac77",
+                  "name": "카드",
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    16,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "LNhYR",
+                      "name": "라벨",
+                      "fill": "$text-mute",
+                      "content": "VECTA 픽 기준 할 일",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "kkYYu",
+                      "name": "제목",
+                      "fill": "$text",
+                      "content": "10월 12일(월) 할 일 4종목",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 17,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SK88Z",
+                      "name": "예시 줄",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "n3X7I",
+                          "name": "종목",
+                          "fill": "$text",
+                          "content": "DB손해보험 · 월 시가 매수",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "KInVw",
+                          "name": "수량",
+                          "fill": "$warn",
+                          "content": "0주 · 금액 부족",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "WkpX0",
+                      "name": "설명",
+                      "fill": "$text-mute",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "한 주 가격(188,000원)이 권장 비중 금액보다 커서 살 수 없습니다.",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
