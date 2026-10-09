@@ -1,7 +1,7 @@
 """네이버 금융 종목뉴스 수집 — 제목·언론사·시각·원문링크만.
 
-  · parse_*  : HTML → 행 (순수 함수, 테스트 대상)
-  · fetch_*  : httpx 호출 (euc-kr)
+  · parse_*  : JSON → 행 (순수 함수, 테스트 대상)
+  · fetch_*  : httpx 호출 (네이버 증권 모바일 JSON)
   · ingest_* : 정규화 + 적재
 
 ⚠️ 본문은 저장하지 않는다. 기사 본문은 언론사 저작물이라 수집·재배포 대상이 아니다.
@@ -23,7 +23,12 @@ from engine.logging import get_logger
 
 log = get_logger(__name__)
 
-_BASE = "https://finance.naver.com/item/news_news.naver"
+# 2026-09-17 부터 PC 종목뉴스 HTML(finance.naver.com/item/news_news.naver)이 410 Gone 이다.
+# 배치는 에러 없이 «0건»으로 지나가 3주간 뉴스가 한 건도 안 쌓였다(10/9 발견).
+# 지금은 네이버 증권 모바일이 쓰는 JSON 을 읽는다 — 기사 키(언론사-기사번호)가 옛 HTML 과
+# 같아서 이미 쌓인 행과 중복 없이 이어진다.
+_BASE = "https://m.stock.naver.com/api/news/stock/{symbol}"
+_PAGE_SIZE = 20
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -32,92 +37,89 @@ _HEADERS = {
 }
 KST = timezone(timedelta(hours=9))
 
-# 한 행: 제목(링크) · 언론사 · 날짜시각. 네이버가 연관기사를 같은 표에 섞어 넣어
-# 같은 기사가 여러 번 잡히므로, 아래 정규화에서 (office_id, article_id) 로 접는다.
-_ROW_RE = re.compile(
-    r'<td class="title">\s*<a href="([^"]+)"[^>]*>(.*?)</a>.*?'
-    r'<td class="info">(.*?)</td>.*?'
-    r'<td class="date">(.*?)</td>',
-    re.S,
-)
-_ID_RE = re.compile(r"article_id=(\d+).*?office_id=(\d+)")
 _TAG_RE = re.compile(r"<[^>]+>")
 
 _ENTITIES = {
-    "&quot;": '"', "&apos;": "'", "&amp;": "&", "&lt;": "<", "&gt;": ">",
+    "&quot;": '"', "&apos;": "'", "&#39;": "'", "&amp;": "&", "&lt;": "<", "&gt;": ">",
     "&hellip;": "…", "&middot;": "·", "&lsquo;": "‘", "&rsquo;": "’",
     "&ldquo;": "“", "&rdquo;": "”", "&nbsp;": " ", "&uarr;": "↑", "&darr;": "↓",
 }
 
 
 def _clean(raw: str) -> str:
-    s = _TAG_RE.sub("", raw)
+    s = _TAG_RE.sub("", raw or "")
     for k, v in _ENTITIES.items():
         s = s.replace(k, v)
     return " ".join(s.split()).strip()
 
 
-def parse_news_table(html: str) -> list[dict]:
-    """종목뉴스 HTML → [{provider_article_id, headline, source, published_at, url}] (순수).
+def parse_news_json(groups: list) -> list[dict]:
+    """종목뉴스 JSON → [{provider_article_id, headline, source, published_at, url}] (순수).
 
-    연관기사 중복은 provider_article_id 기준으로 접는다(첫 등장 유지).
+    응답은 «묶음» 목록이고 묶음마다 items(같은 사건의 연관기사)가 들어 있다.
+    같은 기사가 여러 묶음에 다시 나오므로 provider_article_id 로 접는다(첫 등장 유지).
+    본문(body)은 응답에 있어도 읽지 않는다 — 언론사 저작물이다.
     """
     out: list[dict] = []
     seen: set[str] = set()
-    for href, title, source, date in _ROW_RE.findall(html):
-        m = _ID_RE.search(href.replace("&amp;", "&"))
-        if not m:
-            continue
-        article_id, office_id = m.group(1), m.group(2)
-        key = f"{office_id}-{article_id}"
-        if key in seen:
-            continue
-        seen.add(key)
-
-        headline = _clean(title)
-        if not headline:
-            continue
-        ts = _parse_kst(_clean(date))
-        if ts is None:
-            continue
-        url = href if href.startswith("http") else "https://finance.naver.com" + href
-        out.append({
-            "provider_article_id": key,
-            "headline": headline,
-            "source": _clean(source) or None,
-            "published_at": ts,
-            "url": url.replace("&amp;", "&"),
-        })
+    if not isinstance(groups, list):
+        return out
+    for g in groups:
+        for it in (g or {}).get("items") or []:
+            office, article = it.get("officeId"), it.get("articleId")
+            if not office or not article:
+                continue
+            key = f"{office}-{article}"
+            if key in seen:
+                continue
+            seen.add(key)
+            headline = _clean(it.get("titleFull") or it.get("title") or "")
+            ts = _parse_kst(str(it.get("datetime") or ""))
+            if not headline or ts is None:
+                continue
+            url = it.get("mobileNewsUrl") or (
+                f"https://n.news.naver.com/mnews/article/{office}/{article}")
+            out.append({
+                "provider_article_id": key,
+                "headline": headline,
+                "source": _clean(it.get("officeName") or "") or None,
+                "published_at": ts,
+                "url": url,
+            })
     return out
 
 
 def _parse_kst(s: str) -> str | None:
-    """'2026.08.14 09:28' → ISO8601(KST). 실패 시 None."""
-    m = re.search(r"(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2})", s)
+    """'202610091850' → ISO8601(KST). 실패 시 None."""
+    m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})", s.strip())
     if not m:
         return None
     y, mo, d, h, mi = (int(x) for x in m.groups())
-    return datetime(y, mo, d, h, mi, tzinfo=KST).isoformat()
+    try:
+        return datetime(y, mo, d, h, mi, tzinfo=KST).isoformat()
+    except ValueError:
+        return None
 
 
-def fetch_news(symbol: str, pages: int = 1) -> str:
-    """종목뉴스 HTML(euc-kr). 페이지를 이어붙여 반환."""
+def fetch_news(symbol: str, pages: int = 1) -> list:
+    """종목뉴스 JSON 묶음 목록. 페이지를 이어붙여 반환. 실패 페이지는 건너뛴다."""
     import httpx
 
-    parts: list[str] = []
-    headers = {
-        **_HEADERS,
-        "Referer": f"https://finance.naver.com/item/main.naver?code={symbol}",
-    }
+    groups: list = []
     for p in range(1, pages + 1):
         try:
-            r = httpx.get(_BASE, params={"code": symbol, "page": str(p)},
-                          headers=headers, timeout=20)
-            r.encoding = "euc-kr"
-            parts.append(r.text)
+            r = httpx.get(_BASE.format(symbol=symbol),
+                          params={"pageSize": str(_PAGE_SIZE), "page": str(p)},
+                          headers=_HEADERS, timeout=20)
+            if r.status_code != 200:
+                log.warning("naver.news.http", symbol=symbol, page=p, status=r.status_code)
+                continue
+            data = r.json()
+            if isinstance(data, list):
+                groups.extend(data)
         except Exception as e:  # 한 종목 실패가 배치를 죽이지 않는다
             log.warning("naver.news.page_fail", symbol=symbol, page=p, error=str(e))
-    return "\n".join(parts)
+    return groups
 
 
 def normalize_news(rows: list[dict], instrument_id: int) -> list[dict]:
@@ -156,11 +158,16 @@ def ingest_news(symbols: list[str], pages: int = 1, sleep_sec: float = 0.4) -> i
         iid = id_by_symbol.get(sym)
         if not iid:
             continue
-        rows = normalize_news(parse_news_table(fetch_news(sym, pages)), iid)
+        rows = normalize_news(parse_news_json(fetch_news(sym, pages)), iid)
         if rows:
             total += upsert("news", rows,
                             on_conflict="provider,provider_article_id,instrument_id")
         time.sleep(sleep_sec)  # 예의상 간격 — 기존 크롤러와 동일 기조
 
     log.info("naver.news.done", symbols=len(symbols), rows=total)
+    # 대상이 여럿인데 전부 0건이면 «뉴스가 없는 날»이 아니라 수집이 깨진 것이다.
+    # 2026-09-17 엔드포인트 폐지 때 이 경고가 없어 3주를 몰랐다.
+    if total == 0 and len(id_by_symbol) >= 5:
+        log.error("naver.news.all_empty", symbols=len(id_by_symbol),
+                  hint="네이버 뉴스 응답 구조·주소 변경 의심 — fetch_news 확인")
     return total
