@@ -9,6 +9,7 @@ import pandas as pd
 from engine.db import get_client, select_all, upsert
 from engine.logging import get_logger
 from engine.signals.generate import generate_signals
+from engine.signals.indicators import clean_halt_bars
 
 log = get_logger(__name__)
 
@@ -23,7 +24,7 @@ def _load_ohlcv(instrument_id: int, limit: int = 120) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
-    out = df[["open", "high", "low", "close", "volume"]].astype(float)
+    out = clean_halt_bars(df[["open", "high", "low", "close", "volume"]].astype(float))
     out["ts"] = df["ts"]  # 신선도 가드(freshness)·PEAD point-in-time 용 — db_direct 와 동형
     return out
 

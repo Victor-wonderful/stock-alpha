@@ -822,3 +822,25 @@ def test_pick_judge_fields_cover_everything_the_rule_reads():
     }
     missing = required - set(rd.PICK_JUDGE_FIELDS)
     assert not missing, f"판정이 읽는데 조회하지 않는 컬럼: {sorted(missing)}"
+
+
+# ── 거래정지 봉 · 시가 확정 시 손절 상한 (2026-10-09, 한화 -23% 사고) ──
+
+def test_pick_status_halt_bar_is_not_a_stop_hit():
+    """정지일 봉은 저가 0 으로 온다 — «저가 ≤ 손절»로 가짜 손절 청산하면 안 된다."""
+    halt = {"low": 0.0, "high": 0.0, "close": 100.0}
+    assert resolve_pick_status(_PICK, [_bar(99, 105), halt], date(2026, 6, 12)) is None
+
+
+def test_confirm_levels_voids_when_gap_widens_stop_beyond_cap():
+    """시가가 지지선 아래로 갭다운하면 ATR 손절로 넘어가 손절이 멀어진다.
+    발행 때 통과했어도 확정 시 -20% 를 넘으면 사지 않는다(한화 9/28: -12.4% → -23.3%)."""
+    pick = _pending(setup="median", plan_payload={
+        "atr": 17067.0, "support": 136400.0, "resistance": None, "risk_pct": 1.0,
+        "planned_entry": 137600.0})
+    assert rd._confirm_levels(pick, 132000.0) is None
+    # 같은 픽이라도 ATR 이 정상(정지 봉 제거 후 7,071)이면 손절 약 -10% 로 진입한다.
+    pick["plan_payload"]["atr"] = 7071.0
+    got = rd._confirm_levels(pick, 132000.0)
+    assert got is not None
+    assert (132000.0 - got["stop_loss"]) / 132000.0 < 0.20

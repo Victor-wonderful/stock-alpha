@@ -12,6 +12,7 @@ import pandas as pd
 
 from engine.config import get_settings
 from engine.logging import get_logger
+from engine.signals.indicators import clean_halt_bars
 
 log = get_logger(__name__)
 
@@ -65,7 +66,7 @@ def load_all_ohlcv_1d(bars: int = 500, active_only: bool = True) -> dict[int, pd
     for iid, rows in buckets.items():
         df = pd.DataFrame(rows, columns=[*_OHLCV_COLS, "ts"])
         df[_OHLCV_COLS] = df[_OHLCV_COLS].astype(float)
-        frames[iid] = df
+        frames[iid] = clean_halt_bars(df)   # 거래정지 0원 봉 → 종가로(지표·판정 오염 방지)
     log.info("db_direct.ohlcv", instruments=len(frames), bars=bars)
     return frames
 
