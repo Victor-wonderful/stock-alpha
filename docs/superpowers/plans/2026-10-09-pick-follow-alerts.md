@@ -1861,6 +1861,100 @@ git commit -m "feat(web): 내 주문표 — 수량·금액·손절 복사, 모�
 
 ---
 
+### Task 11b: 웹 — 디자인 리뷰 반영 (2026-10-09, 시안 vecta-v4.pen A·B·E)
+
+시안 확정 뒤 `plan-design-review` 에서 정한 것. Task 11 코드 위에 덧댄다. 엔진 쪽 문구(「·」 구분, 할 일 없는 날 진행 중 픽 수)는 엔진 브랜치에 이미 반영됐다(커밋 c8c888b·7869d95).
+
+**Files:**
+- Modify: `apps/web/lib/orders.ts`, `apps/web/app/orders/page.tsx`, `apps/web/app/orders/_amount.tsx`, `apps/web/app/orders/_copy.tsx`, `apps/web/app/alerts/page.tsx`
+
+- [ ] **Step 1: 진행 중 픽 수 + 오래된 목록 판정** — `lib/orders.ts`
+
+`OrderSheet` 에 두 필드를 더한다:
+
+```ts
+  /** 진행 중(open) 픽 수 — 할 일 없는 날 «그대로 두세요» 문구용 */
+  openCount: number;
+  /** 목록의 실행일(for_date)이 이미 지났다 = 오늘 배치가 아직 안 끝났다 */
+  stale: boolean;
+```
+
+`getOrderSheet` 끝(return 직전)에:
+
+```ts
+  const { count: openCount } = await supabase
+    .from("recommendations")
+    .select("id", { count: "exact", head: true })
+    .eq("basket_type", "daily_focus")
+    .eq("status", "open");
+  // KST 오늘 — 서버는 UTC 라 +9h 로 날짜를 만든다(메모리 moscow-timezone-trap 과 같은 함정).
+  const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const stale = head.for_date < todayKst;
+```
+
+그리고 두 return 을 `{ ..., openCount: openCount ?? 0, stale }` 로 바꾼다(목록이 없을 때는 `openCount: 0, stale: false`).
+
+- [ ] **Step 2: 화면 규칙 6가지** — `app/orders/page.tsx`
+
+1. **매도 칩은 파랑** — 국내 증권사 관례(매수=빨강, 매도=파랑). `sell` 의 tone 을 `"bg-bad-soft text-bad"` 로.
+2. **모바일은 종목당 카드 1장** — `todo` 를 `symbol` 로 묶어(`Map<string, Line[]>`, 등장 순서 유지) 카드 하나에 줄을 쌓는다. 첫 줄 = 종목명 + 첫 할 일 칩, 이어지는 «손절 주문» 줄은 위 테두리(`border-t border-border pt-2`)와 작은 칩 「이어서 손절 주문」(`bg-accent-soft text-accent text-[11px]`). 제목 숫자는 «할 일 N건»이 아니라 «할 일 N종목»(`new Set(todo.map(l => l.symbol)).size`). 데스크톱 표는 그대로 줄 단위.
+3. **첫 방문(금액 미입력) 안내 띠** — `sheet.investAmount == null` 이고 할 일이 있으면 표 위에:
+   ```tsx
+   <p className="mb-3 flex items-start gap-2 rounded-[10px] bg-accent-soft px-3 py-2.5 text-[12px] text-accent">
+     투자 금액을 넣으면 종목마다 몇 주를 살지 계산해 드립니다. 한 번만 넣으면 기억합니다.
+   </p>
+   ```
+   수량 칸은 「금액 입력 후 표시」(text-text-mute).
+4. **오래된 목록 경고** — `sheet.stale` 이면 제목 아래에:
+   ```tsx
+   <p role="status" className="mb-3 rounded-[10px] bg-warn-soft px-3 py-2.5 text-[12px] text-warn">
+     지난 거래일({day(sheet.asOf!)}) 기준 목록입니다. 오늘 분석이 아직 끝나지 않았어요 — 끝나면 자동으로 바뀝니다.
+   </p>
+   ```
+5. **할 일 없는 날** — 기존 한 줄 문구를 바꾼다:
+   ```tsx
+   <div className="flex flex-col items-center gap-1.5 py-8 text-center">
+     <p className="text-sm font-semibold text-text">내일은 할 일이 없습니다</p>
+     {sheet.openCount > 0 && (
+       <p className="text-[12px] text-text-mute">진행 중인 픽 {sheet.openCount}건은 그대로 두세요</p>
+     )}
+     <a href="/focus" className="mt-1 text-[12px] font-semibold text-accent">진행 중인 픽 보기 →</a>
+   </div>
+   ```
+   제목도 `할 일 없음` 으로(`${day(forDate)} 할 일 없음`).
+6. **0주** — `l.qty === 0` 이면 수량 칸에 `0주 · 금액 부족`(`text-warn font-semibold`), 카드/행 아래에 `한 주 가격({won(entry)}원)이 권장 비중 금액보다 커서 살 수 없습니다.`(text-[11px] text-text-mute). 이 경우 [복사] 버튼은 숨긴다.
+
+- [ ] **Step 3: 저장 결과 표시** — `_amount.tsx`
+
+`const [saved, setSaved] = useState(false);` 를 두고, 저장 액션 성공 뒤 `setSaved(true); setTimeout(() => setSaved(false), 2000);`. 버튼 옆에 `{saved && <span role="status" className="text-[12px] text-pass">저장됨</span>}`. 입력을 고치면 `setSaved(false)`.
+
+- [ ] **Step 4: 복사 버튼 — 손가락 크기·읽어 주기** — `_copy.tsx`
+
+className 에 `min-h-[36px] md:min-h-0 px-3 md:px-2` 를 더하고(모바일 터치 영역), 버튼 안에 `<span className="sr-only" aria-live="polite">{done ? "복사했습니다" : ""}</span>` 를 둔다.
+
+- [ ] **Step 5: 알림 화면 연결 실패 안내** — `app/alerts/page.tsx`
+
+`export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ telegram?: string }> })` 로 받고, `const sp = await searchParams;` 후 텔레그램 줄 바로 아래에:
+
+```tsx
+{sp.telegram === "error" && (
+  <p role="alert" className="px-1 text-[11px] text-fail">
+    연결 코드를 만들지 못했습니다. 잠시 후 다시 눌러 주세요.
+  </p>
+)}
+```
+
+- [ ] **Step 6: 확인** — `npm run build` 성공. preview 로 `/orders` 를 375px·1440px 에서 열어 시안 A·B·E 와 나란히 비교(칩 색, 종목당 카드, 안내 띠, 0주 표시). `/alerts?telegram=error` 에서 안내 문구 확인.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add apps/web/lib/orders.ts apps/web/app/orders apps/web/app/alerts/page.tsx
+git commit -m "feat(web): 주문표·알림 — 디자인 리뷰 반영(매도 파랑, 종목당 카드, 첫 방문·오래된 목록·0주·빈 날 상태)"
+```
+
+---
+
 ### Task 12: 웹 — 추격 손절 표시를 저장값으로
 
 **Files:**
@@ -1946,3 +2040,25 @@ Expected: Victor 텔레그램에 저녁 메시지 1통, `[내 주문표 열기]`
 - [ ] **Step 2:** `cd apps/web && npm run build` → 성공
 - [ ] **Step 3:** `/security-review` — 범위: 0051 RLS(telegram_links·pick_actions·app_secrets·outbox), security definer 함수 3개, 웹훅 비밀값 검증, 토큰이 웹·로그에 없는지
 - [ ] **Step 4:** `/code-review` 후 리뷰 로그 한 줄(전역 CLAUDE.md 규칙)
+
+---
+
+## 디자인 리뷰 기록 (plan-design-review, 2026-10-09)
+
+시안: `design/vecta-v4.pen` — A 주문표 데스크톱 · B 모바일 · C 알림 3상태 · D 텔레그램 메시지 · E 주문표 상태 4종(리뷰에서 추가).
+
+| 관점 | 전 | 후 | 반영 |
+|---|---|---|---|
+| 정보 순서 | 7 | 9 | 모바일 종목당 카드, 제목 «N종목» |
+| 상태별 화면 | 4 | 9 | 첫 방문·할 일 없는 날·오래된 목록·0주·저장됨·연결 실패 |
+| 사용자 흐름 | 7 | 9 | 빈 날 «그대로 두세요» + 진행 중 픽 링크(불안 해소) |
+| 뻔한 AI 디자인 | 8 | 9 | 카드는 모바일에서만(표가 안 들어가는 폭), 장식 없음 |
+| 디자인 기준 | 6 | 8 | DESIGN.md 없음 → globals.css 토큰을 기준으로. 매도=파랑(국내 관례) |
+| 모바일·접근성 | 6 | 9 | 복사 버튼 터치 36px, 복사·저장 결과 읽어 주기(aria-live), 알림 오류 role=alert |
+| 미결정 | — | 0 | 남은 결정 없음 |
+
+전체 6/10 → 9/10. 남은 1점: DESIGN.md(디자인 기준 문서)가 없다 — 범위 밖(별도 작업).
+
+**범위 밖:** 화면 안 «샀음» 체크 · 장중 알림 · 카카오(정책상 보류, 메모리 kakao-channel-blocked) · DESIGN.md 작성.
+**이미 있는 것 재사용:** 라이브 헤더·「내 자산」 탭(AssetTabs)·globals.css 색 토큰·알림 화면 카드 모양.
+
