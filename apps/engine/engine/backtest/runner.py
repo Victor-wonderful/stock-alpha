@@ -13,6 +13,7 @@ from engine.backtest.event_backtest import backtest_playbook, precompute_detecti
 from engine.backtest.gate import GATE_ENTRY_MODE, GateThresholds, evaluate_gate
 from engine.backtest.metrics import Trade, sharpe
 from engine.db import get_client, select_all, upsert
+from engine.signals.indicators import clean_halt_bars
 from engine.logging import get_logger
 from engine.signals import playbooks
 from engine.signals.horizons import HORIZONS, backtest_kwargs, get_profile
@@ -30,7 +31,7 @@ def _load_ohlcv(instrument_id: int, limit: int = 500) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
-    out = df[["open", "high", "low", "close", "volume"]].astype(float)
+    out = clean_halt_bars(df[["open", "high", "low", "close", "volume"]].astype(float))
     out["ts"] = df["ts"]  # 트레이드 진입시점 기록용(시간순 MDD)
     return out
 

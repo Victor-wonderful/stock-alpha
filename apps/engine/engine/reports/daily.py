@@ -725,8 +725,17 @@ def _close_patch(status: str, today: date, exit_price: float,
 
 
 def _bar_lhc(bar: dict) -> tuple[float, float, float]:
-    """일봉 한 개 → (저가, 고가, 종가)."""
-    return float(bar["low"]), float(bar["high"]), float(bar["close"])
+    """일봉 한 개 → (저가, 고가, 종가).
+
+    거래정지일 봉은 저가·고가가 0 으로 온다. 그대로 쓰면 «저가 0 ≤ 손절가»라
+    정지 첫날 가짜 손절 청산이 난다. 거래가 없던 날이므로 종가에 멈춘 것으로 본다
+    (indicators.clean_halt_bars 와 같은 규칙 — 백테스트 로더도 같은 봉을 본다).
+    """
+    cl = float(bar["close"])
+    lo, hi = float(bar["low"] or 0), float(bar["high"] or 0)
+    if cl > 0 and (lo <= 0 or hi <= 0):
+        return cl, cl, cl
+    return lo, hi, cl
 
 
 def _pre_trail(bar: dict, trail_from: str) -> bool:
@@ -1016,6 +1025,14 @@ def _confirm_levels(pick: dict, open_price: float) -> dict | None:
         tp1 = _mv(pick.get("target_price"))
         tp2 = _mv(pick.get("tp2_price"))
     if stop is None or open_price - stop < min_risk_floor(open_price, atr and float(atr)):
+        return None
+    # 발행 때 건 안전망(손절폭 -20% 상한·손익비 1.0)을 시가 확정 때도 다시 건다.
+    # 시가가 지지선 아래로 갭다운하면 구조 손절이 무효가 되고 ATR 손절로 넘어가며
+    # 손절이 «멀어진다» — 발행 때 -12.4% 였던 한화(2026-09-28)가 이 경로로 -23.3%
+    # 가 되어 그대로 진입됐다. 발행 게이트를 통과했어도 실제로 사는 계획은 이것이다.
+    rr = None if tp1 is None else (tp1 - open_price) / (open_price - stop)
+    check = {"entry_price": open_price, "stop_loss": stop, "risk_reward": rr}
+    if not (_stop_width_ok(check) and _rr_ok(check)):
         return None
     return {
         "entry_price": round(open_price, 4),

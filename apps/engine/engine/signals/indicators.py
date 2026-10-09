@@ -8,6 +8,31 @@ import numpy as np
 import pandas as pd
 
 
+def clean_halt_bars(df: pd.DataFrame) -> pd.DataFrame:
+    """거래정지일 봉(시가·고가·저가 0, 종가만 있음)을 «그날 가격 = 종가»로 채운다.
+
+    수집원은 거래가 없던 날을 시가·고가·저가 0 · 종가 = 직전 종가로 내려준다.
+    그대로 두면 그날 하루 움직임(TR)이 «종가 전액»으로 잡힌다 — 2026-07~08 한화가
+    3주 정지되며 TR 83,800 이 13번 찍혔고, ATR 이 실제(약 7,000)의 2.4배로 부풀어
+    9/28 픽 손절이 -23% 로 나갔다(정상이면 약 -10%). 지수평활이라 정지가 풀린 뒤에도
+    두 달 가까이 남는다. 저가 0 은 지지선·손절 터치 판정도 망가뜨린다.
+
+    거래가 없던 날은 «가격이 종가에 멈춰 있었다»가 사실이므로 O=H=L=C 로 채운다.
+    이러면 TR 은 직전 종가와의 차이(대개 0)가 되고, 손절 판정에도 걸리지 않는다.
+    """
+    if df.empty or not {"open", "high", "low", "close"} <= set(df.columns):
+        return df
+    bad = (df["close"] > 0) & (
+        (df["open"] <= 0) | (df["high"] <= 0) | (df["low"] <= 0)
+    )
+    if not bad.any():
+        return df
+    out = df.copy()
+    for col in ("open", "high", "low"):
+        out.loc[bad, col] = out.loc[bad, "close"]
+    return out
+
+
 def sma(s: pd.Series, n: int) -> pd.Series:
     return s.rolling(n, min_periods=1).mean()
 
@@ -29,7 +54,8 @@ def rsi(close: pd.Series, n: int = 14) -> pd.Series:
 
 
 def atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
-    """Average True Range."""
+    """Average True Range. 거래정지 봉은 clean_halt_bars 로 먼저 채운다(로더를 안 거친 입력 대비)."""
+    df = clean_halt_bars(df)
     high, low, close = df["high"], df["low"], df["close"]
     prev_close = close.shift(1)
     tr = pd.concat([
